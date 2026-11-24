@@ -5,6 +5,7 @@ import {
   useAdminUser,
   useReactivateUser,
   useResendInvitation,
+  useResetUserMfa,
   useRevokeUserSessions,
   useSession,
   useSuspendUser,
@@ -50,10 +51,18 @@ import {
   type UpdateUserRequest,
   updateUserSchema,
 } from '@marketplace/validation';
-import { BanIcon, LogOutIcon, MailIcon, PencilIcon, RotateCcwIcon } from 'lucide-react';
+import {
+  BanIcon,
+  LogOutIcon,
+  MailIcon,
+  PencilIcon,
+  RotateCcwIcon,
+  ShieldOffIcon,
+} from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
+import { SellerStatusBadge } from '../../components/seller-status';
 import { showError } from '../../lib/errors';
 import { formatDateTime } from '../../lib/format';
 import { RoleCheckboxes } from './role-checkboxes';
@@ -67,6 +76,17 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="text-sm font-medium break-words">{children}</dd>
     </div>
+  );
+}
+
+function SellerLink({ seller }: { seller: NonNullable<AdminUserDetail['seller']> }) {
+  const session = useSession();
+  return hasPermission(session.data, 'sellers.read') ? (
+    <Link to={`/sellers/${seller.id}`} className="underline-offset-4 hover:underline">
+      {seller.businessName}
+    </Link>
+  ) : (
+    <>{seller.businessName}</>
   );
 }
 
@@ -174,6 +194,7 @@ function UserActions({ user }: { user: AdminUserDetail }) {
   const reactivate = useReactivateUser();
   const revoke = useRevokeUserSessions();
   const resend = useResendInvitation();
+  const resetMfa = useResetUserMfa();
   const myRoles = session.data?.user.roles ?? [];
   const grantable = grantableRoles(myRoles);
   const isSelf = session.data?.user.id === user.id;
@@ -228,6 +249,24 @@ function UserActions({ user }: { user: AdminUserDetail }) {
             'Could not sign the account out',
             () => revoke.mutateAsync(user.id),
             'Signed out of every device',
+          )}
+        />
+      ) : null}
+      {can('users.update') && user.mfaEnabled && !isSelf ? (
+        <ConfirmDialog
+          trigger={
+            <Button variant="outline">
+              <ShieldOffIcon /> Reset two-step verification
+            </Button>
+          }
+          title="Reset two-step verification?"
+          description="Only after confirming the person's identity, for example when they lost their phone and recovery codes. They are signed out everywhere and can turn it on again after signing in."
+          confirmLabel="Reset"
+          destructive
+          onConfirm={run(
+            'Could not reset two-step verification',
+            () => resetMfa.mutateAsync(user.id),
+            'Two-step verification turned off',
           )}
         />
       ) : null}
@@ -326,6 +365,21 @@ export function UserDetailPage() {
                   {user.data.lastSignInAt ? formatDateTime(user.data.lastSignInAt) : 'Never'}
                 </Detail>
                 <Detail label="Signed-in devices">{user.data.activeSessions}</Detail>
+                <Detail label="Two-step verification">{user.data.mfaEnabled ? 'On' : 'Off'}</Detail>
+                {user.data.seller ? (
+                  <Detail label="Seller">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <SellerLink seller={user.data.seller} />
+                      <SellerStatusBadge status={user.data.seller.status} />
+                      <span className="text-xs text-muted-foreground">
+                        {user.data.seller.isOwner ? 'Owner' : 'Employee'}
+                        {user.data.seller.memberStatus === 'SUSPENDED'
+                          ? ' · suspended by the seller'
+                          : ''}
+                      </span>
+                    </span>
+                  </Detail>
+                ) : null}
               </dl>
             </CardContent>
           </Card>

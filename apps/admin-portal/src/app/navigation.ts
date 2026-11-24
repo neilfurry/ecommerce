@@ -2,20 +2,23 @@ import type { Permission } from '@marketplace/shared-types';
 import type { SidebarNavItem, SidebarNavSection } from '@marketplace/ui';
 import {
   ActivityIcon,
+  BriefcaseBusinessIcon,
   BuildingIcon,
   HardDriveIcon,
   KeyRoundIcon,
   ListChecksIcon,
   MessageSquareIcon,
   ScrollTextIcon,
+  ShieldIcon,
+  StoreIcon,
   UsersIcon,
 } from 'lucide-react';
 
 type NavEntry = SidebarNavItem & { permission?: Permission };
 
 /**
- * Navigation lists only working pages the user may open. Seller approval, catalog
- * moderation, orders, finance and settings are added by the phases that deliver them.
+ * Navigation lists only working pages the user may open. Catalog moderation, orders,
+ * finance and settings are added by the phases that deliver them.
  */
 export function buildNavSections(
   devToolsEnabled: boolean,
@@ -29,6 +32,18 @@ export function buildNavSections(
       items: [{ to: '/system-health', label: 'System health', icon: ActivityIcon }],
     },
     {
+      title: 'Marketplace',
+      items: [
+        {
+          to: '/sellers',
+          label: 'Sellers',
+          icon: BriefcaseBusinessIcon,
+          permission: 'sellers.read',
+        },
+        { to: '/stores', label: 'Stores', icon: StoreIcon, permission: 'stores.read' },
+      ],
+    },
+    {
       title: 'People',
       items: [
         { to: '/users', label: 'Users', icon: UsersIcon, permission: 'users.read' },
@@ -40,8 +55,14 @@ export function buildNavSections(
         },
         {
           to: '/roles',
-          label: 'Roles & permissions',
+          label: 'Roles',
           icon: KeyRoundIcon,
+          permission: 'roles.read',
+        },
+        {
+          to: '/permissions',
+          label: 'Permissions',
+          icon: ShieldIcon,
           permission: 'roles.read',
         },
         { to: '/audit-log', label: 'Audit log', icon: ScrollTextIcon, permission: 'audit.read' },

@@ -1,9 +1,9 @@
-import { PERMISSION_CODES, type Permission, type UserRole } from '@marketplace/shared-types';
+import { PLATFORM_PERMISSIONS, type Permission, type UserRole } from '@marketplace/shared-types';
 
 /** A session response as GET /auth/session returns it. */
 export function sessionFor(
   roles: UserRole[] = ['SUPER_ADMIN'],
-  permissions: readonly Permission[] = PERMISSION_CODES,
+  permissions: readonly Permission[] = PLATFORM_PERMISSIONS,
 ) {
   return {
     user: {

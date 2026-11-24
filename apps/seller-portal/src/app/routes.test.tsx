@@ -73,12 +73,9 @@ function renderAt(path: string, fetchImpl: typeof fetch = signedInFetch()) {
 }
 
 describe('seller-portal routes', () => {
-  it('redirects the index route to /system-status', async () => {
+  it('redirects the index route to the dashboard', async () => {
     const router = renderAt('/', signedInFetch());
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'System status' }),
-    ).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/system-status');
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/dashboard'));
   });
 
   it('renders a 503 health report as a service disruption, not an error', async () => {

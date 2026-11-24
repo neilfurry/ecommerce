@@ -20,12 +20,35 @@ import {
   LoadingState,
   PageHeader,
   Spinner,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   toast,
 } from '@marketplace/ui';
 import type { RoleDto, RoleList } from '@marketplace/validation';
 import { LockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { showError } from '../../lib/errors';
+
+const SCOPES = [
+  {
+    value: 'platform',
+    label: 'Marketplace staff',
+    description: 'Roles of marketplace employees. They work in this Admin Console.',
+  },
+  {
+    value: 'seller',
+    label: 'Seller teams',
+    description:
+      "Roles inside a seller's business. Seller owners and managers assign them to their own employees; they only ever apply to that seller's data.",
+  },
+  {
+    value: 'customer',
+    label: 'Customers',
+    description: 'Shopper account types.',
+  },
+] as const;
 
 function RoleCard({
   role,
@@ -41,7 +64,9 @@ function RoleCard({
   const dirty =
     selected.length !== role.permissions.length ||
     selected.some((p) => !role.permissions.includes(p));
-  const canEdit = editable && !role.locked;
+  const canEdit = editable && !role.locked && role.scope !== 'customer';
+  // A role can only hold permissions of its own scope (platform or seller).
+  const available = catalog.filter((permission) => permission.scope === role.scope);
 
   const save = async () => {
     try {
@@ -61,7 +86,7 @@ function RoleCard({
           <h2>{role.name}</h2>
           {role.locked ? (
             <Badge variant="secondary">
-              <LockIcon aria-hidden="true" /> Always every permission
+              <LockIcon aria-hidden="true" /> Always every {role.scope} permission
             </Badge>
           ) : null}
         </CardTitle>
@@ -70,9 +95,15 @@ function RoleCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {available.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Customer roles have no staff permissions. They control prices and storefront access
+            only.
+          </p>
+        ) : null}
         <fieldset className="grid gap-2 sm:grid-cols-2" disabled={!canEdit || update.isPending}>
           <legend className="sr-only">Permissions of {role.name}</legend>
-          {catalog.map((permission) => {
+          {available.map((permission) => {
             const id = `${role.code}-${permission.code}`;
             const checked = role.locked || selected.includes(permission.code);
             return (
@@ -142,17 +173,31 @@ export function RolesPage() {
           onRetry={() => void roles.refetch()}
         />
       ) : (
-        <div className="space-y-4">
-          {roles.data.roles.map((role) => (
-            // Keyed by the saved permissions so a successful save resets the card's draft.
-            <RoleCard
-              key={`${role.code}:${role.permissions.join(',')}`}
-              role={role}
-              catalog={roles.data.permissions}
-              editable={editable}
-            />
+        <Tabs defaultValue="platform">
+          <TabsList aria-label="Role group">
+            {SCOPES.map((scope) => (
+              <TabsTrigger key={scope.value} value={scope.value}>
+                {scope.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {SCOPES.map((scope) => (
+            <TabsContent key={scope.value} value={scope.value} className="space-y-4">
+              <p className="text-sm text-muted-foreground">{scope.description}</p>
+              {roles.data.roles
+                .filter((role) => role.scope === scope.value)
+                .map((role) => (
+                  // Keyed by the saved permissions so a successful save resets the card's draft.
+                  <RoleCard
+                    key={`${role.code}:${role.permissions.join(',')}`}
+                    role={role}
+                    catalog={roles.data.permissions}
+                    editable={editable}
+                  />
+                ))}
+            </TabsContent>
           ))}
-        </div>
+        </Tabs>
       )}
     </div>
   );

@@ -1,27 +1,49 @@
+import { useSession } from '@marketplace/api-client';
 import { UserMenu } from '@marketplace/auth-ui';
 import { APP_NAME } from '@marketplace/config';
-import { BrandMark, SidebarLayout, type SidebarNavSection } from '@marketplace/ui';
-import { ActivityIcon, StoreIcon } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle, BrandMark, SidebarLayout } from '@marketplace/ui';
+import { AlertTriangleIcon, StoreIcon } from 'lucide-react';
+import { Outlet } from 'react-router';
+import { buildNavSections } from './navigation';
 
-/**
- * Navigation lists only working pages. Store, product, inventory and order sections are
- * added by the phases that deliver them (seller onboarding is Phase 3).
- */
-const NAV_SECTIONS: SidebarNavSection[] = [
-  {
-    title: 'Support',
-    items: [{ to: '/system-status', label: 'System status', icon: ActivityIcon }],
-  },
-];
+/** Banner for sellers that cannot sell right now. */
+function SellerStatusBanner() {
+  const seller = useSession().data?.user.seller;
+  if (!seller || (seller.status !== 'SUSPENDED' && seller.status !== 'CLOSED')) return null;
+  return (
+    <Alert variant="destructive" className="mb-6">
+      <AlertTriangleIcon />
+      <AlertTitle>
+        {seller.status === 'SUSPENDED'
+          ? 'Your seller account is suspended'
+          : 'Your seller account is closed'}
+      </AlertTitle>
+      <AlertDescription>
+        Your stores are hidden from shoppers and changes are paused. Contact marketplace support.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function Page() {
+  return (
+    <>
+      <SellerStatusBanner />
+      <Outlet />
+    </>
+  );
+}
 
 export function SellerLayout() {
+  const session = useSession();
   return (
     <SidebarLayout
       appName="Seller Center"
-      appTagline={APP_NAME}
+      appTagline={session.data?.user.seller?.businessName ?? APP_NAME}
       logo={<BrandMark icon={StoreIcon} />}
-      sections={NAV_SECTIONS}
+      sections={buildNavSections(session.data?.user.permissions ?? [])}
       headerActions={<UserMenu />}
+      content={<Page />}
     />
   );
 }

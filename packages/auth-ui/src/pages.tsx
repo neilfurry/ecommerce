@@ -161,14 +161,25 @@ export function PasswordSignInForm({
 }
 
 /** Sign-in page of the Seller Center and the Admin Console (staff use email + password). */
-export function StaffSignInPage({ brand, appName }: { brand: ReactNode; appName: string }) {
+export function StaffSignInPage({
+  brand,
+  appName,
+  description = "Accounts are created by an administrator. Check your email for an invitation if you don't have a password yet.",
+  footer,
+}: {
+  brand: ReactNode;
+  appName: string;
+  description?: ReactNode;
+  footer?: ReactNode;
+}) {
   const navigate = useNavigate();
   const returnTo = useReturnTo();
   return (
     <AuthShell
       brand={brand}
       title={`Sign in to ${appName}`}
-      description="Accounts are created by an administrator. Check your email for an invitation if you don't have a password yet."
+      description={description}
+      footer={footer}
     >
       <PasswordSignInForm onSignedIn={() => void navigate(returnTo, { replace: true })} />
     </AuthShell>

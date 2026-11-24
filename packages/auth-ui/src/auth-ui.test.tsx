@@ -97,6 +97,67 @@ describe('route guards', () => {
     expect(router.state.location.pathname).toBe('/users');
   });
 
+  it('asks for the authenticator code when two-step verification is on', async () => {
+    let signedIn = false;
+    const bodies: Record<string, unknown> = {};
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.body) bodies[url.replace(/^.*\/api\/v1/, '')] = JSON.parse(String(init.body));
+      if (url.endsWith('/auth/csrf')) return json({ csrfToken: 't' });
+      if (url.endsWith('/auth/sign-in')) {
+        // No session yet: only a short-lived challenge.
+        return json({
+          mfaRequired: true,
+          mfaToken: 'challenge-token-0123456789abcdef',
+          expiresAt: '2026-11-25T09:05:00.000Z',
+        });
+      }
+      if (url.endsWith('/auth/mfa/verify')) {
+        const { code } = JSON.parse(String(init?.body)) as { code: string };
+        if (code !== '123456') {
+          return json(
+            {
+              error: {
+                code: 'OTP_INVALID',
+                message: 'That code is not correct.',
+                statusCode: 400,
+                fieldErrors: [
+                  { path: 'code', message: 'Check your authenticator app and try again' },
+                ],
+              },
+            },
+            400,
+          );
+        }
+        signedIn = true;
+        return json({ ...session, user: { ...session.user, mfaEnabled: true } });
+      }
+      if (url.endsWith('/auth/session')) return signedIn ? json(session) : unauthenticated();
+      return unauthenticated();
+    });
+    const router = renderRoutes(fetchImpl as unknown as typeof fetch, '/users');
+    await userEvent.type(await screen.findByLabelText('Email'), 'ana@example.ph');
+    await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    const code = await screen.findByLabelText('Authentication code');
+    expect(router.state.location.pathname).toBe('/sign-in');
+    await userEvent.type(code, '000000');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify' }));
+    expect(
+      await screen.findByText('Check your authenticator app and try again'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Users page')).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Authentication code'), '123456');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify' }));
+    expect(await screen.findByText('Users page')).toBeInTheDocument();
+    expect(bodies['/auth/mfa/verify']).toEqual({
+      mfaToken: 'challenge-token-0123456789abcdef',
+      code: '123456',
+    });
+  });
+
   it('shows the sign-in error and clears the password', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

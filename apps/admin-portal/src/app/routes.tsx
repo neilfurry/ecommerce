@@ -18,8 +18,12 @@ import { AuditLogPage } from '../pages/audit/audit-log-page';
 import { FilesPage } from '../pages/dev-tools/files-page';
 import { JobsPage } from '../pages/dev-tools/jobs-page';
 import { SmsOutboxPage } from '../pages/dev-tools/sms-outbox-page';
+import { PermissionsPage } from '../pages/permissions/permissions-page';
 import { RolesPage } from '../pages/roles/roles-page';
+import { SellerDetailPage } from '../pages/sellers/seller-detail-page';
+import { SellersPage } from '../pages/sellers/sellers-page';
 import { StatusPage } from '../pages/status-page';
+import { StoresPage } from '../pages/stores/stores-page';
 import { UserDetailPage } from '../pages/users/user-detail-page';
 import { UsersPage } from '../pages/users/users-page';
 import { WholesalePage } from '../pages/wholesale/wholesale-page';
@@ -64,7 +68,14 @@ export function buildRoutes(devToolsEnabled: boolean): RouteObject[] {
                 { path: 'users', element: guarded('users.read', <UsersPage />) },
                 { path: 'users/:userId', element: guarded('users.read', <UserDetailPage />) },
                 { path: 'wholesale', element: guarded('wholesale.read', <WholesalePage />) },
+                { path: 'sellers', element: guarded('sellers.read', <SellersPage />) },
+                {
+                  path: 'sellers/:sellerId',
+                  element: guarded('sellers.read', <SellerDetailPage />),
+                },
+                { path: 'stores', element: guarded('stores.read', <StoresPage />) },
                 { path: 'roles', element: guarded('roles.read', <RolesPage />) },
+                { path: 'permissions', element: guarded('roles.read', <PermissionsPage />) },
                 { path: 'audit-log', element: guarded('audit.read', <AuditLogPage />) },
                 ...(devToolsEnabled
                   ? [
