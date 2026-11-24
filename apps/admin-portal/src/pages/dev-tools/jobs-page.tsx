@@ -111,7 +111,7 @@ function SampleJobCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <Form {...form}>
-          <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
+          <form onSubmit={onSubmit} className="grid items-start gap-4 sm:grid-cols-2" noValidate>
             <FormField
               control={form.control}
               name="message"
@@ -173,6 +173,7 @@ function SampleJobCard() {
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
+                  <FormDescription>Simulated processing time, up to 10 seconds.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

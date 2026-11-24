@@ -93,7 +93,10 @@ function renderAt(path: string, fetchImpl: ReturnType<typeof fakeApi>, devTools 
   queryClient.setDefaultOptions({ queries: { retry: false } });
   render(
     <AppProviders
-      apiClient={createApiClient({ baseUrl: '/api', fetchImpl })}
+      apiClient={createApiClient({
+        baseUrl: '/api',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })}
       queryClient={queryClient}
     >
       <RouterProvider router={router} />
