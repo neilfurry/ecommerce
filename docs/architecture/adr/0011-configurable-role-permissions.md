@@ -18,8 +18,9 @@ and customers who can only ever see their own data.
 - `SUPER_ADMIN` is locked: it always holds every permission and cannot be edited. The last
   active super admin cannot be suspended or demoted.
 - Endpoints declare what they need with `@RequirePermissions(...)` (platform operations) or
-  `@Roles(...)` (audience checks such as "customers only"). Seller isolation (Phase 3) is
-  enforced by scoping queries to the caller's seller, never by a permission.
+  `@Roles(...)` (audience checks such as "customers only"). Seller isolation is enforced by
+  scoping queries to the caller's seller, never by a permission (see ADR 0013, which also adds
+  permission scopes and the locked `SELLER_OWNER` role).
 - Granting is hierarchical: a super admin may grant any platform staff role; an admin may grant
   the staff roles below admin. Admins cannot manage accounts holding a role they could not
   grant. Customer roles are never granted by hand: `CUSTOMER` comes from sign-up and

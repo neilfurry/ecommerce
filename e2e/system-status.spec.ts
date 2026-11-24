@@ -39,9 +39,8 @@ test.describe('Storefront', () => {
 test.describe('Seller portal', () => {
   test.use({ storageState: SELLER_STATE });
 
-  test('opens on live system status', async ({ page }) => {
-    await page.goto(SELLER);
-    await expect(page).toHaveURL(`${SELLER}/system-status`);
+  test('shows live system status', async ({ page }) => {
+    await page.goto(`${SELLER}/system-status`);
     await expect(page.getByRole('heading', { level: 1, name: 'System status' })).toBeVisible();
     await expectAllComponentsUp(page);
   });

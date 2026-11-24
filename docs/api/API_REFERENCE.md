@@ -147,12 +147,16 @@ limits (10 or 5 per minute).
 | POST   | `/auth/customers/sign-up/verify`     | `{ challengeId, code }` → 201 session; creates the account (and the wholesale application) and emails a confirmation link                                                                                                                                |
 | POST   | `/auth/otp/resend`                   | `{ challengeId }` → new challenge (after 60 s; max 3 per challenge, 5 per number per hour)                                                                                                                                                               |
 | POST   | `/auth/customers/sign-in/otp`        | `{ mobile }` → 202 challenge. Same answer for unknown numbers, but nothing is sent                                                                                                                                                                       |
-| POST   | `/auth/customers/sign-in/otp/verify` | `{ challengeId, code }` → session                                                                                                                                                                                                                        |
-| POST   | `/auth/sign-in`                      | `{ email, password }` → session, for every app; the account must hold a role allowed in the app named by `X-Client-App`                                                                                                                                  |
+| POST   | `/auth/customers/sign-in/otp/verify` | `{ challengeId, code }` → session, or an MFA challenge as for `/auth/sign-in`                                                                                                                                                                            |
+| POST   | `/auth/sign-in`                      | `{ email, password }` → session, for every app; the account must hold a role allowed in the app named by `X-Client-App`. With two-step verification on: `{ mfaRequired: true, mfaToken, expiresAt }` and no cookies                                      |
+| POST   | `/auth/mfa/verify`                   | `{ mfaToken, code }` (6-digit authenticator code or a recovery code) → session. The challenge lasts 5 minutes and allows 5 attempts                                                                                                                      |
+| POST   | `/auth/sellers/sign-up`              | Seller Center only. `{ firstName, lastName, email, password, mobile, businessName, businessType }` → 201 session. Creates the owner account and a `PENDING` seller; emails a confirmation link                                                           |
+| POST   | `/auth/seller-invitations/preview`   | `{ token }` → `{ sellerName, email, roles, existingAccount, expiresAt }`. 404 for an unknown, used or expired invitation                                                                                                                                 |
+| POST   | `/auth/seller-invitations/accept`    | `{ token, firstName?, lastName?, password }` → 204. New people create an account; people with an account confirm its password. Refused for marketplace staff and for people already in a seller                                                          |
 | POST   | `/auth/refresh`                      | Rotates the refresh token → session. 409: another tab refreshed at the same moment (retry the request). 401: sign in again                                                                                                                               |
 | POST   | `/auth/sign-out`                     | Ends this device's session → 204 (works with an expired access token)                                                                                                                                                                                    |
 | POST   | `/auth/sign-out-everywhere`          | _Signed in._ Ends every session of the account → 204                                                                                                                                                                                                     |
-| GET    | `/auth/session`                      | _Signed in._ `{ user: { id, names, email, emailVerified, mobile, mobileVerified, roles, permissions, wholesaleStatus }, app, accessTokenExpiresAt }`                                                                                                     |
+| GET    | `/auth/session`                      | _Signed in._ `{ user: { id, names, email, emailVerified, mobile, mobileVerified, roles, permissions, wholesaleStatus, mfaEnabled, seller }, app, accessTokenExpiresAt }`; `seller` (Seller Center only) is `{ id, businessName, status, isOwner }`       |
 | POST   | `/auth/email/verify`                 | `{ token }` from the confirmation email → 204                                                                                                                                                                                                            |
 | POST   | `/auth/email/resend-verification`    | _Signed in._ Emails a new confirmation link → 202                                                                                                                                                                                                        |
 | POST   | `/auth/password/forgot`              | `{ email }` → 202, whether or not the account exists. The link works once and expires in 30 minutes                                                                                                                                                      |
@@ -167,23 +171,118 @@ limits (10 or 5 per minute).
 | GET    | `/api/v1/account/wholesale-application` | `{ application }` (null if none)                                                         |
 | POST   | `/api/v1/account/wholesale-application` | `{ businessName, tin, businessAddress }` → application; also resubmits after a rejection |
 
-### Administration (Admin Console)
+### Two-step verification (`/api/v1/auth/mfa`, signed in, every app)
 
-| Method | Path                                               | Permission              | Description                                                                                                                                         |
-| ------ | -------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/v1/admin/users`                              | `users.read`            | Accounts; filters `search` (name, email, mobile), `kind` (`staff`/`customers`), `role`, `status`; paginated                                         |
-| POST   | `/api/v1/admin/users`                              | `users.create`          | `{ firstName, lastName, email, roles }` → 201 invited account; emails an invitation (7 days)                                                        |
-| GET    | `/api/v1/admin/users/{id}`                         | `users.read`            | Account with signed-in device count and lock-out                                                                                                    |
-| PATCH  | `/api/v1/admin/users/{id}`                         | `users.update`          | `{ firstName, lastName, roles }`. Staff roles only; only roles the caller may grant                                                                 |
-| POST   | `/api/v1/admin/users/{id}/suspend`                 | `users.suspend`         | Blocks sign-in and ends every session at once. Not yourself; never the last super admin                                                             |
-| POST   | `/api/v1/admin/users/{id}/reactivate`              | `users.suspend`         | Reactivates and clears any lock-out                                                                                                                 |
-| POST   | `/api/v1/admin/users/{id}/sessions/revoke`         | `users.sessions.revoke` | Signs the account out everywhere → 204                                                                                                              |
-| POST   | `/api/v1/admin/users/{id}/invitation/resend`       | `users.create`          | New invitation link; earlier links stop working → 204                                                                                               |
-| GET    | `/api/v1/admin/roles`                              | `roles.read`            | Roles with permissions and account counts, and the permission catalog                                                                               |
-| PUT    | `/api/v1/admin/roles/{code}/permissions`           | `roles.update`          | `{ permissions }` replaces the role's permissions (not `SUPER_ADMIN`); effective on the next request                                                |
-| GET    | `/api/v1/admin/wholesale-applications`             | `wholesale.read`        | `?status=PENDING\|APPROVED\|REJECTED`; pending oldest first; paginated                                                                              |
-| POST   | `/api/v1/admin/wholesale-applications/{id}/review` | `wholesale.review`      | `{ decision: APPROVE\|REJECT, note }` (note required to reject); approval grants `WHOLESALE_CUSTOMER`; emails the customer. 409 if already reviewed |
-| GET    | `/api/v1/admin/audit-logs`                         | `audit.read`            | Newest first; filters `action`, `actorId`, `entityId`; paginated (50)                                                                               |
+Optional for every account (ADR 0014). The authenticator secret is stored encrypted
+(`AUTH_MFA_ENCRYPTION_KEY`); recovery codes are stored hashed and shown once.
+
+| Method | Path                       | Description                                                                         |
+| ------ | -------------------------- | ----------------------------------------------------------------------------------- |
+| GET    | `/auth/mfa`                | `{ enabled, enabledAt, recoveryCodesRemaining }`                                    |
+| POST   | `/auth/mfa/totp/setup`     | `{ password }` → `{ secret, otpauthUrl }` for the QR code. Not active until enabled |
+| POST   | `/auth/mfa/totp/enable`    | `{ code }` → `{ recoveryCodes }` (10, shown once)                                   |
+| POST   | `/auth/mfa/recovery-codes` | `{ code }` → new `{ recoveryCodes }`; the old ones stop working                     |
+| POST   | `/auth/mfa/disable`        | `{ password, code }` → 204                                                          |
+
+Errors: `OTP_INVALID` (400, wrong or reused code), `OTP_TOO_MANY_ATTEMPTS` (400, sign in again).
+
+### Users, roles and permissions (Admin Console)
+
+| Method | Path                                         | Permission              | Description                                                                                                                                         |
+| ------ | -------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/users`                              | `users.read`            | Accounts; filters `search` (name, email, mobile), `kind` (`staff`/`customers`), `role`, `status`; paginated                                         |
+| POST   | `/api/v1/users`                              | `users.create`          | `{ firstName, lastName, email, roles }` → 201 invited staff account; emails an invitation (7 days)                                                  |
+| GET    | `/api/v1/users/{id}`                         | `users.read`            | Account with signed-in device count, lock-out, `mfaEnabled` and seller membership                                                                   |
+| PATCH  | `/api/v1/users/{id}`                         | `users.update`          | `{ firstName, lastName, roles }`. Marketplace staff roles only; only roles the caller may grant                                                     |
+| POST   | `/api/v1/users/{id}/suspend`                 | `users.suspend`         | Blocks sign-in and ends every session at once. Not yourself; never the last super admin                                                             |
+| POST   | `/api/v1/users/{id}/reactivate`              | `users.suspend`         | Reactivates and clears any lock-out                                                                                                                 |
+| POST   | `/api/v1/users/{id}/sessions/revoke`         | `users.sessions.revoke` | Signs the account out everywhere → 204                                                                                                              |
+| POST   | `/api/v1/users/{id}/mfa/reset`               | `users.update`          | Turns two-step verification off (lost phone and recovery codes) and signs the account out → 204. Audited                                            |
+| POST   | `/api/v1/users/{id}/invitation/resend`       | `users.create`          | New invitation link; earlier links stop working → 204                                                                                               |
+| GET    | `/api/v1/roles`                              | `roles.read`            | Roles with `scope` (`platform`/`seller`/`customer`), `locked`, permissions and account counts, and the permission catalog                           |
+| PUT    | `/api/v1/roles/{code}/permissions`           | `roles.update`          | `{ permissions }` replaces the role's permissions; only permissions of the role's own scope (400 otherwise); not the locked roles                   |
+| GET    | `/api/v1/permissions`                        | `roles.read`            | The catalog: `{ permissions: [{ code, description, scope, roles }] }`                                                                               |
+| GET    | `/api/v1/wholesale-applications`             | `wholesale.read`        | `?status=PENDING\|APPROVED\|REJECTED`; pending oldest first; paginated                                                                              |
+| POST   | `/api/v1/wholesale-applications/{id}/review` | `wholesale.review`      | `{ decision: APPROVE\|REJECT, note }` (note required to reject); approval grants `WHOLESALE_CUSTOMER`; emails the customer. 409 if already reviewed |
+| GET    | `/api/v1/audit-logs`                         | `audit.read`            | Newest first; filters `action`, `actorId`, `entityId`; paginated (50)                                                                               |
+
+Phase 2 renamed the Phase 1 `/api/v1/admin/*` paths to the resource paths above.
+
+### Sellers
+
+Seller statuses: `PENDING` → (submit) `UNDER_REVIEW` → `VERIFIED` or `REJECTED` (resubmit) or
+back to `PENDING` (more information requested); `VERIFIED` ⇄ `SUSPENDED`; any → `CLOSED`
+(final). Every change writes a history entry and an audit log entry and emails the owner.
+
+Seller Center (`X-Client-App: seller`). Every query is limited to the signed-in person's own
+seller; another seller's ids answer 404.
+
+| Method | Path                                                | Permission              | Description                                                                                                            |
+| ------ | --------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/sellers/me`                                | any seller role         | Profile, documents, history, `missingForSubmission`, `legalDetailsEditable`, store and member counts                   |
+| PATCH  | `/api/v1/sellers/me`                                | `seller.profile.manage` | Partial profile. Legal details (name, type, registration number, TIN, VAT) only while `PENDING` or `REJECTED`          |
+| POST   | `/api/v1/sellers/me/documents`                      | `seller.profile.manage` | Multipart `file` (PDF, JPEG, PNG; content checked), `type`, `description?` → 201. Only while `PENDING` or `REJECTED`   |
+| DELETE | `/api/v1/sellers/me/documents/{documentId}`         | `seller.profile.manage` | → 204. Only while `PENDING` or `REJECTED`                                                                              |
+| GET    | `/api/v1/sellers/me/documents/{documentId}/content` | any seller role         | The file, `Cache-Control: private, no-store`, as an attachment                                                         |
+| POST   | `/api/v1/sellers/me/submit`                         | `seller.profile.manage` | → `UNDER_REVIEW`. 422 listing what is missing (confirmed email, address, registration number, TIN, required documents) |
+
+Admin Console:
+
+| Method | Path                                                  | Permission        | Description                                                                                                                               |
+| ------ | ----------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/sellers`                                     | `sellers.read`    | `?status&search&page&pageSize`; `UNDER_REVIEW` oldest submission first, otherwise newest first                                            |
+| GET    | `/api/v1/sellers/{id}`                                | `sellers.read`    | Full detail with documents and history                                                                                                    |
+| GET    | `/api/v1/sellers/{id}/documents/{documentId}/content` | `sellers.read`    | The private file; each view is audited (`seller.document_viewed`)                                                                         |
+| POST   | `/api/v1/sellers/{id}/review`                         | `sellers.review`  | `{ decision: APPROVE\|REJECT\|REQUEST_INFO, note? }`; note required to reject or request information. Only `UNDER_REVIEW` (409 otherwise) |
+| POST   | `/api/v1/sellers/{id}/suspend`                        | `sellers.suspend` | `{ reason }`; `VERIFIED` only. Stores are hidden and the team can no longer make changes                                                  |
+| POST   | `/api/v1/sellers/{id}/reinstate`                      | `sellers.suspend` | `{ reason }`; `SUSPENDED` only                                                                                                            |
+| POST   | `/api/v1/sellers/{id}/close`                          | `sellers.suspend` | `{ reason }`; final. Stores are deactivated and every member's Seller Center sessions end                                                 |
+
+Sensitive files are never public: there is no storage URL; they are streamed by the API after the
+permission check.
+
+### Stores
+
+At most 5 stores per seller; only `VERIFIED` sellers create or change stores. A store link (slug)
+is 3–60 lower-case letters, digits and hyphens, unique, not a reserved word, and cannot be
+changed. Statuses: `ACTIVE` (open), `INACTIVE` (hidden by the seller), `SUSPENDED` (by the
+marketplace).
+
+| Method | Path                                  | Access                  | Description                                                                      |
+| ------ | ------------------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| GET    | `/api/v1/stores/slug-availability`    | public                  | `?slug` → `{ slug, available, reason? }`                                         |
+| GET    | `/api/v1/stores/by-slug/{slug}`       | public                  | The public store page data; only open stores of verified sellers (404 otherwise) |
+| GET    | `/api/v1/stores/{id}/logo`, `/banner` | public                  | The image (cache-busted by `?v=`). 404 without one                               |
+| GET    | `/api/v1/stores/mine`                 | any seller role         | `{ stores, canCreate }`                                                          |
+| POST   | `/api/v1/stores`                      | `seller.store.manage`   | `{ name, slug }` plus optional details → 201, open (`ACTIVE`)                    |
+| GET    | `/api/v1/stores/{id}`                 | any seller role         | Own store only (404 for another seller's)                                        |
+| PATCH  | `/api/v1/stores/{id}`                 | `seller.store.manage`   | Name, description, contact, address, `socialLinks` (https)                       |
+| PUT    | `/api/v1/stores/{id}/settings`        | `seller.store.manage`   | Colours, announcement, shipping and return policies, vacation mode               |
+| PUT    | `/api/v1/stores/{id}/logo`, `/banner` | `seller.store.manage`   | Multipart `file` (PNG, JPEG, WebP)                                               |
+| DELETE | `/api/v1/stores/{id}/logo`, `/banner` | `seller.store.manage`   | Removes the image                                                                |
+| POST   | `/api/v1/stores/{id}/open`, `/close`  | `seller.store.manage`   | Show or hide the store. Not while suspended                                      |
+| GET    | `/api/v1/stores`                      | `stores.read` (admin)   | Every store; `?status&search&sellerId`; paginated                                |
+| POST   | `/api/v1/stores/{id}/suspend`         | `stores.manage` (admin) | `{ reason }`; the reason is shown to the seller                                  |
+| POST   | `/api/v1/stores/{id}/reinstate`       | `stores.manage` (admin) | `{ reason }`; the store becomes `ACTIVE` again                                   |
+
+`customDomain` is reserved on the store record for a later phase; it cannot be set yet.
+
+### Seller employees (`/api/v1/seller/members`, Seller Center)
+
+A seller's owner and managers manage only their own seller's people. Invitations last 7 days; a
+new invitation to the same address replaces the open one. The owner can assign every seller role
+except owner; a manager can assign roles below manager. Nobody can grant a permission they don't
+hold, manage the owner, or manage themselves.
+
+| Method | Path                                                | Permission              | Description                                                        |
+| ------ | --------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
+| GET    | `/seller/members`                                   | `seller.members.read`   | `{ members, invitations, assignableRoles, assignablePermissions }` |
+| POST   | `/seller/members/invitations`                       | `seller.members.manage` | `{ email, roles, permissions? }` → 201; emails a join link         |
+| POST   | `/seller/members/invitations/{id}/resend`           | `seller.members.manage` | New link, 7 more days → 204                                        |
+| DELETE | `/seller/members/invitations/{id}`                  | `seller.members.manage` | Cancels the invitation → 204                                       |
+| PATCH  | `/seller/members/{memberId}`                        | `seller.members.manage` | `{ roles, permissions? }`; effective on the person's next request  |
+| POST   | `/seller/members/{memberId}/suspend`, `/reactivate` | `seller.members.manage` | Suspending ends their Seller Center sessions                       |
+| DELETE | `/seller/members/{memberId}`                        | `seller.members.manage` | Removes them from the seller (their account stays) → 204           |
 
 ### Documentation
 

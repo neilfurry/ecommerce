@@ -19,7 +19,7 @@ test.use({ storageState: ADMIN_STATE });
 
 async function uploadDocument(page: Page, type: string) {
   await page.getByLabel('Document type').click();
-  await page.getByRole('option', { name: type }).click();
+  await page.getByRole('option', { name: type, exact: true }).click();
   await page.getByLabel('File (PDF, JPEG or PNG)').setInputFiles({
     name: `${type.slice(0, 8)}.pdf`,
     mimeType: 'application/pdf',
@@ -46,7 +46,7 @@ test.describe('Seller onboarding', () => {
     await seller.getByRole('link', { name: 'Register your business' }).click();
     await seller.getByLabel('Registered business name').fill(businessName);
     await seller.getByLabel('Business type').click();
-    await seller.getByRole('option', { name: 'Sole proprietorship' }).click();
+    await seller.getByRole('option', { name: 'Sole proprietorship', exact: true }).click();
     await seller.getByLabel('Owner first name').fill('Lito');
     await seller.getByLabel('Owner last name').fill('Santos');
     await seller.getByLabel('Business mobile number').fill(uniqueMobile());
@@ -148,7 +148,7 @@ test.describe('Seller onboarding', () => {
     await page.goto(`${SELLER}/register`);
     await page.getByLabel('Registered business name').fill(`Isolation Test ${Date.now()}`);
     await page.getByLabel('Business type').click();
-    await page.getByRole('option', { name: 'Corporation' }).click();
+    await page.getByRole('option', { name: 'Corporation', exact: true }).click();
     await page.getByLabel('Owner first name').fill('Iso');
     await page.getByLabel('Owner last name').fill('Lation');
     await page.getByLabel('Business mobile number').fill(uniqueMobile());

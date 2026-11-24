@@ -61,12 +61,14 @@ apps/api/src
 ├── main.ts / bootstrap.ts   HTTP pipeline (shared with e2e tests)
 ├── config/                  Zod-validated env → typed AppConfig; fails fast at start-up
 ├── common/
-│   ├── auth/                @Public() @Roles() @RequirePermissions() @SkipCsrf() @CurrentUser(); RolesGuard
+│   ├── auth/                @Public() @Roles() @RequirePermissions() @SkipCsrf() @CurrentUser(); RolesGuard;
+│   │                        sellerScope(user) for seller-isolated queries
 │   ├── errors/              ApiException + GlobalExceptionFilter (standard error envelope)
 │   ├── validation/          createZodDto, ZodGlobalValidationPipe, ZodValidationPipe
 │   └── openapi/             zodToOpenApi: Swagger schemas from the same Zod schemas
 ├── infrastructure/          Global technical modules: prisma, redis, storage, queue, throttling, logging
-└── modules/                 Domain modules: health, auth, users, roles, wholesale, audit, notifications, files, dev-tools
+└── modules/                 Domain modules: health, auth (incl. MFA), users, roles, wholesale, sellers, stores,
+                             seller-members, audit, notifications, files, dev-tools
 ```
 
 ### Request lifecycle
@@ -92,20 +94,26 @@ apps/api/src
 
 ### Authentication and authorization
 
-Decisions: ADR 0010 (sessions), ADR 0011 (roles and permissions), ADR 0012 (SMS codes).
+Decisions: ADR 0010 (sessions), ADR 0011 (roles and permissions), ADR 0012 (SMS codes),
+ADR 0013 (sellers and isolation), ADR 0014 (two-step verification).
 
 - **Who signs in where.** Customers sign up themselves in the storefront (mobile number
   confirmed by SMS; email confirmed by link) and sign in with mobile + SMS code or email +
   password. Wholesale customers shop at retail prices until an admin approves their business.
-  Every other role is created by an administrator and activated by an emailed invitation.
-  Platform staff use the Admin Console; seller staff use the Seller Center.
+  Sellers register their business in the Seller Center and become its owner; owners and
+  managers invite their own employees. Platform staff are created by an administrator and
+  activated by an emailed invitation. Platform staff use the Admin Console; seller staff use
+  the Seller Center. Any account can turn on two-step verification (authenticator app).
 - **Sessions** live in HttpOnly cookies, one pair per app; access tokens last 15 minutes and
   refresh tokens rotate with reuse detection. Roles and permissions are resolved per request
   (cached 60 s in Redis and invalidated on change), so suspensions and permission changes apply
   immediately.
-- **Authorization**: `@RequirePermissions(...)` for platform operations, `@Roles(...)` for
-  audiences. `SUPER_ADMIN` always has every permission. Seller-scoped services (Phase 3) will
-  always filter by `user.sellerId`.
+- **Authorization**: `@RequirePermissions(...)` for operations, `@Roles(...)` for audiences.
+  Permissions are scoped `platform` or `seller`, and roles only contribute permissions of their
+  own scope. `SUPER_ADMIN` and `SELLER_OWNER` always hold every permission of their scope.
+- **Seller isolation**: a seller role counts only with an active membership of a seller. In the
+  Seller Center the principal carries `seller.id`, and every seller-side query filters by it
+  through `sellerScope(user)`; another seller's records answer 404.
 - **Audit**: `AuditService.record()` writes to the append-only `audit_logs` table, inside the
   same transaction as the change it describes.
 - **Notifications**: the API enqueues email and SMS jobs after committing; the worker renders
@@ -156,6 +164,9 @@ Decisions: ADR 0010 (sessions), ADR 0011 (roles and permissions), ADR 0012 (SMS 
   - Deletes are soft for metadata (`status = DELETED`, `deleted_at`) and hard for the object.
 - Downloads use short-lived signed URLs (`STORAGE_SIGNED_URL_TTL_SECONDS`), or stream through
   the API with `Content-Disposition: attachment`.
+- Seller verification documents (`SELLER_DOCUMENT`) are only ever streamed through the API after
+  the seller-scope or `sellers.read` check (`Cache-Control: private, no-store`), never by URL.
+  Staff views are audited. Store logos and banners are the only public seller files.
 
 ## Frontend architecture
 

@@ -63,19 +63,28 @@ this for you.
 | Email reaches Mailpit       | Playwright `dev-tools.spec.ts` queries the Mailpit API                                                                |
 | Docker services are healthy | CI "scripts" job: `setup.ps1` runs `docker compose up --wait` (all health checks)                                     |
 
-### Phase 2 (identity and access)
+### Phase 2 (identity, access, sellers and stores)
 
-| Requirement                                          | Proven by                                                                                               |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Customer sign-up with SMS code, retail and wholesale | `auth.e2e-spec.ts` (API), `auth-flows.test.tsx` (storefront), Playwright `identity.spec.ts`             |
-| Sign-in by mobile + SMS code or email + password     | `auth.e2e-spec.ts`, `auth-flows.test.tsx`, Playwright `identity.spec.ts`                                |
-| Staff accounts only through admin invitation         | `administration.e2e-spec.ts`, Playwright invitation test                                                |
-| Sessions: rotation, reuse detection, sign-out        | `auth.e2e-spec.ts` (sessions), `client.test.ts` (single-flight refresh)                                 |
-| CSRF, lock-out, rate limits, no enumeration          | `auth.e2e-spec.ts`, `guards.spec.ts`                                                                    |
-| Roles and configurable permissions                   | `administration.e2e-spec.ts` (immediate effect), `guards.spec.ts`, admin `routes.test.tsx`              |
-| Wholesale approval                                   | `administration.e2e-spec.ts`, Playwright wholesale test                                                 |
-| Append-only audit log                                | `administration.e2e-spec.ts` (update/delete rejected by the database)                                   |
-| Emails and SMS are sent by the worker                | `worker.integration-spec.ts` (SMTP and mock SMS outbox), `notification-handlers.spec.ts`, `sms.spec.ts` |
+| Requirement                                          | Proven by                                                                                                                                                      |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer sign-up with SMS code, retail and wholesale | `auth.e2e-spec.ts` (API), `auth-flows.test.tsx` (storefront), Playwright `identity.spec.ts`                                                                    |
+| Sign-in by mobile + SMS code or email + password     | `auth.e2e-spec.ts`, `auth-flows.test.tsx`, Playwright `identity.spec.ts`                                                                                       |
+| Staff accounts only through admin invitation         | `administration.e2e-spec.ts`, Playwright invitation test                                                                                                       |
+| Sessions: rotation, reuse detection, sign-out        | `auth.e2e-spec.ts` (sessions), `client.test.ts` (single-flight refresh)                                                                                        |
+| CSRF, lock-out, rate limits, no enumeration          | `auth.e2e-spec.ts`, `guards.spec.ts`                                                                                                                           |
+| Roles and configurable permissions                   | `administration.e2e-spec.ts` (immediate effect), `guards.spec.ts`, admin `routes.test.tsx`                                                                     |
+| Wholesale approval                                   | `administration.e2e-spec.ts`, Playwright wholesale test                                                                                                        |
+| Append-only audit log                                | `administration.e2e-spec.ts` (update/delete rejected by the database)                                                                                          |
+| Emails and SMS are sent by the worker                | `worker.integration-spec.ts` (SMTP and mock SMS outbox), `notification-handlers.spec.ts`, `sms.spec.ts`                                                        |
+| Seller registration (self sign-up)                   | `sellers.e2e-spec.ts` (registration), seller `seller-pages.test.tsx`, Playwright `sellers.spec.ts`                                                             |
+| Email verification, password reset, token expiry     | `auth.e2e-spec.ts`, `mfa.e2e-spec.ts` (expired and forged access tokens)                                                                                       |
+| Seller verification workflow                         | `sellers.e2e-spec.ts` (submit, request info, approve, reject, resubmit, suspend, reinstate, close), admin `marketplace.test.tsx`, Playwright `sellers.spec.ts` |
+| Private seller documents                             | `sellers.e2e-spec.ts` (only the seller and staff; staff views audited; type checked by content)                                                                |
+| Seller data isolation                                | `sellers.e2e-spec.ts`, `stores.e2e-spec.ts`, `seller-members.e2e-spec.ts` (404 for another seller's data), Playwright isolation test                           |
+| Stores                                               | `stores.e2e-spec.ts` (verified only, unique slugs, limit, settings, images, public visibility, admin suspension)                                               |
+| Seller staff invitations and permissions             | `seller-members.e2e-spec.ts` (invite, expire, resend, revoke, join, role limits, suspend, remove), seller `seller-pages.test.tsx`                              |
+| Permission scopes                                    | `mfa.e2e-spec.ts` (permission catalog, scope validation), admin `marketplace.test.tsx` (roles page)                                                            |
+| Two-step verification                                | `totp.spec.ts` (RFC 6238 vectors), `mfa.e2e-spec.ts` (sign-in, recovery codes, attempt limit, disable, admin reset), auth-ui `auth-ui.test.tsx`                |
 
 API e2e tests create their own users directly in the database and give each test client its
 own address (`X-Forwarded-For` with `TRUST_PROXY=1`), so per-address limits never leak between
