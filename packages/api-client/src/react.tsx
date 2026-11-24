@@ -35,8 +35,21 @@ export function useApiClient(): ApiClient {
 /** Central query-key factory: keeps cache keys consistent for invalidation. */
 export const queryKeys = {
   health: ['health'] as const,
+  session: ['session'] as const,
+  account: {
+    wholesale: ['account', 'wholesale-application'] as const,
+  },
+  admin: {
+    all: ['admin'] as const,
+    users: (query: object) => ['admin', 'users', query] as const,
+    user: (id: string) => ['admin', 'user', id] as const,
+    roles: ['admin', 'roles'] as const,
+    wholesale: (query: object) => ['admin', 'wholesale', query] as const,
+    auditLogs: (query: object) => ['admin', 'audit-logs', query] as const,
+  },
   dev: {
     all: ['dev'] as const,
+    smsOutbox: ['dev', 'sms-outbox'] as const,
     queues: ['dev', 'queues'] as const,
     job: (queue: string, jobId: string) => ['dev', 'job', queue, jobId] as const,
     deadLetters: (page: number, pageSize: number) =>

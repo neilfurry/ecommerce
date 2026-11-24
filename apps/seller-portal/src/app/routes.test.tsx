@@ -31,7 +31,7 @@ function renderAt(path: string, fetchImpl: typeof fetch = vi.fn()) {
   queryClient.setDefaultOptions({ queries: { retry: false } });
   render(
     <AppProviders
-      apiClient={createApiClient({ baseUrl: '/api', fetchImpl })}
+      apiClient={createApiClient({ baseUrl: '/api', app: 'seller', fetchImpl })}
       queryClient={queryClient}
     >
       <RouterProvider router={router} />

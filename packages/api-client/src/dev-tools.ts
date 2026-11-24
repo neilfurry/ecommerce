@@ -2,6 +2,8 @@ import {
   deadLetterListResponseSchema,
   type DeadLetterListResponse,
   type DevSampleJobRequest,
+  type DevSmsOutbox,
+  devSmsOutboxSchema,
   type DevTestEmailRequest,
   enqueuedJobResponseSchema,
   type EnqueuedJobResponse,
@@ -38,6 +40,8 @@ export function createDevToolsClient(request: Request) {
         schema: jobStatusResponseSchema,
         signal,
       }),
+    smsOutbox: (signal?: AbortSignal): Promise<DevSmsOutbox> =>
+      request('/dev/sms-outbox', { schema: devSmsOutboxSchema, signal }),
     queueStats: (signal?: AbortSignal): Promise<QueueStatsResponse> =>
       request('/dev/queues', { schema: queueStatsResponseSchema, signal }),
     listDeadLetters: (

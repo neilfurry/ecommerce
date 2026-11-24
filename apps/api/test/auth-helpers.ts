@@ -157,9 +157,9 @@ export async function findJob<T>(
     getQueueToken(queue === 'email' ? QUEUE_NAMES.EMAIL : QUEUE_NAMES.NOTIFICATIONS),
   );
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const jobs = await q.getJobs([...PENDING_STATES], 0, 500);
+    const jobs = (await q.getJobs([...PENDING_STATES], 0, 500)) as (Job<T> | undefined)[];
     const found = jobs
-      .filter((job): job is Job<T> => !!job && match(job.data, job))
+      .filter((job): job is Job<T> => job !== undefined && match(job.data, job))
       .sort((a, b) => b.timestamp - a.timestamp)[0];
     if (found) return found;
     await new Promise((resolve) => setTimeout(resolve, 50));

@@ -361,6 +361,14 @@ export class UsersService {
     if (others === 0) throw forbidden('The platform must keep at least one active super admin.');
   }
 
+  /** Seller staff activate their account in the Seller Center, platform staff in the Admin Console. */
+  private invitationAppUrl(user: UserWithRoles): string {
+    const platform = user.roles.some((r) =>
+      (PLATFORM_STAFF_ROLES as readonly string[]).includes(r.roleCode),
+    );
+    return platform ? this.config.appUrls.admin : this.config.appUrls.seller;
+  }
+
   private async sendInvitation(
     user: UserWithRoles,
     token: string,
@@ -374,7 +382,7 @@ export class UsersService {
       this.notifications.sendStaffInvitation({
         to: user.email,
         firstName: user.firstName,
-        link: `${this.config.appUrls.admin}/accept-invitation?token=${token}`,
+        link: `${this.invitationAppUrl(user)}/accept-invitation?token=${token}`,
         invitedBy: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'An administrator',
         roles: user.roles.map((r) => ROLE_LABELS[r.roleCode as UserRole]),
         expiresInHours: TOKEN_LIFETIMES_MS.INVITATION / 3_600_000,

@@ -196,7 +196,8 @@ export const userListQuerySchema = z.object({
   status: z.enum(USER_STATUSES).optional(),
   kind: z.enum(['staff', 'customers']).optional(),
 });
-export type UserListQuery = z.input<typeof userListQuerySchema>;
+/** What a client sends; every field is optional. */
+export type UserListQuery = Partial<z.output<typeof userListQuerySchema>>;
 export type UserListFilters = z.output<typeof userListQuerySchema>;
 
 export const adminUserSchema = z.object({
@@ -220,6 +221,7 @@ export const adminUserDetailSchema = adminUserSchema.extend({
   lockedUntil: z.iso.datetime().nullable(),
 });
 export type AdminUserDetail = z.infer<typeof adminUserDetailSchema>;
+export type AdminUserList = z.infer<typeof adminUserListSchema>;
 
 export const roleSchema = z.object({
   code: userRoleSchema,
@@ -258,6 +260,7 @@ export const wholesaleApplicationSchema = z.object({
 });
 export type WholesaleApplicationDto = z.infer<typeof wholesaleApplicationSchema>;
 export const wholesaleApplicationListSchema = paginatedSchema(wholesaleApplicationSchema);
+export type WholesaleApplicationList = z.infer<typeof wholesaleApplicationListSchema>;
 /** The signed-in customer's own application; null when they never applied. */
 export const myWholesaleApplicationSchema = z.object({
   application: wholesaleApplicationSchema.nullable(),
@@ -269,6 +272,7 @@ export const wholesaleListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   status: wholesaleStatusSchema.optional(),
 });
+export type WholesaleListQuery = Partial<z.output<typeof wholesaleListQuerySchema>>;
 
 export const reviewWholesaleSchema = z
   .object({
@@ -289,7 +293,7 @@ export const auditLogQuerySchema = z.object({
   actorId: z.uuid().optional(),
   entityId: z.string().trim().max(100).optional(),
 });
-export type AuditLogQuery = z.input<typeof auditLogQuerySchema>;
+export type AuditLogQuery = Partial<z.output<typeof auditLogQuerySchema>>;
 
 export const auditLogEntrySchema = z.object({
   id: z.uuid(),
@@ -305,6 +309,7 @@ export const auditLogEntrySchema = z.object({
 });
 export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
 export const auditLogListSchema = paginatedSchema(auditLogEntrySchema);
+export type AuditLogList = z.infer<typeof auditLogListSchema>;
 
 export const devSmsMessageSchema = z.object({
   to: z.string(),
