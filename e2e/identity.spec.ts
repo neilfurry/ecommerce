@@ -141,7 +141,7 @@ test.describe('Staff accounts', () => {
     // Customer support can see users but not roles or developer tools.
     await expect(staffPage.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible();
     const nav = staffPage.getByRole('navigation', { name: 'Main' }).first();
-    await expect(nav.getByRole('link', { name: 'Roles & permissions' })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: 'Roles' })).toHaveCount(0);
     await staffPage.goto(`${ADMIN}/dev-tools/jobs`);
     await expect(staffPage.getByText("You don't have access to this page")).toBeVisible();
     await staff.close();
@@ -163,7 +163,7 @@ test.describe('Staff accounts', () => {
     const context = await browser.newContext({ storageState: SELLER_STATE });
     const page = await context.newPage();
     await page.goto(SELLER);
-    await expect(page).toHaveURL(`${SELLER}/system-status`);
+    await expect(page).toHaveURL(`${SELLER}/dashboard`);
     await expect(page.getByRole('button', { name: /Account menu for/ })).toBeVisible();
     await context.close();
   });
