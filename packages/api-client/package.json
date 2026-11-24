@@ -1,0 +1,39 @@
+{
+  "name": "@marketplace/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Typed HTTP client and TanStack Query hooks for the marketplace API",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "echo \"@marketplace/api-client is consumed from source by Vite\"",
+    "dev": "echo \"@marketplace/api-client is consumed from source by Vite\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@marketplace/config": "workspace:*",
+    "@marketplace/types": "workspace:*",
+    "@marketplace/validation": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.108.4",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.108.4",
+    "@testing-library/jest-dom": "^8.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "jsdom": "^31.0.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.1"
+  }
+}

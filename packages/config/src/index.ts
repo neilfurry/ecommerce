@@ -1,0 +1,51 @@
+/**
+ * Shared, non-secret runtime constants.
+ * Secrets and environment-specific values belong in environment variables, not here.
+ */
+
+export const APP_NAME = 'Marketplace';
+
+/** Philippine market defaults. */
+export const DEFAULT_CURRENCY = 'PHP';
+export const DEFAULT_LOCALE = 'en-PH';
+export const DEFAULT_TIMEZONE = 'Asia/Manila';
+
+/** HTTP API routing: every endpoint lives under /{API_PREFIX}/v{API_DEFAULT_VERSION}/... */
+export const API_PREFIX = 'api';
+export const API_DEFAULT_VERSION = '1';
+
+/** Header used to correlate a request across API logs, worker logs and error responses. */
+export const REQUEST_ID_HEADER = 'x-request-id';
+
+/** BullMQ queue names. Each queue is owned by one business domain. */
+export const QUEUE_NAMES = {
+  SYSTEM: 'system',
+} as const;
+export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
+
+/** Redis key prefix for all BullMQ data, shared by producers (API) and consumers (worker). */
+export const BULLMQ_PREFIX = 'marketplace:bull';
+
+/** Job names on the system queue. */
+export const SYSTEM_JOBS = {
+  HEARTBEAT: 'system.heartbeat',
+} as const;
+
+/** Job-scheduler id for the recurring worker heartbeat. */
+export const WORKER_HEARTBEAT_SCHEDULER_ID = 'system-heartbeat';
+
+/** Redis key namespace. All application keys start with "marketplace:". */
+export const REDIS_KEYS = {
+  WORKER_HEARTBEAT: 'marketplace:worker:heartbeat',
+  THROTTLE_PREFIX: 'marketplace:throttle:',
+} as const;
+
+/** The API reports the worker as down if its last heartbeat is older than this. */
+export const WORKER_HEARTBEAT_STALE_AFTER_SECONDS = 60;
+
+/** Local development ports for the three frontends. */
+export const FRONTEND_DEV_PORTS = {
+  storefront: 5173,
+  sellerPortal: 5174,
+  adminPortal: 5175,
+} as const;

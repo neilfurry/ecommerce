@@ -1,0 +1,69 @@
+# Local development infrastructure. The apps themselves run on the host with `pnpm dev`
+# (fast hot reload on Windows); production container images arrive in Phase 10.
+#
+#   docker compose up -d --wait   start everything and wait until healthy
+#   docker compose down           stop (data is kept in named volumes)
+#   docker compose down -v        stop AND delete all local data
+#
+# Values come from the repository-root .env (see .env.example). Ports bind to 127.0.0.1
+# only, so the services are not reachable from other machines on your network.
+name: marketplace
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marketplace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marketplace_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-marketplace}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ requires "noeviction" so queued jobs are never silently dropped.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    # MinIO Inc. stopped publishing community images in Oct 2025; Chainguard maintains a
+    # free build. Override MINIO_IMAGE in .env to use any other MinIO/S3-compatible image.
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio:latest}
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    # Local development only: run as root so the named volume is always writable.
+    user: '0:0'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-marketplace}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-marketplace_dev_secret}
+    ports:
+      - '127.0.0.1:${MINIO_API_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    # Minimal images ship no curl/mc, so there is no container healthcheck; the API's
+    # GET /api/v1/health reports storage reachability and the bucket is created on API start.
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

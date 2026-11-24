@@ -1,0 +1,13 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
+  "[prisma]": { "editor.defaultFormatter": "Prisma.prisma" },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "files.eol": "\n",
+  "tailwindCSS.experimental.configFile": {
+    "apps/storefront/src/styles.css": "apps/storefront/src/**",
+    "apps/seller-portal/src/styles.css": "apps/seller-portal/src/**",
+    "apps/admin-portal/src/styles.css": "apps/admin-portal/src/**"
+  }
+}
