@@ -4,62 +4,84 @@ A multi-vendor e-commerce marketplace for the Philippine market: independent sel
 stores, customers buy from many sellers in one checkout (retail and wholesale), and the platform
 handles payments, commissions, settlements and payouts.
 
-> **Status:** Phase 1 (Foundation) of 10. See [docs/roadmap.md](docs/roadmap.md) and the
-> [Phase 1 report](docs/phases/phase-1-foundation.md).
+> **Status:** Phase 1 (Foundation) of 10. See the [roadmap](docs/roadmap.md) and the
+> [Phase 1 report](docs/phases/phase-1-foundation.md). No business modules exist yet.
 
-## What's in the repository
+## Repository layout
 
-| Path                  | What it is                                                    | Dev URL                        |
-| --------------------- | ------------------------------------------------------------- | ------------------------------ |
-| `apps/api`            | NestJS REST API (modular monolith), Prisma, Swagger           | http://localhost:3000/api/docs |
-| `apps/worker`         | NestJS background worker (BullMQ consumers)                   | none (no HTTP)                 |
-| `apps/storefront`     | Customer storefront (React + Vite)                            | http://localhost:5173          |
-| `apps/seller-portal`  | Seller Center (React + Vite)                                  | http://localhost:5174          |
-| `apps/admin-portal`   | Admin Console (React + Vite)                                  | http://localhost:5175          |
-| `packages/ui`         | Design system: shadcn/ui components, layouts, Tailwind tokens |                                |
-| `packages/api-client` | Typed API client and TanStack Query hooks                     |                                |
-| `packages/validation` | Zod schemas shared by API and frontends                       |                                |
-| `packages/types`      | Shared TypeScript types                                       |                                |
-| `packages/config`     | Shared constants (queues, Redis keys, locale, currency)       |                                |
-| `docker-compose.yml`  | PostgreSQL 17, Redis 7, MinIO (S3-compatible storage)         | MinIO console: :9001           |
-| `scripts/*.ps1`       | Windows PowerShell scripts: setup, dev, test, reset, backup   |                                |
-| `e2e/`                | Playwright browser tests across the three frontends           |                                |
-| `docs/`               | Setup guides, architecture, decision records, phase reports   |                                |
+```
+marketplace/
+├── apps/
+│   ├── storefront/        Customer storefront (React + Vite)          http://localhost:5173
+│   ├── seller-portal/     Seller Center (React + Vite)                http://localhost:5174
+│   ├── admin-portal/      Admin Console (React + Vite)                http://localhost:5175
+│   ├── api/               REST API (NestJS modular monolith)          http://localhost:3000/api/docs
+│   └── worker/            Background jobs (NestJS + BullMQ, no HTTP)
+├── packages/
+│   ├── ui/                Design system: shadcn/ui components, layouts, form bindings
+│   ├── shared-types/      TypeScript types (roles, error codes, health...)
+│   ├── validation/        Zod schemas shared by the API and the frontends
+│   ├── api-client/        Typed API client + TanStack Query hooks
+│   └── config/            Constants: queues and retry policies, Redis keys, locale
+├── prisma/                schema.prisma, migrations/, seed.ts, generated client (@marketplace/database)
+├── docker/                docker-compose.yml: PostgreSQL, Redis, MinIO, Mailpit
+├── scripts/               Windows PowerShell scripts: setup, start, stop, test, reset, backup
+├── e2e/                   Playwright browser tests
+└── docs/                  architecture/ database/ api/ development/ testing/ phases/
+```
 
-## Quick start (Windows 11)
+## Start the project (Windows 11)
 
-Prerequisites: Node.js 24 LTS, Git, Docker Desktop with WSL 2. Full walkthrough:
-[docs/windows-setup.md](docs/windows-setup.md).
+Prerequisites: **Git, Node.js 24 LTS, Docker Desktop (WSL 2)**. Step-by-step install guide:
+[docs/development/WINDOWS_SETUP.md](docs/development/WINDOWS_SETUP.md).
 
 ```powershell
 git clone https://github.com/neilfurry/ecommerce.git
 cd ecommerce
-powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1   # install, start services, migrate, seed
-.\scripts\dev.ps1                                                # start API, worker and all three frontends
+powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1   # once: install, start services, migrate, seed
+.\scripts\start.ps1                                             # every day: services + all five apps
 ```
 
-Open http://localhost:5175 (Admin Console): **System health** should show every component **Up**.
+Then open:
+
+| What                         | URL                                 |
+| ---------------------------- | ----------------------------------- |
+| Storefront                   | http://localhost:5173               |
+| Seller Center                | http://localhost:5174               |
+| Admin Console                | http://localhost:5175               |
+| API documentation (Swagger)  | http://localhost:3000/api/docs      |
+| API health                   | http://localhost:3000/api/v1/health |
+| Mailpit (all dev email)      | http://localhost:8025               |
+| MinIO console (file storage) | http://localhost:9001               |
+
+Stop with **Ctrl+C**, then `.\scripts\stop.ps1` to stop the Docker services (data is kept).
+
+**Check that everything works:** in the Admin Console, **System health** shows every component **Up**.
+Under **Developer tools**, run the sample job, send a test email (it appears in Mailpit) and upload
+a test file.
 
 ## Everyday commands (PowerShell)
 
-| Task                                  | Command                                                                      |
-| ------------------------------------- | ---------------------------------------------------------------------------- |
-| Start everything                      | `.\scripts\dev.ps1`                                                          |
-| Start one app                         | `.\scripts\dev.ps1 -Only api` (or `worker`, `storefront`, `seller`, `admin`) |
-| Start / stop infrastructure only      | `pnpm infra:up` / `pnpm infra:down`                                          |
-| Create a migration after schema edits | `pnpm db:migrate`                                                            |
-| Apply migrations                      | `pnpm db:deploy`                                                             |
-| Seed reference data                   | `pnpm db:seed`                                                               |
-| Reset local database                  | `.\scripts\reset-db.ps1`                                                     |
-| Back up / restore local database      | `.\scripts\backup-db.ps1` / `.\scripts\restore-db.ps1 -File <path>`          |
-| Browse the database                   | `pnpm db:studio`                                                             |
-| All tests + typecheck + lint          | `.\scripts\test.ps1`                                                         |
-| Unit tests only                       | `.\scripts\test.ps1 -Suite unit`                                             |
-| Typecheck / lint / format             | `pnpm typecheck` / `pnpm lint` / `pnpm format`                               |
+| Task                                  | Command                                                                     |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| Start everything                      | `.\scripts\start.ps1`                                                       |
+| Start one app                         | `.\scripts\start.ps1 -Only api` (`worker`, `storefront`, `seller`, `admin`) |
+| Start only the Docker services        | `.\scripts\start.ps1 -InfraOnly`                                            |
+| Stop the Docker services              | `.\scripts\stop.ps1` (`-RemoveData` also wipes data)                        |
+| Create a migration after schema edits | `pnpm db:migrate`                                                           |
+| Apply migrations / seed               | `pnpm db:deploy` / `pnpm db:seed`                                           |
+| Reset the local database              | `.\scripts\reset-db.ps1`                                                    |
+| Back up / restore the database        | `.\scripts\backup-db.ps1` / `.\scripts\restore-db.ps1 -File <path>`         |
+| All checks and tests                  | `.\scripts\test.ps1`                                                        |
+| Typecheck / lint / format             | `pnpm typecheck` / `pnpm lint` / `pnpm format`                              |
 
 ## Documentation
 
-- [Windows setup](docs/windows-setup.md) and [troubleshooting](docs/troubleshooting.md)
-- [Architecture overview](docs/architecture.md)
-- [Architecture decision records](docs/adr/)
-- [Roadmap](docs/roadmap.md) and [phase reports](docs/phases/)
+| Topic        | Document                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Development  | [Windows setup](docs/development/WINDOWS_SETUP.md) · [Local database](docs/development/LOCAL_DATABASE.md) · [Troubleshooting](docs/development/TROUBLESHOOTING.md) |
+| Architecture | [System architecture](docs/architecture/SYSTEM_ARCHITECTURE.md) · [Decision records](docs/architecture/adr/)                                                       |
+| Database     | [Database conventions](docs/database/DATABASE_CONVENTIONS.md)                                                                                                      |
+| API          | [API reference and conventions](docs/api/API_REFERENCE.md)                                                                                                         |
+| Testing      | [Testing guide](docs/testing/TESTING_GUIDE.md)                                                                                                                     |
+| Delivery     | [Roadmap](docs/roadmap.md) · [Phase reports](docs/phases/)                                                                                                         |

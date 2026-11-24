@@ -139,6 +139,13 @@ jobs:
           ./scripts/restore-db.ps1 -File $dump.FullName -Force
           ./scripts/reset-db.ps1 -Force
           docker compose --env-file .env -f docker/docker-compose.yml exec -T postgres psql -U marketplace -d marketplace -tAc "select code from currencies"
+      - name: stop.ps1, start.ps1 -InfraOnly, stop.ps1 -RemoveData
+        run: |
+          ./scripts/stop.ps1
+          ./scripts/start.ps1 -InfraOnly
+          ./scripts/stop.ps1 -RemoveData -Force
+          $left = docker volume ls -q --filter name=marketplace_
+          if ($left) { throw "Volumes not removed: $left" }
       - name: Compose logs on failure
         if: failure()
         run: docker compose --env-file .env -f docker/docker-compose.yml logs --tail 100

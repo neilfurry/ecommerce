@@ -62,7 +62,7 @@ test.describe('Admin Console developer tools', () => {
   test('file upload, signed download and delete', async ({ page }) => {
     const name = `e2e-${Date.now()}.txt`;
     await page.goto(`${ADMIN}/dev-tools/files`);
-    await page.getByLabel('File').setInputFiles({
+    await page.getByLabel('File', { exact: true }).setInputFiles({
       name,
       mimeType: 'text/plain',
       buffer: Buffer.from('Salamat sa pagsubok!'),
@@ -85,7 +85,7 @@ test.describe('Admin Console developer tools', () => {
 
   test('rejects a disguised executable', async ({ page }) => {
     await page.goto(`${ADMIN}/dev-tools/files`);
-    await page.getByLabel('File').setInputFiles({
+    await page.getByLabel('File', { exact: true }).setInputFiles({
       name: 'photo.png',
       mimeType: 'image/png',
       buffer: Buffer.concat([Buffer.from('MZ'), Buffer.alloc(64)]),

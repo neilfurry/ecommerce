@@ -37,21 +37,41 @@ then `Get-Process -Id <pid>`.
 
 **MinIO image cannot be pulled**
 MinIO Inc. stopped publishing community images in October 2025. The default is Chainguard's free
-image (`cgr.dev/chainguard/minio`). If that registry is unreachable, set `MINIO_IMAGE` in `.env` to
+image (`cgr.dev/chainguard/minio:latest-dev`; the `-dev` variant contains the shell its health check uses). If that registry is unreachable, set `MINIO_IMAGE` in `.env` to
 another S3-compatible image that accepts `server /data --console-address :9001` and run
 `pnpm infra:up` again.
 
 **MinIO fails with a permission error on `/data`**
-Remove the volume and start again: `docker compose down`, `docker volume rm marketplace_minio-data`,
-`pnpm infra:up`.
+Remove the volume and start again: `.\scripts\stop.ps1`, `docker volume rm marketplace_minio-data`,
+`.\scripts\start.ps1 -InfraOnly`.
 
 **Start over with clean data**
-`docker compose down -v` (deletes all local data), then `.\scripts\setup.ps1`.
+`.\scripts\stop.ps1 -RemoveData` (deletes all local data), then `.\scripts\setup.ps1`.
+
+**A container stays "unhealthy" and `start.ps1` fails**
+Show the logs: `docker compose --env-file .env -f docker/docker-compose.yml logs <service> --tail 50`
+(`postgres`, `redis`, `minio` or `mailpit`).
+
+## Email (Mailpit)
+
+**The test email job fails or the email never arrives**
+Check that Mailpit is healthy (`pnpm infra:ps`) and that `SMTP_HOST=localhost` and `SMTP_PORT=1025` in
+`.env`. Failed sends are retried 5 times with backoff (30 s, 60 s, 2 min...), then appear under
+**Developer tools → Dead-letter queue**. Open http://localhost:8025 to see delivered mail.
+
+## Background jobs
+
+**Jobs stay "Waiting"**
+The worker is not running. Start it with `.\scripts\start.ps1 -Only worker`.
+
+**A job shows up in the dead-letter queue**
+It failed every attempt, or had an invalid payload or no handler. Open **Details** to read the
+error, fix the cause, then use **Retry**.
 
 ## Database and Prisma
 
 **`Can't reach database server at localhost:5432`**
-Run `pnpm infra:up` and check `docker compose ps`: `postgres` should be `healthy`.
+Run `.\scripts\start.ps1 -InfraOnly` and check `pnpm infra:ps`: `postgres` should be `healthy`.
 
 **`P3009 migrate found failed migrations` or drift warnings from `pnpm db:migrate`**
 On a local database, `.\scripts\reset-db.ps1` rebuilds it from the migrations.
@@ -61,13 +81,23 @@ Prisma downloads a schema engine on first use. Behind a corporate proxy, set `HT
 running pnpm. On a restricted network, ask IT to allow `binaries.prisma.sh`.
 
 **`Cannot find module '../../generated/prisma/client'`**
-The Prisma client is generated code and is not committed. Run `pnpm db:generate`. `pnpm dev` and
-`pnpm build` do this automatically.
+The Prisma client is generated into `prisma/src/generated` and is not committed. Run
+`pnpm db:generate`. `pnpm dev`, `pnpm build`, `pnpm db:seed` and the test scripts do this automatically.
+
+## Developer tools
+
+**`/api/v1/dev/*` answers 404, or the Developer tools menu is missing**
+Set `DEV_TOOLS_ENABLED=true` in `.env` and restart the API. The menu appears in development
+builds of the Admin Console. Developer tools are rejected when `NODE_ENV=production`.
+
+**Uploads fail with "Unsupported file type"**
+Only PNG, JPEG, GIF, WebP, PDF and plain text are accepted, and the type is detected from the
+file's content. A renamed file of another type is rejected on purpose.
 
 ## API and frontends
 
 **System status shows the worker as down (non-critical)**
-Start it: `.\scripts\dev.ps1 -Only worker`. Heartbeats appear within a few seconds. The API
+Start it: `.\scripts\start.ps1 -Only worker`. Heartbeats appear within a few seconds. The API
 reports the worker down when there is no heartbeat for 60 seconds.
 
 **Frontends show "Unable to reach the API"**

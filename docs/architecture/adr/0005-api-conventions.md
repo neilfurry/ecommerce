@@ -7,7 +7,8 @@
 
 - **Paths:** `/api/v{n}/<resource>` (URI versioning, default `v1`). Plural nouns, kebab-case.
 - **Validation:** request bodies, params and queries are validated with **Zod schemas from
-  `@marketplace/validation`** through `ZodValidationPipe`, the same schemas the frontends use for
+  `@marketplace/validation`**. The global `ZodGlobalValidationPipe` validates parameters typed with a
+  `createZodDto(schema)` class, and `ZodValidationPipe` handles one-off schemas. These are the same schemas the frontends use for
   forms. NestJS 12 also offers `StandardSchemaValidationPipe`. We use our own pipe because it
   produces our error envelope with per-field errors.
 - **OpenAPI:** Swagger at `/api/docs` (JSON at `/api/docs-json`). Response and request schemas are

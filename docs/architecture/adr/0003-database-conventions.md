@@ -5,9 +5,10 @@
 
 ## Decision
 
-- **PostgreSQL + Prisma 7** with the `prisma-client` generator (output `apps/api/src/generated`,
-  not committed) and the `@prisma/adapter-pg` driver adapter. Connection settings live in
-  `prisma.config.ts`, which loads the repository-root `.env`.
+- **PostgreSQL + Prisma 7** with the `prisma-client` generator in the `prisma/` workspace package
+  (`@marketplace/database`; generated client in `prisma/src/generated`, not committed) and the `@prisma/adapter-pg` driver adapter. Connection settings live in
+  `prisma/prisma.config.ts`, which loads the repository-root `.env`. Full rules:
+  [docs/database/DATABASE_CONVENTIONS.md](../../database/DATABASE_CONVENTIONS.md).
 - **Primary keys:** UUID (`@db.Uuid @default(uuid(7))`, time-ordered for index locality) for all
   business entities. Small reference tables may use natural keys (e.g. `currencies.code`).
 - **Names:** models in PascalCase, tables and columns in snake_case via `@@map`/`@map`.

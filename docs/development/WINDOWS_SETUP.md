@@ -1,156 +1,145 @@
 # Windows 11 development setup
 
-Everything runs on one Windows 11 PC. The databases run in Docker Desktop (WSL 2 backend). The
-Node.js apps run directly on Windows for fast hot reload. All commands are for **Windows
-PowerShell** unless marked otherwise.
+Everything runs on one Windows 11 PC. PostgreSQL, Redis, MinIO and Mailpit run in Docker Desktop
+(WSL 2 backend). The Node.js apps run directly on Windows for fast hot reload. Every command is
+for **Windows PowerShell** (5.1 or 7) unless marked **WSL/Linux**.
 
-## 1. Install prerequisites
+## 1. Install the prerequisites
 
-| Tool               | Version              | How to install                                                    |
-| ------------------ | -------------------- | ----------------------------------------------------------------- |
-| Git                | any recent           | `winget install --id Git.Git -e`                                  |
-| Node.js            | **24 LTS** (≥ 22.22) | `winget install --id OpenJS.NodeJS.LTS -e`                        |
-| pnpm               | 10.x                 | `corepack enable` then `corepack prepare pnpm@10.28.0 --activate` |
-| Docker Desktop     | 4.x, WSL 2 backend   | `winget install --id Docker.DockerDesktop -e`                     |
-| Visual Studio Code | any recent           | `winget install --id Microsoft.VisualStudioCode -e`               |
+Open **PowerShell** and run:
 
-After installing, **close and reopen PowerShell** so the new `PATH` is picked up, then check:
+```powershell
+winget install --id Git.Git -e
+winget install --id OpenJS.NodeJS.LTS -e          # Node.js 24 LTS
+winget install --id Docker.DockerDesktop -e
+winget install --id Microsoft.VisualStudioCode -e # optional but recommended
+```
+
+Docker Desktop needs WSL 2. If WSL is not installed yet, open PowerShell **as Administrator**:
+
+```powershell
+wsl --install
+```
+
+Restart Windows, then start **Docker Desktop**. Under **Settings → General**, keep **Use the WSL 2
+based engine** ticked. Under **Settings → Resources**, give Docker at least 4 GB of memory. Wait
+until the status bar shows **Engine running**.
+
+Close and reopen PowerShell so the new programs are on `PATH`, then enable pnpm:
+
+```powershell
+corepack enable
+corepack prepare pnpm@10.28.0 --activate
+```
+
+Check the versions:
 
 ```powershell
 git --version
-node --version      # v24.x (or v22.22+)
+node --version      # v24.x (v22.22 or newer also works)
 pnpm --version      # 10.x
 docker --version
+docker compose version
 ```
 
-### Docker Desktop and WSL 2
-
-1. If WSL is not installed yet, run in an **Administrator** PowerShell: `wsl --install`, then
-   restart Windows.
-2. Start Docker Desktop. Under **Settings → General**, make sure **Use the WSL 2 based engine**
-   is ticked.
-3. Wait until the status bar says **Engine running**.
-4. Optional but recommended: under **Settings → Resources**, give Docker at least 4 GB of memory.
-
-### Recommended VS Code extensions
-
-ESLint, Prettier, Prisma, Tailwind CSS IntelliSense, Playwright Test for VS Code, Docker.
+> **Execution policy.** If Windows says "running scripts is disabled", either use the
+> `powershell -ExecutionPolicy Bypass -File .\scripts\<name>.ps1` form, or allow local scripts
+> for your user once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 ## 2. Get the code and run setup
 
 ```powershell
-cd $HOME\source          # or wherever you keep projects
+cd $HOME
+mkdir source -Force | Out-Null
+cd source
 git clone https://github.com/neilfurry/ecommerce.git
 cd ecommerce
 powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 ```
 
-`setup.ps1` is safe to re-run. It:
+`setup.ps1` can be re-run safely. It:
 
 1. checks Node.js, pnpm and Docker;
-2. copies `.env.example` to `.env` (only if `.env` does not exist);
-3. runs `pnpm install`;
-4. starts PostgreSQL, Redis and MinIO with `docker compose up -d --wait`;
-5. applies the database migrations (`pnpm db:deploy`) and seeds reference data (`pnpm db:seed`);
-6. builds the shared packages.
+2. creates `.env` from `.env.example` (only when `.env` does not exist);
+3. installs dependencies (`pnpm install`);
+4. starts PostgreSQL, Redis, MinIO and Mailpit and waits until they are **healthy**;
+5. applies database migrations and seeds reference data;
+6. builds the shared packages and generates the Prisma client.
 
-> **Execution policy.** If Windows refuses to run scripts, either keep using the
-> `powershell -ExecutionPolicy Bypass -File ...` form, or allow local scripts for your user once:
-> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+It ends with "Setup complete." and the list of URLs.
 
-## 3. Start developing
+## 3. Start and stop
 
 ```powershell
-.\scripts\dev.ps1
+.\scripts\start.ps1                 # Docker services + API + worker + 3 frontends
+.\scripts\start.ps1 -Only api       # or worker, storefront, seller, admin
+.\scripts\start.ps1 -InfraOnly      # only the Docker services
+.\scripts\stop.ps1                  # stop Docker services, keep data
+.\scripts\stop.ps1 -RemoveData      # stop and delete ALL local data (asks first)
 ```
 
-| App           | URL                                               |
-| ------------- | ------------------------------------------------- |
-| Storefront    | http://localhost:5173                             |
-| Seller Center | http://localhost:5174                             |
-| Admin Console | http://localhost:5175                             |
-| API (Swagger) | http://localhost:3000/api/docs                    |
-| API health    | http://localhost:3000/api/v1/health               |
-| MinIO console | http://localhost:9001 (user/password from `.env`) |
+Apps started by `start.ps1` stop with **Ctrl+C** in that window.
 
-Stop with **Ctrl+C**. The Docker services keep running in the background; stop them with
-`pnpm infra:down`. Your data is kept. `docker compose down -v` deletes it.
+| Service       | URL / address                     | Credentials (from `.env`)                  |
+| ------------- | --------------------------------- | ------------------------------------------ |
+| Storefront    | http://localhost:5173             |                                            |
+| Seller Center | http://localhost:5174             |                                            |
+| Admin Console | http://localhost:5175             |                                            |
+| API (Swagger) | http://localhost:3000/api/docs    |                                            |
+| PostgreSQL    | localhost:5432                    | `marketplace` / `marketplace_dev_password` |
+| Redis         | localhost:6379                    |                                            |
+| MinIO API     | http://localhost:9000             | `marketplace` / `marketplace_dev_secret`   |
+| MinIO console | http://localhost:9001             | same as MinIO API                          |
+| Mailpit       | http://localhost:8025 (SMTP 1025) |                                            |
 
-## 4. Environment configuration
+All ports bind to `127.0.0.1`, so other computers on your network cannot reach them.
 
-All apps read the single **`.env`** file in the repository root. `.env.example` documents every
-variable. The defaults work out of the box for local development.
+## 4. Verify the installation
 
-| Variable                                               | Used by              | Purpose                                                 |
-| ------------------------------------------------------ | -------------------- | ------------------------------------------------------- |
-| `API_PORT`                                             | API                  | HTTP port (default 3000)                                |
-| `CORS_ORIGINS`                                         | API                  | Comma-separated browser origins allowed to call the API |
-| `TRUST_PROXY`                                          | API                  | `true`/hop count when behind a reverse proxy            |
-| `LOG_LEVEL`                                            | API, worker          | `fatal`…`trace`, `silent`                               |
-| `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_MAX_REQUESTS` | API                  | Global per-IP rate limit                                |
-| `SWAGGER_ENABLED`                                      | API                  | Serve Swagger UI at `/api/docs`                         |
-| `POSTGRES_USER/PASSWORD/DB/PORT`                       | docker compose       | PostgreSQL container settings                           |
-| `DATABASE_URL`                                         | API, Prisma          | PostgreSQL connection string                            |
-| `REDIS_PORT`, `REDIS_URL`                              | compose, API, worker | Redis                                                   |
-| `MINIO_*`                                              | docker compose       | MinIO container settings and image                      |
-| `S3_*`                                                 | API                  | S3-compatible storage connection and bucket             |
-| `WORKER_CONCURRENCY`                                   | worker               | Jobs processed in parallel per queue                    |
-| `WORKER_HEARTBEAT_INTERVAL_SECONDS`                    | worker               | How often the worker reports it is alive                |
-| `VITE_API_BASE_URL`                                    | frontends            | API path/URL as seen by the browser (default `/api`)    |
-| `VITE_API_PROXY_TARGET`                                | frontends            | Where the Vite dev server proxies `/api`                |
+1. Open http://localhost:5175. **System health** shows Database, Redis, File storage and
+   Background worker as **Up**.
+2. **Developer tools → Background jobs**: click **Run job**. The job status turns **Completed**.
+3. On the same page, click **Send test email**, then **Open Mailpit inbox**. The email is there.
+4. **Developer tools → File storage**: upload a PNG or PDF, download it, then delete it.
+5. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
+6. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
 
-Invalid or missing values stop the API and worker at start-up with a list of every problem.
+## 5. Environment configuration
 
-## 5. Database workflow
+All apps and Docker Compose read the single **`.env`** in the repository root. `.env.example`
+documents every variable, and its defaults work as-is for local development. Invalid or missing
+values stop the API or worker at start-up with a list of every problem; secret values are never
+printed.
 
-| Task                                                                    | Command                                |
-| ----------------------------------------------------------------------- | -------------------------------------- |
-| Edit `apps/api/prisma/schema.prisma`, then create and apply a migration | `pnpm db:migrate` (prompts for a name) |
-| Apply existing migrations (no prompts)                                  | `pnpm db:deploy`                       |
-| Seed reference data (idempotent)                                        | `pnpm db:seed`                         |
-| Drop, recreate, migrate and seed                                        | `.\scripts\reset-db.ps1`               |
-| Visual database browser                                                 | `pnpm db:studio`                       |
+| Group           | Variables                                                                                                                                                                                                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API             | `API_PORT`, `CORS_ORIGINS`, `TRUST_PROXY`, `LOG_LEVEL`, `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_MAX_REQUESTS`, `SWAGGER_ENABLED`                                                                                                                                                                                |
+| PostgreSQL      | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `SHADOW_DATABASE_URL` (optional)                                                                                                                                                                                           |
+| Redis           | `REDIS_PORT`, `REDIS_URL`                                                                                                                                                                                                                                                                                        |
+| Object storage  | `MINIO_IMAGE`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE`, `S3_AUTO_CREATE_BUCKET`, `STORAGE_SIGNED_URL_TTL_SECONDS`, `UPLOAD_MAX_BYTES` |
+| Email           | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`                                                                                                                                                                                       |
+| Developer tools | `DEV_TOOLS_ENABLED` (rejected when `NODE_ENV=production`)                                                                                                                                                                                                                                                        |
+| Worker          | `WORKER_CONCURRENCY` (optional override), `WORKER_HEARTBEAT_INTERVAL_SECONDS`                                                                                                                                                                                                                                    |
+| Frontends       | `VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET`, `VITE_MAILPIT_URL`                                                                                                                                                                                                                                                 |
 
-Migrations are committed to Git in `apps/api/prisma/migrations`. Never edit an applied migration;
-create a new one instead.
+`NODE_ENV` is intentionally not set in `.env`: the API and worker default to `development`, and
+Vite would otherwise build development bundles.
 
-## 6. Running tests
+## 6. Database, tests and backups
 
-```powershell
-.\scripts\test.ps1                  # typecheck, lint, unit, integration, browser tests
-.\scripts\test.ps1 -Suite unit      # fast, no Docker needed
-.\scripts\test.ps1 -Suite integration
-.\scripts\test.ps1 -Suite ui        # Playwright
-```
+- Database workflow (migrations, seed, reset, Studio, backups): [LOCAL_DATABASE.md](LOCAL_DATABASE.md)
+- Running and writing tests: [../testing/TESTING_GUIDE.md](../testing/TESTING_GUIDE.md)
 
-Before the first browser test run, download the browser once:
+## 7. Recommended VS Code extensions
 
-```powershell
-pnpm exec playwright install chromium
-```
-
-## 7. Automatic backups
-
-`.\scripts\backup-db.ps1` writes a compressed dump to `.\backups` and deletes dumps older than
-14 days (`-RetentionDays` to change). To run it every day at 13:00 with Windows Task Scheduler:
-
-```powershell
-$repo = (Get-Location).Path
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$repo\scripts\backup-db.ps1`"" `
-  -WorkingDirectory $repo
-$trigger = New-ScheduledTaskTrigger -Daily -At 1pm
-Register-ScheduledTask -TaskName 'Marketplace DB backup' -Action $action -Trigger $trigger
-```
-
-Restore with `.\scripts\restore-db.ps1 -File .\backups\<file>.dump`. Production backups (managed
-database snapshots plus off-site copies) are covered in Phase 10.
+Open the folder in VS Code and accept the **recommended extensions** prompt: ESLint, Prettier,
+Prisma, Tailwind CSS IntelliSense, Playwright, Docker, Vitest.
 
 ## 8. WSL / Linux shell (optional)
 
-The same `pnpm` commands work unchanged inside WSL (Ubuntu). Use `cp .env.example .env` instead
-of `Copy-Item`, and `docker compose up -d --wait` instead of the PowerShell scripts. For the best
-file-watching performance inside WSL, clone the repository into the Linux file system
+**WSL/Linux:** the same `pnpm` commands work unchanged. Use `cp .env.example .env`, then
+`pnpm infra:up`, `pnpm db:deploy`, `pnpm db:seed` and `pnpm dev`. PowerShell 7 (`pwsh`) also runs
+the scripts in `scripts/` on Linux. For fast file watching, clone into the Linux file system
 (`~/projects`), not under `/mnt/c`.
 
-Having problems? See [troubleshooting.md](troubleshooting.md).
+Having problems? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
