@@ -1,6 +1,37 @@
 import { APP_NAME } from '@marketplace/config';
-import { BrandMark, cn } from '@marketplace/ui';
+import { useSession } from '@marketplace/api-client';
+import { UserMenu } from '@marketplace/auth-ui';
+import { BrandMark, Button, cn } from '@marketplace/ui';
+import { UserIcon } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router';
+
+/** Sign-in links for visitors; account link and menu for signed-in customers. */
+function AccountActions() {
+  const session = useSession();
+  if (session.isPending) return null;
+  if (session.data) {
+    return (
+      <div className="flex items-center gap-1">
+        <Button asChild variant="ghost">
+          <Link to="/account">
+            <UserIcon aria-hidden="true" /> My account
+          </Link>
+        </Button>
+        <UserMenu />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Button asChild variant="ghost">
+        <Link to="/sign-in">Sign in</Link>
+      </Button>
+      <Button asChild>
+        <Link to="/sign-up">Create account</Link>
+      </Button>
+    </div>
+  );
+}
 
 const NAV_LINKS = [{ to: '/', label: 'Home', end: true }];
 
@@ -37,6 +68,9 @@ export function StoreLayout() {
               </NavLink>
             ))}
           </nav>
+          <div className="ml-auto">
+            <AccountActions />
+          </div>
         </div>
       </header>
 
