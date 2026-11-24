@@ -16,7 +16,7 @@
 [CmdletBinding()]
 param()
 
-. "$PSScriptRoot\lib\common.ps1"
+. "$PSScriptRoot/lib/common.ps1"
 Set-Location $script:RepoRoot
 
 Write-Step 'Checking prerequisites'

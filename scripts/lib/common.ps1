@@ -1,10 +1,10 @@
 # Shared helpers for the development scripts. Dot-source this file:
-#   . "$PSScriptRoot\lib\common.ps1"
+#   . "$PSScriptRoot/lib/common.ps1"
 # Compatible with Windows PowerShell 5.1 and PowerShell 7+.
 
 $ErrorActionPreference = 'Stop'
 
-$script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 
 function Write-Step([string]$Message) {
     Write-Host ''

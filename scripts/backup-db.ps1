@@ -19,7 +19,7 @@
 [CmdletBinding()]
 param([int]$RetentionDays = 14)
 
-. "$PSScriptRoot\lib\common.ps1"
+. "$PSScriptRoot/lib/common.ps1"
 Set-Location $script:RepoRoot
 Assert-DockerRunning
 

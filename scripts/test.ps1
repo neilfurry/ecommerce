@@ -18,7 +18,7 @@ param(
     [string]$Suite = 'all'
 )
 
-. "$PSScriptRoot\lib\common.ps1"
+. "$PSScriptRoot/lib/common.ps1"
 Set-Location $script:RepoRoot
 
 if ($Suite -eq 'all') {

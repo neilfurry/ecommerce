@@ -9,7 +9,7 @@
 [CmdletBinding()]
 param([switch]$Force)
 
-. "$PSScriptRoot\lib\common.ps1"
+. "$PSScriptRoot/lib/common.ps1"
 Set-Location $script:RepoRoot
 
 $envValues = Read-DotEnv
