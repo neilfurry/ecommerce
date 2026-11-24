@@ -1,8 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-
-const STOREFRONT = 'http://localhost:5173';
-const SELLER = 'http://localhost:5174';
-const ADMIN = 'http://localhost:5175';
+import { ADMIN, ADMIN_STATE, SELLER, SELLER_STATE, STOREFRONT } from './support/env';
 
 /** Waits until the live status reports the worker heartbeat (it starts with the stack). */
 async function expectAllComponentsUp(page: Page) {
@@ -40,6 +37,8 @@ test.describe('Storefront', () => {
 });
 
 test.describe('Seller portal', () => {
+  test.use({ storageState: SELLER_STATE });
+
   test('opens on live system status', async ({ page }) => {
     await page.goto(SELLER);
     await expect(page).toHaveURL(`${SELLER}/system-status`);
@@ -59,9 +58,10 @@ test.describe('Seller portal', () => {
 });
 
 test.describe('Admin portal', () => {
+  test.use({ storageState: ADMIN_STATE });
+
   test('shows system health with every dependency up @responsive', async ({ page }) => {
-    await page.goto(ADMIN);
-    await expect(page).toHaveURL(`${ADMIN}/system-health`);
+    await page.goto(`${ADMIN}/system-health`);
     await expect(page.getByRole('heading', { level: 1, name: 'System health' })).toBeVisible();
     await expectAllComponentsUp(page);
   });

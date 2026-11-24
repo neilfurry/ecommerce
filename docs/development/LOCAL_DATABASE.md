@@ -72,10 +72,34 @@ Rules:
 
 ## Current tables
 
-| Table          | Purpose                                                                               | Since   |
-| -------------- | ------------------------------------------------------------------------------------- | ------- |
-| `currencies`   | ISO 4217 currencies the platform transacts in (seeded: `PHP`)                         | Phase 1 |
-| `stored_files` | Metadata for every object in file storage (key, verified type, size, SHA-256, status) | Phase 1 |
+| Table                                      | Purpose                                                                                     | Since   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------- | ------- |
+| `currencies`                               | ISO 4217 currencies the platform transacts in (seeded: `PHP`)                               | Phase 1 |
+| `stored_files`                             | Metadata for every object in file storage (key, verified type, size, SHA-256, status)       | Phase 1 |
+| `users`                                    | Every account: unique lowercase email, unique E.164 mobile, Argon2id hash, status, lock-out | Phase 2 |
+| `roles`, `permissions`, `role_permissions` | The 14 roles, the permission catalog and which role holds what (synchronised by the seed)   | Phase 2 |
+| `user_roles`                               | Roles held by each user                                                                     | Phase 2 |
+| `sessions`                                 | Signed-in devices: hashed refresh token, app, expiry, revocation, rotation chain            | Phase 2 |
+| `otp_challenges`                           | SMS codes (HMAC only), attempts, sends, pending sign-up details until confirmed             | Phase 2 |
+| `verification_tokens`                      | Hashed single-use email-confirmation, password-reset and invitation links                   | Phase 2 |
+| `wholesale_applications`                   | Business name, TIN, address and review decision per customer                                | Phase 2 |
+| `audit_logs`                               | Append-only record of sign-ins and administrative actions (a trigger rejects changes)       | Phase 2 |
+
+### The first super admin in a new environment
+
+Demo accounts are seeded only in development. Anywhere else, create the first super admin once:
+
+```powershell
+$env:BOOTSTRAP_ADMIN_EMAIL = 'you@yourcompany.ph'
+$env:BOOTSTRAP_ADMIN_FIRST_NAME = 'Your'
+$env:BOOTSTRAP_ADMIN_LAST_NAME = 'Name'
+$env:BOOTSTRAP_ADMIN_PASSWORD = Read-Host 'Password (12+ characters)' -MaskInput
+pnpm db:bootstrap-admin
+Remove-Item Env:BOOTSTRAP_ADMIN_PASSWORD
+```
+
+It refuses to run when a super admin already exists. Everyone else is invited from the Admin
+Console.
 
 ## Backups
 

@@ -99,13 +99,26 @@ All ports bind to `127.0.0.1`, so other computers on your network cannot reach t
 
 ## 4. Verify the installation
 
-1. Open http://localhost:5175. **System health** shows Database, Redis, File storage and
-   Background worker as **Up**.
+`setup.ps1` seeds demo accounts for development (`SEED_DEMO_USERS=true`). They all use the
+password in `SEED_DEMO_PASSWORD` (`Marketplace-dev-2026!` by default):
+
+| Account                          | Role             | Sign in at                                      |
+| -------------------------------- | ---------------- | ----------------------------------------------- |
+| `superadmin@marketplace.local`   | Super admin      | Admin Console (5175)                            |
+| `admin@marketplace.local`        | Admin            | Admin Console (5175)                            |
+| `support@marketplace.local`      | Customer support | Admin Console (5175)                            |
+| `seller.owner@marketplace.local` | Seller owner     | Seller Center (5174)                            |
+| `customer@marketplace.local`     | Customer         | Storefront (5173), or by SMS to `0917 000 0001` |
+
+1. Open http://localhost:5175 and sign in as the super admin. **System health** shows Database,
+   Redis, File storage and Background worker as **Up**.
 2. **Developer tools → Background jobs**: click **Run job**. The job status turns **Completed**.
 3. On the same page, click **Send test email**, then **Open Mailpit inbox**. The email is there.
 4. **Developer tools → File storage**: upload a PNG or PDF, download it, then delete it.
-5. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
-6. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
+5. In the storefront (http://localhost:5173) click **Create account**. The SMS code appears in
+   Admin Console → **Developer tools → SMS outbox**; the email confirmation link in Mailpit.
+6. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
+7. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
 
 ## 5. Environment configuration
 
@@ -121,6 +134,10 @@ printed.
 | Redis           | `REDIS_PORT`, `REDIS_URL`                                                                                                                                                                                                                                                                                        |
 | Object storage  | `MINIO_IMAGE`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE`, `S3_AUTO_CREATE_BUCKET`, `STORAGE_SIGNED_URL_TTL_SECONDS`, `UPLOAD_MAX_BYTES` |
 | Email           | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`                                                                                                                                                                                       |
+| Authentication  | `AUTH_JWT_SECRET`, `AUTH_OTP_SECRET` (different, 32+ characters), `AUTH_ACCESS_TOKEN_TTL_SECONDS`, `AUTH_CUSTOMER_SESSION_DAYS`, `AUTH_STAFF_SESSION_HOURS`, `AUTH_MAX_FAILED_SIGN_INS`, `AUTH_LOCKOUT_MINUTES`, `COOKIE_SECURE` (required `true` in production), `COOKIE_DOMAIN` (optional)                     |
+| App URLs        | `STOREFRONT_URL`, `SELLER_PORTAL_URL`, `ADMIN_PORTAL_URL` (used in email links)                                                                                                                                                                                                                                  |
+| SMS             | `SMS_PROVIDER` (`mock` or `semaphore`; `mock` is rejected in production), `SEMAPHORE_API_KEY`, `SEMAPHORE_SENDER_NAME`                                                                                                                                                                                           |
+| Demo data       | `SEED_DEMO_USERS`, `SEED_DEMO_PASSWORD` (development only; never seeded when `NODE_ENV=production`)                                                                                                                                                                                                              |
 | Developer tools | `DEV_TOOLS_ENABLED` (rejected when `NODE_ENV=production`)                                                                                                                                                                                                                                                        |
 | Worker          | `WORKER_CONCURRENCY` (optional override), `WORKER_HEARTBEAT_INTERVAL_SECONDS`                                                                                                                                                                                                                                    |
 | Frontends       | `VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET`, `VITE_MAILPIT_URL`                                                                                                                                                                                                                                                 |

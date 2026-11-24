@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { ADMIN, ADMIN_STATE, MAILPIT } from './support/env';
 
-const ADMIN = 'http://localhost:5175';
-const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025';
+test.use({ storageState: ADMIN_STATE });
 
 /**
  * Proves the background pipeline and file storage end to end through the Admin Console:

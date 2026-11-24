@@ -45,7 +45,9 @@ servers, or reuses ones already running locally. Build the API and worker first:
 `pnpm --filter @marketplace/api --filter @marketplace/worker run build`. `test.ps1 -Suite ui` does
 this for you.
 
-## What the Phase 1 tests prove
+## What the tests prove
+
+### Phase 1
 
 | Requirement                 | Proven by                                                                                                             |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -60,6 +62,26 @@ this for you.
 | Health endpoint works       | `health.e2e-spec.ts`, Playwright status pages                                                                         |
 | Email reaches Mailpit       | Playwright `dev-tools.spec.ts` queries the Mailpit API                                                                |
 | Docker services are healthy | CI "scripts" job: `setup.ps1` runs `docker compose up --wait` (all health checks)                                     |
+
+### Phase 2 (identity and access)
+
+| Requirement                                          | Proven by                                                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Customer sign-up with SMS code, retail and wholesale | `auth.e2e-spec.ts` (API), `auth-flows.test.tsx` (storefront), Playwright `identity.spec.ts`             |
+| Sign-in by mobile + SMS code or email + password     | `auth.e2e-spec.ts`, `auth-flows.test.tsx`, Playwright `identity.spec.ts`                                |
+| Staff accounts only through admin invitation         | `administration.e2e-spec.ts`, Playwright invitation test                                                |
+| Sessions: rotation, reuse detection, sign-out        | `auth.e2e-spec.ts` (sessions), `client.test.ts` (single-flight refresh)                                 |
+| CSRF, lock-out, rate limits, no enumeration          | `auth.e2e-spec.ts`, `guards.spec.ts`                                                                    |
+| Roles and configurable permissions                   | `administration.e2e-spec.ts` (immediate effect), `guards.spec.ts`, admin `routes.test.tsx`              |
+| Wholesale approval                                   | `administration.e2e-spec.ts`, Playwright wholesale test                                                 |
+| Append-only audit log                                | `administration.e2e-spec.ts` (update/delete rejected by the database)                                   |
+| Emails and SMS are sent by the worker                | `worker.integration-spec.ts` (SMTP and mock SMS outbox), `notification-handlers.spec.ts`, `sms.spec.ts` |
+
+API e2e tests create their own users directly in the database and give each test client its
+own address (`X-Forwarded-For` with `TRUST_PROXY=1`), so per-address limits never leak between
+tests. They read SMS codes and email links from the queued jobs; Playwright reads them from the
+SMS outbox and Mailpit, like a developer would. Playwright signs in to the staff apps once
+(`e2e/auth.setup.ts`, using the seeded demo accounts) and reuses the saved cookies.
 
 ## Continuous integration
 

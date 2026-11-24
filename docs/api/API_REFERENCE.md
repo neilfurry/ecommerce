@@ -15,10 +15,27 @@ Interactive documentation, generated from the same Zod schemas that validate req
 | Ids            | UUIDv7 strings                                                                                                |
 | Pagination     | `?page=1&pageSize=20` (max 100) → `{ items, page, pageSize, totalItems, totalPages }`                         |
 | Validation     | Shared Zod schemas from `@marketplace/validation`, applied by the global pipe                                 |
-| Authentication | Every route requires a signed-in user unless marked `@Public()` (sign-in arrives in Phase 2)                  |
+| Authentication | Every route requires a signed-in user unless marked `@Public()`. See _Authentication_ below                   |
 | Rate limit     | `RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS` per IP. Exceeding it returns 429 with `Retry-After` |
 | Tracing        | Every response carries `X-Request-Id`. A well-formed incoming id is reused                                    |
 | Status codes   | 200 read/update · 201 create · 202 queued for background processing · 204 delete                              |
+
+### Authentication
+
+Browsers authenticate with HttpOnly cookies set by the sign-in endpoints (ADR 0010). Every
+request must also say which app it comes from, and state-changing requests must carry the CSRF
+token:
+
+| Header         | Value                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `X-Client-App` | `storefront`, `seller` or `admin`: selects the session cookies and who may sign in there |
+| `X-CSRF-Token` | For POST, PUT, PATCH and DELETE: the token from `GET /api/v1/auth/csrf`                  |
+
+`@marketplace/api-client` does all of this, including refreshing once on `401 TOKEN_EXPIRED`.
+Authentication errors: `UNAUTHENTICATED` (401, sign in), `TOKEN_EXPIRED` (401, refresh),
+`INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `ACCOUNT_SUSPENDED` (403),
+`EMAIL_NOT_VERIFIED` (403), `OTP_INVALID` / `OTP_EXPIRED` / `OTP_TOO_MANY_ATTEMPTS` (400),
+`CSRF_FAILED` (403), `FORBIDDEN` (403, missing role or permission), `RATE_LIMITED` (429).
 
 ### Error envelope
 
@@ -69,7 +86,7 @@ create(@Body() body: CreateThingDto, @CurrentUser() user: AuthenticatedUser) {
 }
 ```
 
-## Endpoints (Phase 1)
+## Endpoints
 
 ### Health (public)
 
@@ -98,8 +115,8 @@ Example `GET /api/v1/health`:
 ### Developer tools (development only)
 
 Available only when `DEV_TOOLS_ENABLED=true`. The API refuses that setting when
-`NODE_ENV=production`, and when disabled every route below answers 404. They are public until
-Phase 2, which restricts them to `SUPER_ADMIN`.
+`NODE_ENV=production`, and when disabled every route below answers 404. Every route requires
+the `dev-tools.use` permission (super admin by default).
 
 | Method | Path                                  | Description                                                                                                                      |
 | ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -116,6 +133,57 @@ Phase 2, which restricts them to `SUPER_ADMIN`.
 | GET    | `/api/v1/dev/files/{id}/download-url` | Short-lived signed URL `{ url, expiresAt }` for direct download                                                                  |
 | GET    | `/api/v1/dev/files/{id}/content`      | Download through the API (streamed, `Content-Disposition: attachment`)                                                           |
 | DELETE | `/api/v1/dev/files/{id}`              | Delete from storage; metadata kept as `DELETED` → 204                                                                            |
+| GET    | `/api/v1/dev/sms-outbox`              | Texts captured by the mock SMS provider, newest first (at most 50) `{ messages: [{ to, body, sentAt }] }`                        |
+
+### Authentication (`/api/v1/auth`)
+
+Public unless marked _signed in_. Sign-in, sign-up and code endpoints have strict per-address
+limits (10 or 5 per minute).
+
+| Method | Path                                 | Description                                                                                                                                                                                                                                              |
+| ------ | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/auth/csrf`                         | `{ csrfToken }` and the matching cookie                                                                                                                                                                                                                  |
+| POST   | `/auth/customers/sign-up`            | Storefront only. `{ firstName, lastName, email, mobile, password, accountType: RETAIL\|WHOLESALE, business? }` → 202 SMS challenge `{ challengeId, destination, expiresAt, resendAvailableAt }`. 409 with field errors when the email or number is taken |
+| POST   | `/auth/customers/sign-up/verify`     | `{ challengeId, code }` → 201 session; creates the account (and the wholesale application) and emails a confirmation link                                                                                                                                |
+| POST   | `/auth/otp/resend`                   | `{ challengeId }` → new challenge (after 60 s; max 3 per challenge, 5 per number per hour)                                                                                                                                                               |
+| POST   | `/auth/customers/sign-in/otp`        | `{ mobile }` → 202 challenge. Same answer for unknown numbers, but nothing is sent                                                                                                                                                                       |
+| POST   | `/auth/customers/sign-in/otp/verify` | `{ challengeId, code }` → session                                                                                                                                                                                                                        |
+| POST   | `/auth/sign-in`                      | `{ email, password }` → session, for every app; the account must hold a role allowed in the app named by `X-Client-App`                                                                                                                                  |
+| POST   | `/auth/refresh`                      | Rotates the refresh token → session. 409: another tab refreshed at the same moment (retry the request). 401: sign in again                                                                                                                               |
+| POST   | `/auth/sign-out`                     | Ends this device's session → 204 (works with an expired access token)                                                                                                                                                                                    |
+| POST   | `/auth/sign-out-everywhere`          | _Signed in._ Ends every session of the account → 204                                                                                                                                                                                                     |
+| GET    | `/auth/session`                      | _Signed in._ `{ user: { id, names, email, emailVerified, mobile, mobileVerified, roles, permissions, wholesaleStatus }, app, accessTokenExpiresAt }`                                                                                                     |
+| POST   | `/auth/email/verify`                 | `{ token }` from the confirmation email → 204                                                                                                                                                                                                            |
+| POST   | `/auth/email/resend-verification`    | _Signed in._ Emails a new confirmation link → 202                                                                                                                                                                                                        |
+| POST   | `/auth/password/forgot`              | `{ email }` → 202, whether or not the account exists. The link works once and expires in 30 minutes                                                                                                                                                      |
+| POST   | `/auth/password/reset`               | `{ token, password }` → 204; signs out every device                                                                                                                                                                                                      |
+| POST   | `/auth/password/change`              | _Signed in._ `{ currentPassword, newPassword }` → 204; signs out other devices                                                                                                                                                                           |
+| POST   | `/auth/invitations/accept`           | `{ token, password }` → 204; activates an invited staff account                                                                                                                                                                                          |
+
+### Account (customers)
+
+| Method | Path                                    | Description                                                                              |
+| ------ | --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/account/wholesale-application` | `{ application }` (null if none)                                                         |
+| POST   | `/api/v1/account/wholesale-application` | `{ businessName, tin, businessAddress }` → application; also resubmits after a rejection |
+
+### Administration (Admin Console)
+
+| Method | Path                                               | Permission              | Description                                                                                                                                         |
+| ------ | -------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/admin/users`                              | `users.read`            | Accounts; filters `search` (name, email, mobile), `kind` (`staff`/`customers`), `role`, `status`; paginated                                         |
+| POST   | `/api/v1/admin/users`                              | `users.create`          | `{ firstName, lastName, email, roles }` → 201 invited account; emails an invitation (7 days)                                                        |
+| GET    | `/api/v1/admin/users/{id}`                         | `users.read`            | Account with signed-in device count and lock-out                                                                                                    |
+| PATCH  | `/api/v1/admin/users/{id}`                         | `users.update`          | `{ firstName, lastName, roles }`. Staff roles only; only roles the caller may grant                                                                 |
+| POST   | `/api/v1/admin/users/{id}/suspend`                 | `users.suspend`         | Blocks sign-in and ends every session at once. Not yourself; never the last super admin                                                             |
+| POST   | `/api/v1/admin/users/{id}/reactivate`              | `users.suspend`         | Reactivates and clears any lock-out                                                                                                                 |
+| POST   | `/api/v1/admin/users/{id}/sessions/revoke`         | `users.sessions.revoke` | Signs the account out everywhere → 204                                                                                                              |
+| POST   | `/api/v1/admin/users/{id}/invitation/resend`       | `users.create`          | New invitation link; earlier links stop working → 204                                                                                               |
+| GET    | `/api/v1/admin/roles`                              | `roles.read`            | Roles with permissions and account counts, and the permission catalog                                                                               |
+| PUT    | `/api/v1/admin/roles/{code}/permissions`           | `roles.update`          | `{ permissions }` replaces the role's permissions (not `SUPER_ADMIN`); effective on the next request                                                |
+| GET    | `/api/v1/admin/wholesale-applications`             | `wholesale.read`        | `?status=PENDING\|APPROVED\|REJECTED`; pending oldest first; paginated                                                                              |
+| POST   | `/api/v1/admin/wholesale-applications/{id}/review` | `wholesale.review`      | `{ decision: APPROVE\|REJECT, note }` (note required to reject); approval grants `WHOLESALE_CUSTOMER`; emails the customer. 409 if already reviewed |
+| GET    | `/api/v1/admin/audit-logs`                         | `audit.read`            | Newest first; filters `action`, `actorId`, `entityId`; paginated (50)                                                                               |
 
 ### Documentation
 
