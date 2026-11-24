@@ -23,7 +23,13 @@ import {
   PasswordInput,
   Spinner,
 } from '@marketplace/ui';
-import { emailAddressSchema, emailSignInSchema, passwordSchema } from '@marketplace/validation';
+import {
+  emailAddressSchema,
+  emailSignInSchema,
+  isMfaChallenge,
+  type MfaChallengeResponse,
+  passwordSchema,
+} from '@marketplace/validation';
 import { AlertCircleIcon, CheckCircle2Icon, MailCheckIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -31,6 +37,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import { applyApiErrors } from './form-errors';
 import type { ReturnState } from './guards';
+import { MfaCodeForm } from './mfa';
 
 export const PASSWORD_HINT =
   'At least 12 characters. A short sentence is easy to remember and hard to guess.';
@@ -73,6 +80,7 @@ export function PasswordSignInForm({
 }: PasswordSignInFormProps) {
   const signIn = useSignIn();
   const [formError, setFormError] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<MfaChallengeResponse | null>(null);
   const form = useForm<z.infer<typeof emailSignInSchema>>({
     resolver: zodResolver(emailSignInSchema),
     defaultValues: { email: '', password: '' },
@@ -81,7 +89,12 @@ export function PasswordSignInForm({
   const onSubmit = form.handleSubmit(async (values) => {
     setFormError(null);
     try {
-      await signIn.mutateAsync(values);
+      const result = await signIn.mutateAsync(values);
+      // Two-step verification: ask for the authenticator code before the session starts.
+      if (isMfaChallenge(result)) {
+        setChallenge(result);
+        return;
+      }
       onSignedIn();
     } catch (error) {
       if (error instanceof ApiError && error.code === 'INVALID_CREDENTIALS')
@@ -89,6 +102,19 @@ export function PasswordSignInForm({
       setFormError(applyApiErrors(form, error));
     }
   });
+
+  if (challenge) {
+    return (
+      <MfaCodeForm
+        challenge={challenge}
+        onSignedIn={onSignedIn}
+        onCancel={() => {
+          setChallenge(null);
+          form.resetField('password');
+        }}
+      />
+    );
+  }
 
   return (
     <Form {...form}>

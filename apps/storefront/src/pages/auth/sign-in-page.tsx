@@ -3,6 +3,7 @@ import { useCompleteSignInWithCode, useRequestSignInCode } from '@marketplace/ap
 import {
   applyApiErrors,
   FormAlert,
+  MfaCodeForm,
   PasswordSignInForm,
   SubmitButton,
   useReturnTo,
@@ -22,7 +23,12 @@ import {
   TabsList,
   TabsTrigger,
 } from '@marketplace/ui';
-import { mobileSignInSchema, type OtpChallengeResponse } from '@marketplace/validation';
+import {
+  isMfaChallenge,
+  type MfaChallengeResponse,
+  mobileSignInSchema,
+  type OtpChallengeResponse,
+} from '@marketplace/validation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router';
@@ -34,11 +40,16 @@ function MobileSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const requestCode = useRequestSignInCode();
   const complete = useCompleteSignInWithCode();
   const [challenge, setChallenge] = useState<OtpChallengeResponse | null>(null);
+  const [mfa, setMfa] = useState<MfaChallengeResponse | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const form = useForm<z.input<typeof mobileSignInSchema>>({
     resolver: zodResolver(mobileSignInSchema),
     defaultValues: { mobile: '' },
   });
+
+  if (mfa) {
+    return <MfaCodeForm challenge={mfa} onSignedIn={onSignedIn} onCancel={() => setMfa(null)} />;
+  }
 
   if (challenge) {
     return (
@@ -50,7 +61,12 @@ function MobileSignIn({ onSignedIn }: { onSignedIn: () => void }) {
         backLabel="Use a different number"
         onBack={() => setChallenge(null)}
         onSubmit={async (code) => {
-          await complete.mutateAsync({ challengeId: challenge.challengeId, code });
+          const result = await complete.mutateAsync({ challengeId: challenge.challengeId, code });
+          if (isMfaChallenge(result)) {
+            setChallenge(null);
+            setMfa(result);
+            return;
+          }
           onSignedIn();
         }}
       />

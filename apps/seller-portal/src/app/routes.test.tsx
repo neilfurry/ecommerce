@@ -38,6 +38,13 @@ const session = {
     roles: ['SELLER_OWNER'],
     permissions: [],
     wholesaleStatus: null,
+    mfaEnabled: false,
+    seller: {
+      id: '0192f0a4-7b7c-7cc4-9a51-1f3a2b4c5d70',
+      businessName: 'Santos Trading',
+      status: 'VERIFIED',
+      isOwner: true,
+    },
   },
   app: 'seller',
   accessTokenExpiresAt: '2026-11-25T09:15:00.000Z',

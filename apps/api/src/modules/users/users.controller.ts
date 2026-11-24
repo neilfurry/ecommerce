@@ -39,7 +39,7 @@ import { UsersService } from './users.service';
 const IdParam = () => Param('id', new ZodValidationPipe(uuidSchema));
 
 @ApiTags('Administration')
-@Controller({ path: 'admin/users', version: '1' })
+@Controller({ path: 'users', version: '1' })
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
@@ -129,6 +129,22 @@ export class UsersController {
     @ReqContext() context: RequestContext,
   ) {
     await this.users.revokeSessions(id, actor, context);
+  }
+
+  @Post(':id/mfa/reset')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions('users.update')
+  @ApiOperation({
+    summary:
+      'Turn off two-step verification for someone who lost their authenticator (signs them out)',
+  })
+  @ApiNoContentResponse()
+  async resetMfa(
+    @IdParam() id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @ReqContext() context: RequestContext,
+  ): Promise<void> {
+    await this.users.resetMfa(id, actor, context);
   }
 
   @Post(':id/invitation/resend')

@@ -1,3 +1,5 @@
+import type { SellerStatus } from './sellers';
+
 /**
  * Platform roles (Master Instructions §7). The permissions attached to each role are
  * configurable data (roles table); these codes are the stable identifiers used in code.
@@ -46,11 +48,24 @@ export const CUSTOMER_ROLES = [
 ] as const satisfies readonly UserRole[];
 
 /**
- * Only customers can create their own account. Every other role is created by an admin
- * (decision of 2026-11-25). WHOLESALE_CUSTOMER is granted when an admin approves the
- * customer's wholesale application; until then the account has CUSTOMER only.
+ * Roles an account can obtain without an administrator (decisions of 2026-11-25):
+ * customers sign up in the storefront (WHOLESALE_CUSTOMER is granted when an admin approves
+ * their wholesale application), and sellers apply in the Seller Center as SELLER_OWNER of a
+ * PENDING seller that sells nothing until an admin verifies it. Seller staff are invited by
+ * their seller; platform staff are created by an administrator.
  */
-export const SELF_REGISTRATION_ROLES = CUSTOMER_ROLES;
+export const SELF_REGISTRATION_ROLES = [
+  ...CUSTOMER_ROLES,
+  'SELLER_OWNER',
+] as const satisfies readonly UserRole[];
+
+/** Where a role applies: the whole platform, one seller's account, or a customer's own data. */
+export type RoleScope = 'platform' | 'seller' | 'customer';
+export function roleScope(role: UserRole): RoleScope {
+  if ((SELLER_ROLES as readonly UserRole[]).includes(role)) return 'seller';
+  if ((CUSTOMER_ROLES as readonly UserRole[]).includes(role)) return 'customer';
+  return 'platform';
+}
 
 /** The three frontends. Each has its own session cookies and accepts only its own roles. */
 export const CLIENT_APPS = ['storefront', 'seller', 'admin'] as const;
@@ -78,8 +93,18 @@ export interface AuthenticatedUser {
   permissions: Permission[];
   /** ISO time the current access token expires (the client refreshes before then). */
   accessTokenExpiresAt: string;
-  /** Set for seller-staff users from Phase 3; every seller-scoped query filters by it. */
+  /**
+   * The seller this user works for (active membership only). Every seller-scoped query
+   * filters by it; seller-scope permissions are only ever granted through it.
+   */
   sellerId?: string;
+  /** Membership details when signed in to the Seller Center as a seller member. */
+  seller?: {
+    id: string;
+    memberId: string;
+    isOwner: boolean;
+    status: SellerStatus;
+  };
 }
 
 export type UserStatus = 'ACTIVE' | 'INVITED' | 'SUSPENDED';
@@ -88,32 +113,84 @@ export type WholesaleApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 // ---- Permissions ---------------------------------------------------------------
 
 /**
- * Every permission the code checks. Which roles hold which permissions is data
- * (role_permissions), editable by a SUPER_ADMIN in the Admin Console. New phases add
- * permissions here and grant defaults in the seed.
+ * Every permission the code checks, with its scope. Platform permissions are held by
+ * platform staff roles; seller permissions apply only inside the holder's own seller account
+ * (through an active seller membership). Which roles hold which permissions is data
+ * (role_permissions), editable in the Admin Console; seller owners can also grant seller
+ * permissions to individual employees. New phases add permissions here.
  */
-export const PERMISSIONS = {
-  'users.read': 'View staff and customer accounts',
-  'users.create': 'Create staff accounts and send invitations',
-  'users.update': 'Change names and roles of accounts',
-  'users.suspend': 'Suspend and reactivate accounts',
-  'users.sessions.revoke': 'Sign accounts out of all devices',
-  'roles.read': 'View roles and their permissions',
-  'roles.update': 'Change which permissions each role has',
-  'wholesale.read': 'View wholesale applications',
-  'wholesale.review': 'Approve or reject wholesale applications',
-  'audit.read': 'View the audit log',
-  'dev-tools.use': 'Use the development tools (never available in production)',
-} as const;
-export type Permission = keyof typeof PERMISSIONS;
-export const PERMISSION_CODES = Object.keys(PERMISSIONS) as Permission[];
+export const PERMISSION_CATALOG = {
+  'users.read': { scope: 'platform', description: 'View staff, seller and customer accounts' },
+  'users.create': { scope: 'platform', description: 'Create staff accounts and send invitations' },
+  'users.update': {
+    scope: 'platform',
+    description: 'Change names and roles of accounts, reset two-step verification',
+  },
+  'users.suspend': { scope: 'platform', description: 'Suspend and reactivate accounts' },
+  'users.sessions.revoke': { scope: 'platform', description: 'Sign accounts out of all devices' },
+  'roles.read': { scope: 'platform', description: 'View roles and their permissions' },
+  'roles.update': { scope: 'platform', description: 'Change which permissions each role has' },
+  'wholesale.read': { scope: 'platform', description: 'View wholesale applications' },
+  'wholesale.review': {
+    scope: 'platform',
+    description: 'Approve or reject wholesale applications',
+  },
+  'sellers.read': {
+    scope: 'platform',
+    description: 'View seller applications, details and documents',
+  },
+  'sellers.review': {
+    scope: 'platform',
+    description: 'Approve, reject or request more information from sellers',
+  },
+  'sellers.suspend': { scope: 'platform', description: 'Suspend, reinstate and close sellers' },
+  'stores.read': { scope: 'platform', description: 'View all stores' },
+  'stores.manage': { scope: 'platform', description: 'Suspend and reinstate stores' },
+  'audit.read': { scope: 'platform', description: 'View the audit log' },
+  'dev-tools.use': {
+    scope: 'platform',
+    description: 'Use the development tools (never available in production)',
+  },
+  'seller.profile.manage': {
+    scope: 'seller',
+    description: 'Edit the business profile, upload documents and submit for verification',
+  },
+  'seller.store.manage': {
+    scope: 'seller',
+    description: 'Create stores and edit store details, images and settings',
+  },
+  'seller.members.read': { scope: 'seller', description: 'View employees and invitations' },
+  'seller.members.manage': {
+    scope: 'seller',
+    description: 'Invite, edit, suspend and remove employees',
+  },
+} as const satisfies Record<string, { scope: 'platform' | 'seller'; description: string }>;
+export type Permission = keyof typeof PERMISSION_CATALOG;
+export type PermissionScope = (typeof PERMISSION_CATALOG)[Permission]['scope'];
+export const PERMISSION_CODES = Object.keys(PERMISSION_CATALOG) as Permission[];
+export const PERMISSIONS = Object.fromEntries(
+  PERMISSION_CODES.map((code) => [code, PERMISSION_CATALOG[code].description]),
+) as Record<Permission, string>;
+export const permissionsInScope = (scope: PermissionScope): Permission[] =>
+  PERMISSION_CODES.filter((code) => PERMISSION_CATALOG[code].scope === scope);
+export const PLATFORM_PERMISSIONS = permissionsInScope('platform');
+export const SELLER_PERMISSIONS = permissionsInScope('seller');
 
-/** SUPER_ADMIN always holds every permission; it cannot be edited (prevents lock-out). */
-export const LOCKED_ROLES: readonly UserRole[] = ['SUPER_ADMIN'];
+/**
+ * Locked roles always hold every permission of their scope and cannot be edited:
+ * SUPER_ADMIN (platform) prevents lock-out; SELLER_OWNER (seller) keeps owners in control.
+ */
+export const LOCKED_ROLES: readonly UserRole[] = ['SUPER_ADMIN', 'SELLER_OWNER'];
 
-/** Default grants, written by the seed. Editable afterwards (except SUPER_ADMIN). */
+/** Permissions a role may hold: only those of its own scope (customers hold none). */
+export function assignablePermissions(role: UserRole): Permission[] {
+  const scope = roleScope(role);
+  return scope === 'customer' ? [] : permissionsInScope(scope);
+}
+
+/** Default grants, written by the seed. Editable afterwards (except locked roles). */
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
-  SUPER_ADMIN: PERMISSION_CODES,
+  SUPER_ADMIN: PLATFORM_PERMISSIONS,
   ADMIN: [
     'users.read',
     'users.create',
@@ -123,30 +200,51 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'roles.read',
     'wholesale.read',
     'wholesale.review',
+    'sellers.read',
+    'sellers.review',
+    'sellers.suspend',
+    'stores.read',
+    'stores.manage',
     'audit.read',
   ],
-  FINANCE_ADMIN: ['users.read', 'audit.read'],
-  CUSTOMER_SUPPORT: ['users.read', 'users.sessions.revoke', 'wholesale.read'],
+  FINANCE_ADMIN: ['users.read', 'sellers.read', 'stores.read', 'audit.read'],
+  CUSTOMER_SUPPORT: [
+    'users.read',
+    'users.sessions.revoke',
+    'wholesale.read',
+    'sellers.read',
+    'stores.read',
+  ],
   WAREHOUSE_STAFF: [],
   DELIVERY_STAFF: [],
-  SELLER_OWNER: [],
-  SELLER_MANAGER: [],
-  SELLER_ENCODER: [],
-  SELLER_INVENTORY: [],
-  SELLER_ORDER_PROCESSOR: [],
-  SELLER_ACCOUNTING: [],
+  SELLER_OWNER: SELLER_PERMISSIONS,
+  SELLER_MANAGER: ['seller.store.manage', 'seller.members.read', 'seller.members.manage'],
+  SELLER_ENCODER: ['seller.members.read'],
+  SELLER_INVENTORY: ['seller.members.read'],
+  SELLER_ORDER_PROCESSOR: ['seller.members.read'],
+  SELLER_ACCOUNTING: ['seller.members.read'],
   CUSTOMER: [],
   WHOLESALE_CUSTOMER: [],
 };
 
 /**
- * Which roles an administrator may grant. Granting the two highest roles is reserved to
- * SUPER_ADMIN; seller roles are granted through seller onboarding (Phase 3).
+ * Which platform roles an administrator may grant. Granting the two highest roles is
+ * reserved to SUPER_ADMIN. Seller roles are granted by sellers to their own employees.
  */
 export function grantableRoles(granterRoles: readonly UserRole[]): UserRole[] {
   if (granterRoles.includes('SUPER_ADMIN')) return [...PLATFORM_STAFF_ROLES];
   if (granterRoles.includes('ADMIN')) {
     return PLATFORM_STAFF_ROLES.filter((role) => role !== 'SUPER_ADMIN' && role !== 'ADMIN');
+  }
+  return [];
+}
+
+/** Seller roles an employee may be given by the owner (all but owner) or a manager (below manager). */
+export const ASSIGNABLE_SELLER_ROLES = SELLER_ROLES.filter((role) => role !== 'SELLER_OWNER');
+export function grantableSellerRoles(granterRoles: readonly UserRole[]): UserRole[] {
+  if (granterRoles.includes('SELLER_OWNER')) return [...ASSIGNABLE_SELLER_ROLES];
+  if (granterRoles.includes('SELLER_MANAGER')) {
+    return ASSIGNABLE_SELLER_ROLES.filter((role) => role !== 'SELLER_MANAGER');
   }
   return [];
 }

@@ -9,7 +9,12 @@
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { createPgAdapter, PrismaClient } from './src';
-import { DEMO_USERS, ensureUser, syncRolesAndPermissions } from './src/seed-identity';
+import {
+  DEMO_USERS,
+  ensureDemoSeller,
+  ensureUser,
+  syncRolesAndPermissions,
+} from './src/seed-identity';
 
 loadDotenv({ path: path.resolve(__dirname, '../.env'), quiet: true });
 
@@ -51,6 +56,7 @@ async function main(): Promise<void> {
       console.log(
         `Demo accounts: ${created} created, ${DEMO_USERS.length - created} already present.`,
       );
+      if (await ensureDemoSeller(prisma)) console.log('Demo seller and store created.');
     }
   } finally {
     await prisma.$disconnect();

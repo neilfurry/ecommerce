@@ -133,6 +133,8 @@ export const EMAIL_JOBS = {
   PASSWORD_RESET: 'email.password-reset',
   STAFF_INVITATION: 'email.staff-invitation',
   WHOLESALE_DECISION: 'email.wholesale-decision',
+  SELLER_STATUS: 'email.seller-status',
+  SELLER_INVITATION: 'email.seller-invitation',
 } as const;
 
 export const NOTIFICATION_JOBS = {

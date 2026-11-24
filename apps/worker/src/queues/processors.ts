@@ -7,6 +7,8 @@ import { HeartbeatHandler } from '../jobs/heartbeat.handler';
 import { SmsOtpHandler } from '../jobs/sms-otp.handler';
 import {
   PasswordResetEmailHandler,
+  SellerInvitationEmailHandler,
+  SellerStatusEmailHandler,
   StaffInvitationEmailHandler,
   VerifyEmailHandler,
   WholesaleDecisionEmailHandler,
@@ -43,10 +45,20 @@ export class EmailProcessor extends DomainProcessor {
     passwordReset: PasswordResetEmailHandler,
     staffInvitation: StaffInvitationEmailHandler,
     wholesaleDecision: WholesaleDecisionEmailHandler,
+    sellerStatus: SellerStatusEmailHandler,
+    sellerInvitation: SellerInvitationEmailHandler,
   ) {
     super(
       QUEUE_NAMES.EMAIL,
-      [devTest, verifyEmail, passwordReset, staffInvitation, wholesaleDecision],
+      [
+        devTest,
+        verifyEmail,
+        passwordReset,
+        staffInvitation,
+        wholesaleDecision,
+        sellerStatus,
+        sellerInvitation,
+      ],
       config,
       deadLetters,
     );

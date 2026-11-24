@@ -22,6 +22,7 @@ import { ApiException } from '../../common/errors/api.exception';
 import { AppConfig } from '../../config/app-config';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { MfaService } from '../auth/mfa.service';
 import { PrincipalService } from '../auth/principal.service';
 import { SessionsService } from '../auth/sessions.service';
 import { TOKEN_LIFETIMES_MS, VerificationTokensService } from '../auth/verification-tokens.service';
@@ -66,6 +67,7 @@ export class UsersService {
     private readonly sessions: SessionsService,
     private readonly tokens: VerificationTokensService,
     private readonly notifications: NotificationsService,
+    private readonly mfa: MfaService,
   ) {}
 
   async list(query: UserListFilters): Promise<PaginatedResponse<AdminUser>> {
@@ -112,15 +114,43 @@ export class UsersService {
   async get(id: string): Promise<AdminUserDetail> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { roles: { select: { roleCode: true } } },
+      include: {
+        roles: { select: { roleCode: true } },
+        mfa: { select: { enabledAt: true } },
+        sellerMembership: {
+          select: {
+            status: true,
+            seller: { select: { id: true, businessName: true, status: true, ownerId: true } },
+          },
+        },
+      },
     });
     if (!user) throw notFound();
+    const membership = user.sellerMembership;
     return {
       ...toAdminUser(user),
       activeSessions: await this.sessions.countActive(id),
       lockedUntil:
         user.lockedUntil && user.lockedUntil > new Date() ? user.lockedUntil.toISOString() : null,
+      mfaEnabled: !!user.mfa?.enabledAt,
+      seller: membership
+        ? {
+            id: membership.seller.id,
+            businessName: membership.seller.businessName,
+            status: membership.seller.status,
+            isOwner: membership.seller.ownerId === user.id,
+            memberStatus: membership.status,
+          }
+        : null,
     };
+  }
+
+  /** Turns off two-step verification for someone who lost their authenticator and codes. */
+  async resetMfa(id: string, actor: AuthenticatedUser, context: RequestContext): Promise<void> {
+    const user = await this.findWithRoles(id);
+    this.assertCanManage(actor, user);
+    await this.mfa.resetByAdmin(id, actor.id, context);
+    await this.sessions.revokeAllForUser(id, 'ADMIN_REVOKED');
   }
 
   async createStaff(

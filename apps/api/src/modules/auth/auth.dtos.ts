@@ -6,11 +6,17 @@ import {
   customerSignUpSchema,
   emailSignInSchema,
   forgotPasswordSchema,
+  mfaDisableSchema,
+  mfaEnableSchema,
+  mfaRegenerateSchema,
+  mfaSetupRequestSchema,
+  mfaVerifySchema,
   mobileSignInSchema,
   otpResendSchema,
   otpVerifySchema,
   resetPasswordSchema,
   reviewWholesaleSchema,
+  sellerSignUpSchema,
   updateRolePermissionsSchema,
   updateUserSchema,
   userListQuerySchema,
@@ -30,6 +36,12 @@ export class ForgotPasswordDto extends createZodDto(forgotPasswordSchema) {}
 export class ResetPasswordDto extends createZodDto(resetPasswordSchema) {}
 export class AcceptInvitationDto extends createZodDto(acceptInvitationSchema) {}
 export class ChangePasswordDto extends createZodDto(changePasswordSchema) {}
+export class MfaVerifyDto extends createZodDto(mfaVerifySchema) {}
+export class MfaSetupDto extends createZodDto(mfaSetupRequestSchema) {}
+export class MfaEnableDto extends createZodDto(mfaEnableSchema) {}
+export class MfaDisableDto extends createZodDto(mfaDisableSchema) {}
+export class MfaRegenerateDto extends createZodDto(mfaRegenerateSchema) {}
+export class SellerSignUpDto extends createZodDto(sellerSignUpSchema) {}
 
 export class CreateStaffUserDto extends createZodDto(createStaffUserSchema) {}
 export class UpdateUserDto extends createZodDto(updateUserSchema) {}

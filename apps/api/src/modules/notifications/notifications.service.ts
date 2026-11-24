@@ -3,6 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EMAIL_JOBS, NOTIFICATION_JOBS, QUEUE_NAMES } from '@marketplace/config';
 import type {
   PasswordResetJob,
+  SellerInvitationJob,
+  SellerStatusJob,
   SmsOtpJob,
   StaffInvitationJob,
   VerifyEmailJob,
@@ -37,6 +39,14 @@ export class NotificationsService {
 
   sendWholesaleDecision(job: WholesaleDecisionJob) {
     return this.emailQueue.add(EMAIL_JOBS.WHOLESALE_DECISION, job);
+  }
+
+  sendSellerStatus(job: SellerStatusJob) {
+    return this.emailQueue.add(EMAIL_JOBS.SELLER_STATUS, job);
+  }
+
+  sendSellerInvitation(job: SellerInvitationJob) {
+    return this.emailQueue.add(EMAIL_JOBS.SELLER_INVITATION, job);
   }
 
   /**

@@ -1,7 +1,12 @@
 import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedUser, UserRole } from '@marketplace/shared-types';
-import { roleListSchema, roleSchema, userRoleSchema } from '@marketplace/validation';
+import {
+  permissionListSchema,
+  roleListSchema,
+  roleSchema,
+  userRoleSchema,
+} from '@marketplace/validation';
 import {
   CurrentUser,
   ReqContext,
@@ -14,7 +19,7 @@ import { UpdateRolePermissionsDto } from '../auth/auth.dtos';
 import { RolesService } from './roles.service';
 
 @ApiTags('Administration')
-@Controller({ path: 'admin/roles', version: '1' })
+@Controller({ path: 'roles', version: '1' })
 export class RolesController {
   constructor(private readonly roles: RolesService) {}
 
@@ -38,5 +43,21 @@ export class RolesController {
     @ReqContext() context: RequestContext,
   ) {
     return this.roles.updatePermissions(code, body.permissions, actor, context);
+  }
+}
+
+@ApiTags('Administration')
+@Controller({ path: 'permissions', version: '1' })
+export class PermissionsController {
+  constructor(private readonly roles: RolesService) {}
+
+  @Get()
+  @RequirePermissions('roles.read')
+  @ApiOperation({
+    summary: 'The permission catalog (platform and seller scope) with the roles holding each',
+  })
+  @ApiOkResponse({ schema: zodToOpenApi(permissionListSchema) })
+  list() {
+    return this.roles.permissions();
   }
 }

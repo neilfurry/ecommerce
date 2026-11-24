@@ -12,3 +12,4 @@ export {
   useReturnTo,
 } from './pages';
 export { ChangePasswordDialog, UserMenu } from './user-menu';
+export { MfaCodeForm, TwoStepDialog } from './mfa';

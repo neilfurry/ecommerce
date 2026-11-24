@@ -10,7 +10,9 @@ import {
 import { type AuthenticatedUser, type ClientApp, type UserRole } from '@marketplace/shared-types';
 import type {
   CustomerSignUp,
+  MfaChallengeResponse,
   OtpChallengeResponse,
+  SellerSignUp,
   SessionResponse,
 } from '@marketplace/validation';
 import type { RequestContext } from '../../common/auth/auth.decorators';
@@ -20,6 +22,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { canUseApp } from './client-apps';
+import { MfaService } from './mfa.service';
 import { OtpService } from './otp.service';
 import { PrincipalService } from './principal.service';
 import { type IssuedSession, SessionsService } from './sessions.service';
@@ -40,6 +43,9 @@ export interface SignedIn {
   response: SessionResponse;
 }
 
+/** A sign-in step either ends in a session or asks for the authenticator code. */
+export type SignInOutcome = SignedIn | { mfa: MfaChallengeResponse };
+
 export { canUseApp };
 
 const invalidCredentials = () =>
@@ -58,6 +64,7 @@ export class AuthService {
     private readonly tokens: VerificationTokensService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly mfa: MfaService,
   ) {}
 
   // ---- Customer sign-up (mobile verified by SMS before the account exists) ---------------
@@ -208,7 +215,7 @@ export class AuthService {
     challengeId: string,
     code: string,
     context: RequestContext,
-  ): Promise<SignedIn> {
+  ): Promise<SignInOutcome> {
     const challenge = await this.otp.verify(challengeId, code, 'SIGN_IN');
     if (!challenge.userId) throw invalidCredentials();
     return this.finishSignIn(challenge.userId, 'storefront', 'sms_code', context);
@@ -221,7 +228,7 @@ export class AuthService {
     password: string,
     app: ClientApp,
     context: RequestContext,
-  ): Promise<SignedIn> {
+  ): Promise<SignInOutcome> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     const fail = async (reason: string, actorId: string | null) => {
       await this.audit.recordSafely(
@@ -302,6 +309,128 @@ export class AuthService {
     return this.finishSignIn(user.id, app, 'password', context);
   }
 
+  // ---- Two-step verification ----------------------------------------------------------------
+
+  /** Second step of a sign-in when the account has two-step verification on. */
+  async completeMfaSignIn(
+    token: string,
+    code: string,
+    app: ClientApp,
+    context: RequestContext,
+  ): Promise<SignedIn> {
+    let pending;
+    try {
+      pending = await this.mfa.completeChallenge(token, code, app);
+    } catch (error) {
+      await this.audit.recordSafely(
+        {
+          action: 'auth.mfa_failed',
+          outcome: 'FAILURE',
+          metadata: { reason: error instanceof ApiException ? error.code : 'error' },
+        },
+        context,
+      );
+      throw error;
+    }
+    const outcome = await this.finishSignIn(pending.userId, app, pending.method, context, {
+      mfaPassed: true,
+    });
+    if ('mfa' in outcome) throw new Error('unreachable: MFA already passed');
+    return outcome;
+  }
+
+  // ---- Seller registration (Seller Center) ------------------------------------------------
+
+  /**
+   * Creates the owner's account and a PENDING seller in one step. The owner can sign in at
+   * once to complete the business profile and upload documents; nothing is sold until an
+   * admin verifies the seller. The email is confirmed by link before submission.
+   */
+  async signUpSeller(input: SellerSignUp, context: RequestContext): Promise<SignedIn> {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: input.email },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'CONFLICT',
+        'An account with this email already exists.',
+        [
+          {
+            path: 'email',
+            message: 'This email is already registered. Use a different email for your business.',
+          },
+        ],
+      );
+    }
+    const passwordHash = await hashPassword(input.password);
+    let created: { user: User; session: IssuedSession; verificationToken: string };
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const now = new Date();
+        const user = await tx.user.create({
+          data: {
+            email: input.email,
+            passwordHash,
+            passwordChangedAt: now,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            status: 'ACTIVE',
+            lastSignInAt: now,
+            roles: { create: [{ roleCode: 'SELLER_OWNER' }] },
+          },
+        });
+        const seller = await tx.seller.create({
+          data: {
+            businessName: input.businessName,
+            businessType: input.businessType,
+            ownerId: user.id,
+            email: input.email,
+            mobile: input.mobile,
+            events: { create: { type: 'REGISTERED', toStatus: 'PENDING', actorId: user.id } },
+            members: { create: { userId: user.id } },
+          },
+        });
+        await this.audit.record(
+          {
+            action: 'seller.registered',
+            actorId: user.id,
+            entityType: 'seller',
+            entityId: seller.id,
+            metadata: { businessType: input.businessType },
+          },
+          context,
+          tx,
+        );
+        const verificationToken = await this.tokens.issue(user.id, 'EMAIL_VERIFICATION', tx);
+        const session = await this.sessions.start(user.id, 'seller', context, tx);
+        return { user, session, verificationToken };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'CONFLICT',
+          'An account with this email already exists.',
+          [{ path: 'email', message: 'This email is already registered.' }],
+        );
+      }
+      throw error;
+    }
+    await this.notifications.safely('verification email', () =>
+      this.notifications.sendVerifyEmail({
+        to: created.user.email,
+        firstName: created.user.firstName,
+        link: `${this.config.appUrls.seller}/verify-email?token=${created.verificationToken}`,
+      }),
+    );
+    return {
+      session: created.session,
+      response: await this.sessionResponse(created.user.id, 'seller', created.session),
+    };
+  }
+
   // ---- Session lifecycle --------------------------------------------------------------------
 
   async refresh(
@@ -369,7 +498,10 @@ export class AuthService {
     const [user, principal] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id: userId },
-        include: { wholesaleApplication: { select: { status: true } } },
+        include: {
+          wholesaleApplication: { select: { status: true } },
+          mfa: { select: { enabledAt: true } },
+        },
       }),
       this.principals.load(userId),
     ]);
@@ -388,6 +520,16 @@ export class AuthService {
         roles: principal?.roles ?? [],
         permissions: principal?.permissions ?? [],
         wholesaleStatus: user.wholesaleApplication?.status ?? null,
+        mfaEnabled: !!user.mfa?.enabledAt,
+        seller:
+          principal?.seller && app === 'seller'
+            ? {
+                id: principal.seller.id,
+                businessName: principal.seller.businessName,
+                status: principal.seller.status,
+                isOwner: principal.seller.isOwner,
+              }
+            : null,
       },
     };
   }
@@ -404,14 +546,14 @@ export class AuthService {
     );
   }
 
-  async resendVerificationEmail(userId: string): Promise<void> {
+  async resendVerificationEmail(userId: string, app: ClientApp): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.emailVerifiedAt) return;
     const token = await this.tokens.issue(user.id, 'EMAIL_VERIFICATION');
     await this.notifications.sendVerifyEmail({
       to: user.email,
       firstName: user.firstName,
-      link: `${this.config.appUrls.storefront}/verify-email?token=${token}`,
+      link: `${this.config.appUrls[app]}/verify-email?token=${token}`,
     });
   }
 
@@ -539,7 +681,8 @@ export class AuthService {
     app: ClientApp,
     method: 'password' | 'sms_code',
     context: RequestContext,
-  ): Promise<SignedIn> {
+    options: { mfaPassed?: boolean } = {},
+  ): Promise<SignInOutcome> {
     const principal = await this.principals.load(userId);
     if (!principal || principal.status !== 'ACTIVE') {
       throw new ApiException(
@@ -566,6 +709,9 @@ export class AuthService {
         'This account cannot sign in here.',
       );
     }
+    if (!options.mfaPassed && (await this.mfa.isEnabled(userId))) {
+      return { mfa: await this.mfa.createChallenge({ userId, app, method }) };
+    }
     const session = await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
@@ -577,7 +723,7 @@ export class AuthService {
           actorId: userId,
           entityType: 'user',
           entityId: userId,
-          metadata: { method },
+          metadata: { method, mfa: !!options.mfaPassed },
         },
         context,
         tx,

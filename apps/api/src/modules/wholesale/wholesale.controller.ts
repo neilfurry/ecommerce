@@ -47,7 +47,7 @@ export class AccountWholesaleController {
 }
 
 @ApiTags('Administration')
-@Controller({ path: 'admin/wholesale-applications', version: '1' })
+@Controller({ path: 'wholesale-applications', version: '1' })
 export class AdminWholesaleController {
   constructor(private readonly wholesale: WholesaleService) {}
 

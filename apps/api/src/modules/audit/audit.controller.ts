@@ -7,7 +7,7 @@ import { AuditLogQueryDto } from '../auth/auth.dtos';
 import { AuditService } from './audit.service';
 
 @ApiTags('Administration')
-@Controller({ path: 'admin/audit-logs', version: '1' })
+@Controller({ path: 'audit-logs', version: '1' })
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
 

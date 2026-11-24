@@ -7,6 +7,8 @@ import { PermanentSmsError, type SmsProvider } from '../sms/sms-provider';
 import { SmsOtpHandler } from './sms-otp.handler';
 import {
   PasswordResetEmailHandler,
+  SellerInvitationEmailHandler,
+  SellerStatusEmailHandler,
   StaffInvitationEmailHandler,
   VerifyEmailHandler,
   WholesaleDecisionEmailHandler,
@@ -67,6 +69,40 @@ describe('transactional email handlers', () => {
     expect(email.subject).toContain(subject);
     expect(email.text).toContain(extra.link);
     expect(email.html).toContain('Ana');
+  });
+
+  it('renders seller status emails with the note from the marketplace team', async () => {
+    await new SellerStatusEmailHandler(mailer).handle(
+      job({
+        to: 'owner@example.ph',
+        firstName: 'Lito',
+        businessName: 'Lito Trading',
+        event: 'INFO_REQUESTED',
+        note: 'Please upload a clearer permit.',
+        link: 'http://localhost:5174/verification',
+      }),
+    );
+    const email = send.mock.calls[0]![0] as { subject: string; text: string };
+    expect(email.subject).toBe('More information needed for your seller application: Lito Trading');
+    expect(email.text).toContain('Please upload a clearer permit.');
+    expect(email.text).toContain('http://localhost:5174/verification');
+  });
+
+  it('renders seller invitations', async () => {
+    await new SellerInvitationEmailHandler(mailer).handle(
+      job({
+        to: 'new.staff@example.ph',
+        sellerName: 'Lito Trading',
+        invitedBy: 'Lito Santos',
+        roles: ['Seller encoder'],
+        link: 'http://localhost:5174/join?token=abc',
+        expiresInHours: 168,
+      }),
+    );
+    const email = send.mock.calls[0]![0] as { subject: string; text: string };
+    expect(email.subject).toContain('Join Lito Trading');
+    expect(email.text).toContain('Seller encoder');
+    expect(email.text).toContain('168 hours');
   });
 
   it('dead-letters invalid payloads immediately', async () => {

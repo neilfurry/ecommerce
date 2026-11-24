@@ -17,6 +17,7 @@ const config = AppConfig.load(
     APP_VERSION: '9.9.9',
     AUTH_JWT_SECRET: 'j'.repeat(32),
     AUTH_OTP_SECRET: 'o'.repeat(32),
+    AUTH_MFA_ENCRYPTION_KEY: 'm'.repeat(32),
   },
   false,
 );

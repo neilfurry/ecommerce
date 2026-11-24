@@ -8,7 +8,13 @@ import {
   type LivenessResponse,
 } from '@marketplace/validation';
 import { z } from 'zod';
-import { createAccountClient, createAdminClient } from './admin';
+import {
+  createAccountClient,
+  createAdminClient,
+  createMarketplaceAdminClient,
+  createSellerClient,
+  createStoresPublicClient,
+} from './admin';
 import { createAuthClient } from './auth';
 import { createDevToolsClient } from './dev-tools';
 import { ApiError } from './errors';
@@ -39,6 +45,8 @@ export interface RequestOptions<TSchema extends z.ZodType> {
   acceptStatuses?: number[];
   /** Internal: auth endpoints that must not trigger a token refresh. */
   skipRefresh?: boolean;
+  /** 'blob' returns the body as a Blob (file downloads); the schema then validates the Blob. */
+  responseType?: 'json' | 'blob';
 }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -135,7 +143,11 @@ export function createApiClient({ baseUrl, app, fetchImpl, onSessionEnded }: Api
     }
 
     const payload: unknown =
-      response.status === 204 ? undefined : await response.json().catch(() => undefined);
+      options.responseType === 'blob'
+        ? await response.blob()
+        : response.status === 204
+          ? undefined
+          : await response.json().catch(() => undefined);
     const parsed = options.schema.safeParse(payload);
     if (!parsed.success) {
       throw new ApiError(
@@ -184,7 +196,9 @@ export function createApiClient({ baseUrl, app, fetchImpl, onSessionEnded }: Api
       return () => sessionEndedListeners.delete(listener);
     },
     auth: createAuthClient(request),
-    admin: createAdminClient(request),
+    admin: { ...createAdminClient(request), ...createMarketplaceAdminClient(request) },
+    seller: createSellerClient(request),
+    stores: createStoresPublicClient(request),
     account: createAccountClient(request),
     devTools: createDevToolsClient(request),
     health: {

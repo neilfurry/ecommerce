@@ -1,5 +1,17 @@
 import {
+  type AcceptSellerInvitationRequest,
   type CustomerSignUpRequest,
+  type MfaRecoveryCodes,
+  mfaRecoveryCodesSchema,
+  type MfaSetupResponse,
+  mfaSetupResponseSchema,
+  type MfaStatus,
+  mfaStatusSchema,
+  type SellerInvitationPreview,
+  sellerInvitationPreviewSchema,
+  type SellerSignUpRequest,
+  type SignInResult,
+  signInResultSchema,
   type MobileSignInRequest,
   type OtpChallengeResponse,
   otpChallengeResponseSchema,
@@ -42,12 +54,55 @@ export function createAuthClient(request: Request) {
       post('/auth/otp/resend', { challengeId }, otpChallengeResponseSchema),
     requestSignInCode: (body: MobileSignInRequest): Promise<OtpChallengeResponse> =>
       post('/auth/customers/sign-in/otp', body, otpChallengeResponseSchema),
-    completeSignInWithCode: (challengeId: string, code: string): Promise<SessionResponse> =>
-      post('/auth/customers/sign-in/otp/verify', { challengeId, code }, sessionResponseSchema),
+    /** A session, or an MFA challenge when the account uses two-step verification. */
+    completeSignInWithCode: (challengeId: string, code: string): Promise<SignInResult> =>
+      post('/auth/customers/sign-in/otp/verify', { challengeId, code }, signInResultSchema),
+
+    // ---- Sellers (Seller Center) ----
+    signUpSeller: (body: SellerSignUpRequest): Promise<SessionResponse> =>
+      post('/auth/sellers/sign-up', body, sessionResponseSchema),
+    previewSellerInvitation: (token: string): Promise<SellerInvitationPreview> =>
+      post('/auth/seller-invitations/preview', { token }, sellerInvitationPreviewSchema),
+    acceptSellerInvitation: (body: AcceptSellerInvitationRequest) =>
+      post('/auth/seller-invitations/accept', body, noContent).then(() => undefined),
 
     // ---- Everyone ----
-    signIn: (email: string, password: string): Promise<SessionResponse> =>
-      post('/auth/sign-in', { email, password }, sessionResponseSchema),
+    /** A session, or an MFA challenge when the account uses two-step verification. */
+    signIn: (email: string, password: string): Promise<SignInResult> =>
+      post('/auth/sign-in', { email, password }, signInResultSchema),
+    /** Second sign-in step: the authenticator or recovery code. */
+    verifyMfa: (mfaToken: string, code: string): Promise<SessionResponse> =>
+      post('/auth/mfa/verify', { mfaToken, code }, sessionResponseSchema),
+
+    // ---- Two-step verification settings ----
+    mfa: {
+      status: (signal?: AbortSignal): Promise<MfaStatus> =>
+        request('/auth/mfa', { schema: mfaStatusSchema, signal }),
+      setup: (password: string): Promise<MfaSetupResponse> =>
+        request('/auth/mfa/totp/setup', {
+          method: 'POST',
+          body: { password },
+          schema: mfaSetupResponseSchema,
+        }),
+      enable: (code: string): Promise<MfaRecoveryCodes> =>
+        request('/auth/mfa/totp/enable', {
+          method: 'POST',
+          body: { code },
+          schema: mfaRecoveryCodesSchema,
+        }),
+      regenerate: (code: string): Promise<MfaRecoveryCodes> =>
+        request('/auth/mfa/recovery-codes', {
+          method: 'POST',
+          body: { code },
+          schema: mfaRecoveryCodesSchema,
+        }),
+      disable: (password: string, code: string) =>
+        request('/auth/mfa/disable', {
+          method: 'POST',
+          body: { password, code },
+          schema: noContent,
+        }).then(() => undefined),
+    },
     signOut: () => post('/auth/sign-out', undefined, noContent).then(() => undefined),
     signOutEverywhere: () =>
       request('/auth/sign-out-everywhere', { method: 'POST', schema: noContent }).then(

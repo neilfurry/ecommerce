@@ -30,6 +30,8 @@ export const REDIS_KEYS = {
   PRINCIPAL_PREFIX: 'marketplace:auth:principal:',
   /** Incremented whenever role permissions change; part of every principal cache key. */
   PERMISSIONS_VERSION: 'marketplace:auth:permissions-version',
+  /** Pending two-step sign-ins (password or SMS code accepted, authenticator code awaited). */
+  MFA_CHALLENGE_PREFIX: 'marketplace:auth:mfa-challenge:',
   /** Development SMS provider: newest-first list of sent messages. */
   DEV_SMS_OUTBOX: 'marketplace:dev:sms-outbox',
 } as const;

@@ -1,6 +1,8 @@
 import { APP_NAME } from '@marketplace/config';
 import type {
   PasswordResetJob,
+  SellerInvitationJob,
+  SellerStatusJob,
   StaffInvitationJob,
   VerifyEmailJob,
   WholesaleDecisionJob,
@@ -116,6 +118,70 @@ export function wholesaleDecisionTemplate(job: WholesaleDecisionJob): RenderedEm
       'You can keep shopping at retail prices, and you can correct your details and apply again from your account.',
     ],
     action: { label: 'Review my application', url: job.link },
+  });
+}
+
+const SELLER_STATUS_COPY: Record<
+  SellerStatusJob['event'],
+  { subject: string; body: string; action: string }
+> = {
+  SUBMITTED: {
+    subject: 'We received your seller application',
+    body: 'Thank you. Our team is checking your business details and documents. We will email you when there is a decision.',
+    action: 'View application',
+  },
+  INFO_REQUESTED: {
+    subject: 'More information needed for your seller application',
+    body: 'Our team needs more information before we can verify your business. Update your application and submit it again.',
+    action: 'Update application',
+  },
+  APPROVED: {
+    subject: 'Your seller account is verified',
+    body: 'Congratulations! Your business is verified. You can now create your store in the Seller Center.',
+    action: 'Create your store',
+  },
+  REJECTED: {
+    subject: 'Your seller application was not approved',
+    body: 'We could not verify your business. You can correct your details and documents and submit the application again.',
+    action: 'Review application',
+  },
+  SUSPENDED: {
+    subject: 'Your seller account is suspended',
+    body: 'Your stores are hidden from shoppers and changes are paused. Contact marketplace support if you have questions.',
+    action: 'Open the Seller Center',
+  },
+  REINSTATED: {
+    subject: 'Your seller account is active again',
+    body: 'The suspension has been lifted. Your stores can be shown to shoppers again.',
+    action: 'Open the Seller Center',
+  },
+  CLOSED: {
+    subject: 'Your seller account is closed',
+    body: 'Your seller account has been closed and your stores are no longer available.',
+    action: 'Open the Seller Center',
+  },
+};
+
+export function sellerStatusTemplate(job: SellerStatusJob): RenderedEmail {
+  const copy = SELLER_STATUS_COPY[job.event];
+  return render(`${copy.subject}: ${job.businessName}`, {
+    greeting: `Hi ${job.firstName},`,
+    paragraphs: [
+      copy.body,
+      ...(job.note ? [`Message from the marketplace team: ${job.note}`] : []),
+    ],
+    action: { label: copy.action, url: job.link },
+  });
+}
+
+export function sellerInvitationTemplate(job: SellerInvitationJob): RenderedEmail {
+  return render(`Join ${job.sellerName} on ${APP_NAME}`, {
+    greeting: 'Hello,',
+    paragraphs: [
+      `${job.invitedBy} invited you to work for ${job.sellerName} in the ${APP_NAME} Seller Center as: ${job.roles.join(', ')}.`,
+    ],
+    action: { label: 'Accept invitation', url: job.link },
+    footnote: `This invitation expires in ${plural(job.expiresInHours, 'hour')}. If you were not expecting it, ignore this email.`,
   });
 }
 

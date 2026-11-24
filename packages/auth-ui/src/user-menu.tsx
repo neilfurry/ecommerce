@@ -35,6 +35,7 @@ import {
   KeyRoundIcon,
   LogOutIcon,
   MonitorSmartphoneIcon,
+  ShieldCheckIcon,
   UserIcon,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -42,6 +43,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import type { z } from 'zod';
 import { applyApiErrors } from './form-errors';
+import { TwoStepDialog } from './mfa';
 import { FormAlert, PASSWORD_HINT, SubmitButton } from './pages';
 
 export function ChangePasswordDialog({
@@ -122,6 +124,7 @@ export function UserMenu({ signInPath = '/sign-in' }: { signInPath?: string }) {
   const signOutEverywhere = useSignOutEverywhere();
   const navigate = useNavigate();
   const [changing, setChanging] = useState(false);
+  const [twoStep, setTwoStep] = useState(false);
   const user = session.data?.user;
   if (!user) return null;
 
@@ -157,6 +160,9 @@ export function UserMenu({ signInPath = '/sign-in' }: { signInPath?: string }) {
           <DropdownMenuItem onSelect={() => setChanging(true)}>
             <KeyRoundIcon /> Change password
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setTwoStep(true)}>
+            <ShieldCheckIcon /> Two-step verification {user.mfaEnabled ? '(on)' : ''}
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => leave(signOutEverywhere)}>
             <MonitorSmartphoneIcon /> Sign out of all devices
           </DropdownMenuItem>
@@ -166,6 +172,7 @@ export function UserMenu({ signInPath = '/sign-in' }: { signInPath?: string }) {
         </DropdownMenuContent>
       </DropdownMenu>
       <ChangePasswordDialog open={changing} onOpenChange={setChanging} />
+      <TwoStepDialog open={twoStep} onOpenChange={setTwoStep} />
     </>
   );
 }

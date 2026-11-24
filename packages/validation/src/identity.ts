@@ -2,6 +2,7 @@ import {
   CLIENT_APPS,
   PERMISSION_CODES,
   type Permission,
+  SELLER_STATUSES,
   USER_ROLES,
   type UserRole,
 } from '@marketplace/shared-types';
@@ -156,6 +157,17 @@ export const sessionUserSchema = z.object({
   roles: z.array(userRoleSchema),
   permissions: z.array(permissionSchema),
   wholesaleStatus: wholesaleStatusSchema.nullable(),
+  /** Whether two-step verification (authenticator app) is on. */
+  mfaEnabled: z.boolean(),
+  /** The seller this user works for (active membership), or null. */
+  seller: z
+    .object({
+      id: z.uuid(),
+      businessName: z.string(),
+      status: z.enum(SELLER_STATUSES),
+      isOwner: z.boolean(),
+    })
+    .nullable(),
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
 
@@ -168,6 +180,67 @@ export const sessionResponseSchema = z.object({
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
 export const csrfResponseSchema = z.object({ csrfToken: z.string() });
+
+// ---- Two-step verification (authenticator app) -----------------------------------------------
+
+/** Six-digit authenticator code, or an XXXX-XXXX recovery code. */
+export const mfaCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^(\d{6}|[A-Z0-9]{4}-?[A-Z0-9]{4})$/, 'Enter the 6-digit code or a recovery code');
+
+/** Returned by sign-in instead of a session when the account has two-step verification on. */
+export const mfaChallengeResponseSchema = z.object({
+  mfaRequired: z.literal(true),
+  mfaToken: z.string(),
+  expiresAt: z.iso.datetime(),
+});
+export type MfaChallengeResponse = z.infer<typeof mfaChallengeResponseSchema>;
+
+/** Result of a sign-in step: a session, or a request for the authenticator code. */
+export const signInResultSchema = z.union([mfaChallengeResponseSchema, sessionResponseSchema]);
+export type SignInResult = z.infer<typeof signInResultSchema>;
+export const isMfaChallenge = (result: SignInResult): result is MfaChallengeResponse =>
+  'mfaRequired' in result;
+
+export const mfaVerifySchema = z.object({
+  mfaToken: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/, 'Sign in again'),
+  code: mfaCodeSchema,
+});
+export type MfaVerifyRequest = z.input<typeof mfaVerifySchema>;
+
+export const mfaStatusSchema = z.object({
+  enabled: z.boolean(),
+  enabledAt: z.iso.datetime().nullable(),
+  recoveryCodesRemaining: z.number().int(),
+});
+export type MfaStatus = z.infer<typeof mfaStatusSchema>;
+
+export const mfaSetupRequestSchema = z.object({
+  password: z.string().min(1, 'Enter your password').max(128),
+});
+export const mfaSetupResponseSchema = z.object({
+  /** Base32 secret for manual entry. */
+  secret: z.string(),
+  /** otpauth:// URI for the QR code. */
+  otpauthUrl: z.string(),
+});
+export type MfaSetupResponse = z.infer<typeof mfaSetupResponseSchema>;
+
+export const mfaEnableSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});
+export const mfaRecoveryCodesSchema = z.object({ recoveryCodes: z.array(z.string()) });
+export type MfaRecoveryCodes = z.infer<typeof mfaRecoveryCodesSchema>;
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1, 'Enter your password').max(128),
+  code: mfaCodeSchema,
+});
+export const mfaRegenerateSchema = z.object({ code: mfaCodeSchema });
 
 // ---- Administration ------------------------------------------------------------------------
 
@@ -219,15 +292,29 @@ export const adminUserListSchema = paginatedSchema(adminUserSchema);
 export const adminUserDetailSchema = adminUserSchema.extend({
   activeSessions: z.number().int(),
   lockedUntil: z.iso.datetime().nullable(),
+  mfaEnabled: z.boolean(),
+  seller: z
+    .object({
+      id: z.uuid(),
+      businessName: z.string(),
+      status: z.enum(SELLER_STATUSES),
+      isOwner: z.boolean(),
+      memberStatus: z.enum(['ACTIVE', 'SUSPENDED']),
+    })
+    .nullable(),
 });
 export type AdminUserDetail = z.infer<typeof adminUserDetailSchema>;
 export type AdminUserList = z.infer<typeof adminUserListSchema>;
+
+export const roleScopeSchema = z.enum(['platform', 'seller', 'customer']);
+export const permissionScopeSchema = z.enum(['platform', 'seller']);
 
 export const roleSchema = z.object({
   code: userRoleSchema,
   name: z.string(),
   description: z.string(),
-  /** SUPER_ADMIN cannot be edited. */
+  scope: roleScopeSchema,
+  /** Locked roles (SUPER_ADMIN, SELLER_OWNER) always hold every permission of their scope. */
   locked: z.boolean(),
   permissions: z.array(permissionSchema),
   userCount: z.number().int(),
@@ -235,9 +322,24 @@ export const roleSchema = z.object({
 export type RoleDto = z.infer<typeof roleSchema>;
 export const roleListSchema = z.object({
   roles: z.array(roleSchema),
-  permissions: z.array(z.object({ code: permissionSchema, description: z.string() })),
+  permissions: z.array(
+    z.object({ code: permissionSchema, description: z.string(), scope: permissionScopeSchema }),
+  ),
 });
 export type RoleList = z.infer<typeof roleListSchema>;
+
+/** GET /permissions: the catalog with the roles that hold each permission. */
+export const permissionListSchema = z.object({
+  permissions: z.array(
+    z.object({
+      code: permissionSchema,
+      description: z.string(),
+      scope: permissionScopeSchema,
+      roles: z.array(userRoleSchema),
+    }),
+  ),
+});
+export type PermissionList = z.infer<typeof permissionListSchema>;
 
 export const updateRolePermissionsSchema = z.object({ permissions: z.array(permissionSchema) });
 

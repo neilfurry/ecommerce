@@ -26,6 +26,31 @@ export const wholesaleDecisionJobSchema = z.object({
   note: z.string().nullable(),
   link: z.url(),
 });
+/** A seller's verification or account status changed. */
+export const sellerStatusJobSchema = z.object({
+  ...recipient,
+  businessName: z.string(),
+  event: z.enum([
+    'SUBMITTED',
+    'INFO_REQUESTED',
+    'APPROVED',
+    'REJECTED',
+    'SUSPENDED',
+    'REINSTATED',
+    'CLOSED',
+  ]),
+  note: z.string().nullable(),
+  link: z.url(),
+});
+/** Invitation to join a seller as an employee. */
+export const sellerInvitationJobSchema = z.object({
+  to: z.email(),
+  sellerName: z.string(),
+  invitedBy: z.string(),
+  roles: z.array(z.string()).min(1),
+  link: z.url(),
+  expiresInHours: z.number().int(),
+});
 export const smsOtpJobSchema = z.object({
   /** E.164 */
   to: z.string().regex(/^\+[1-9]\d{7,14}$/),
@@ -38,3 +63,5 @@ export type PasswordResetJob = z.infer<typeof passwordResetJobSchema>;
 export type StaffInvitationJob = z.infer<typeof staffInvitationJobSchema>;
 export type WholesaleDecisionJob = z.infer<typeof wholesaleDecisionJobSchema>;
 export type SmsOtpJob = z.infer<typeof smsOtpJobSchema>;
+export type SellerStatusJob = z.infer<typeof sellerStatusJobSchema>;
+export type SellerInvitationJob = z.infer<typeof sellerInvitationJobSchema>;

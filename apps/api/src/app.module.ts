@@ -13,6 +13,9 @@ import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RolesModule } from './modules/roles/roles.module';
+import { SellerMembersModule } from './modules/seller-members/seller-members.module';
+import { SellersModule } from './modules/sellers/sellers.module';
+import { StoresModule } from './modules/stores/stores.module';
 import { UsersModule } from './modules/users/users.module';
 import { WholesaleModule } from './modules/wholesale/wholesale.module';
 
@@ -40,6 +43,9 @@ import { WholesaleModule } from './modules/wholesale/wholesale.module';
     UsersModule,
     RolesModule,
     WholesaleModule,
+    SellersModule,
+    StoresModule,
+    SellerMembersModule,
     // Development only: every route answers 404 unless DEV_TOOLS_ENABLED=true.
     DevToolsModule,
   ],

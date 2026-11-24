@@ -9,6 +9,8 @@ import { AuthService } from './auth.service';
 import { AuthenticationGuard } from './guards/authentication.guard';
 import { CsrfGuard } from './guards/csrf.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
+import { MfaController } from './mfa.controller';
+import { MfaService } from './mfa.service';
 import { OtpService } from './otp.service';
 import { PrincipalService } from './principal.service';
 import { SessionsService } from './sessions.service';
@@ -21,7 +23,7 @@ import { VerificationTokensService } from './verification-tokens.service';
 @Global()
 @Module({
   imports: [AuditModule, NotificationsModule],
-  controllers: [AuthController],
+  controllers: [AuthController, MfaController],
   providers: [
     AccessTokenService,
     SessionsService,
@@ -29,11 +31,12 @@ import { VerificationTokensService } from './verification-tokens.service';
     OtpService,
     VerificationTokensService,
     AuthService,
+    MfaService,
     { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: AuthenticationGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
-  exports: [SessionsService, PrincipalService, VerificationTokensService, AuthService],
+  exports: [SessionsService, PrincipalService, VerificationTokensService, AuthService, MfaService],
 })
 export class AuthModule {}

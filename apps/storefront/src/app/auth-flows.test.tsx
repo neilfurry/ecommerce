@@ -28,6 +28,8 @@ const session = (overrides: Record<string, unknown> = {}) => ({
     roles: ['CUSTOMER'],
     permissions: [],
     wholesaleStatus: null,
+    mfaEnabled: false,
+    seller: null,
     ...overrides,
   },
   app: 'storefront',

@@ -70,7 +70,13 @@ describe('AuthenticationGuard', () => {
 
   beforeEach(() => {
     revoked = false;
-    principal = { userId: 'u1', status: 'ACTIVE', roles: ['ADMIN'], permissions: ['users.read'] };
+    principal = {
+      userId: 'u1',
+      status: 'ACTIVE',
+      roles: ['ADMIN'],
+      permissions: ['users.read'],
+      seller: null,
+    };
     const sessions = { isRevoked: jest.fn(async () => revoked) } as unknown as SessionsService;
     const principals = { load: jest.fn(async () => principal) } as unknown as PrincipalService;
     guard = new AuthenticationGuard(new Reflector(), tokens, sessions, principals);

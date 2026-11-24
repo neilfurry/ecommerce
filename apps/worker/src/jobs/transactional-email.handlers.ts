@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { EMAIL_JOBS } from '@marketplace/config';
 import {
   passwordResetJobSchema,
+  sellerInvitationJobSchema,
+  sellerStatusJobSchema,
   staffInvitationJobSchema,
   verifyEmailJobSchema,
   wholesaleDecisionJobSchema,
@@ -12,6 +14,8 @@ import { MailerService, type SentEmail } from '../mail/mailer.service';
 import {
   passwordResetTemplate,
   type RenderedEmail,
+  sellerInvitationTemplate,
+  sellerStatusTemplate,
   staffInvitationTemplate,
   verifyEmailTemplate,
   wholesaleDecisionTemplate,
@@ -85,7 +89,31 @@ export class WholesaleDecisionEmailHandler extends TemplatedEmailHandler<
   }
 }
 
+@Injectable()
+export class SellerStatusEmailHandler extends TemplatedEmailHandler<typeof sellerStatusJobSchema> {
+  readonly jobName = EMAIL_JOBS.SELLER_STATUS;
+  protected readonly schema = sellerStatusJobSchema;
+  protected render = sellerStatusTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
+@Injectable()
+export class SellerInvitationEmailHandler extends TemplatedEmailHandler<
+  typeof sellerInvitationJobSchema
+> {
+  readonly jobName = EMAIL_JOBS.SELLER_INVITATION;
+  protected readonly schema = sellerInvitationJobSchema;
+  protected render = sellerInvitationTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
 export const TRANSACTIONAL_EMAIL_HANDLERS = [
+  SellerStatusEmailHandler,
+  SellerInvitationEmailHandler,
   VerifyEmailHandler,
   PasswordResetEmailHandler,
   StaffInvitationEmailHandler,

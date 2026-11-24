@@ -10,6 +10,7 @@ const validEnv = {
   CORS_ORIGINS: 'http://localhost:5173,http://localhost:5174',
   AUTH_JWT_SECRET: 'j'.repeat(32),
   AUTH_OTP_SECRET: 'o'.repeat(32),
+  AUTH_MFA_ENCRYPTION_KEY: 'm'.repeat(32),
 };
 
 describe('AppConfig.load', () => {

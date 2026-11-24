@@ -27,6 +27,7 @@ export class AppConfig {
   readonly auth: {
     jwtSecret: string;
     otpSecret: string;
+    mfaEncryptionKey: string;
     accessTokenTtlSeconds: number;
     customerSessionDays: number;
     staffSessionHours: number;
@@ -70,6 +71,7 @@ export class AppConfig {
     this.auth = {
       jwtSecret: env.AUTH_JWT_SECRET,
       otpSecret: env.AUTH_OTP_SECRET,
+      mfaEncryptionKey: env.AUTH_MFA_ENCRYPTION_KEY,
       accessTokenTtlSeconds: env.AUTH_ACCESS_TOKEN_TTL_SECONDS,
       customerSessionDays: env.AUTH_CUSTOMER_SESSION_DAYS,
       staffSessionHours: env.AUTH_STAFF_SESSION_HOURS,

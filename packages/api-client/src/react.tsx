@@ -36,6 +36,13 @@ export function useApiClient(): ApiClient {
 export const queryKeys = {
   health: ['health'] as const,
   session: ['session'] as const,
+  mfa: ['mfa'] as const,
+  seller: {
+    all: ['seller'] as const,
+    profile: ['seller', 'profile'] as const,
+    stores: ['seller', 'stores'] as const,
+    team: ['seller', 'team'] as const,
+  },
   account: {
     wholesale: ['account', 'wholesale-application'] as const,
   },
@@ -46,6 +53,10 @@ export const queryKeys = {
     roles: ['admin', 'roles'] as const,
     wholesale: (query: object) => ['admin', 'wholesale', query] as const,
     auditLogs: (query: object) => ['admin', 'audit-logs', query] as const,
+    permissions: ['admin', 'permissions'] as const,
+    sellers: (query: object) => ['admin', 'sellers', query] as const,
+    seller: (id: string) => ['admin', 'seller', id] as const,
+    stores: (query: object) => ['admin', 'stores', query] as const,
   },
   dev: {
     all: ['dev'] as const,

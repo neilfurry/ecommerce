@@ -133,7 +133,7 @@ jobs:
         run: |
           (Get-Content .env) | Where-Object { $_ -notmatch '^(AUTH_|SMS_PROVIDER=)' } | Set-Content .env
           ./scripts/setup.ps1
-          foreach ($key in 'AUTH_JWT_SECRET', 'AUTH_OTP_SECRET', 'SMS_PROVIDER') {
+          foreach ($key in 'AUTH_JWT_SECRET', 'AUTH_OTP_SECRET', 'AUTH_MFA_ENCRYPTION_KEY', 'SMS_PROVIDER') {
             if (-not (Select-String -Path .env -Pattern "^$key=" -Quiet)) { throw "$key was not added to .env" }
           }
       - name: test.ps1 -Suite integration

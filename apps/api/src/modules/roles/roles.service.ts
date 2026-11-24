@@ -1,13 +1,15 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  assignablePermissions,
   type AuthenticatedUser,
   type Permission,
+  PERMISSION_CATALOG,
   PERMISSION_CODES,
-  PERMISSIONS,
+  roleScope,
   USER_ROLES,
   type UserRole,
 } from '@marketplace/shared-types';
-import type { RoleDto, RoleList } from '@marketplace/validation';
+import type { PermissionList, RoleDto, RoleList } from '@marketplace/validation';
 import type { RequestContext } from '../../common/auth/auth.decorators';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -40,11 +42,34 @@ export class RolesService {
           code: role.code as UserRole,
           name: role.name,
           description: role.description,
+          scope: roleScope(role.code as UserRole),
           locked: role.isLocked,
           permissions: role.permissions.map((p) => p.permissionCode as Permission).sort(),
           userCount: role._count.users,
         })),
-      permissions: PERMISSION_CODES.map((code) => ({ code, description: PERMISSIONS[code] })),
+      permissions: PERMISSION_CODES.map((code) => ({
+        code,
+        description: PERMISSION_CATALOG[code].description,
+        scope: PERMISSION_CATALOG[code].scope,
+      })),
+    };
+  }
+
+  /** The permission catalog with the roles holding each permission. */
+  async permissions(): Promise<PermissionList> {
+    const grants = await this.prisma.rolePermission.findMany({
+      select: { roleCode: true, permissionCode: true },
+    });
+    return {
+      permissions: PERMISSION_CODES.map((code) => ({
+        code,
+        description: PERMISSION_CATALOG[code].description,
+        scope: PERMISSION_CATALOG[code].scope,
+        roles: grants
+          .filter((g) => g.permissionCode === code)
+          .map((g) => g.roleCode as UserRole)
+          .sort((a, b) => USER_ROLES.indexOf(a) - USER_ROLES.indexOf(b)),
+      })),
     };
   }
 
@@ -64,6 +89,22 @@ export class RolesService {
         HttpStatus.FORBIDDEN,
         'FORBIDDEN',
         `${role.name} always has every permission and cannot be edited.`,
+      );
+    }
+    const allowed = assignablePermissions(code);
+    const outOfScope = permissions.filter((p) => !allowed.includes(p));
+    if (outOfScope.length > 0) {
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        'VALIDATION_FAILED',
+        `${role.name} cannot hold: ${outOfScope.join(', ')}.`,
+        [
+          {
+            path: 'permissions',
+            message:
+              'Platform roles hold platform permissions; seller roles hold seller permissions',
+          },
+        ],
       );
     }
     const next = [...new Set(permissions)];

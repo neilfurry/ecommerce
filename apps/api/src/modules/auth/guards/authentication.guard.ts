@@ -74,6 +74,18 @@ export class AuthenticationGuard implements CanActivate {
       roles: principal.roles,
       permissions: principal.permissions,
       accessTokenExpiresAt: new Date(exp * 1000).toISOString(),
+      // Seller scope applies only in the Seller Center.
+      ...(app === 'seller' && principal.seller
+        ? {
+            sellerId: principal.seller.id,
+            seller: {
+              id: principal.seller.id,
+              memberId: principal.seller.memberId,
+              isOwner: principal.seller.isOwner,
+              status: principal.seller.status,
+            },
+          }
+        : {}),
     };
   }
 }

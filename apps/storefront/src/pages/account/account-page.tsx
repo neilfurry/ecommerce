@@ -12,6 +12,7 @@ import {
   ChangePasswordDialog,
   FormAlert,
   SubmitButton,
+  TwoStepDialog,
 } from '@marketplace/auth-ui';
 import {
   Alert,
@@ -39,7 +40,13 @@ import {
   toast,
 } from '@marketplace/ui';
 import { type WholesaleBusiness, wholesaleBusinessSchema } from '@marketplace/validation';
-import { BuildingIcon, ClockIcon, KeyRoundIcon, MonitorSmartphoneIcon } from 'lucide-react';
+import {
+  BuildingIcon,
+  ClockIcon,
+  KeyRoundIcon,
+  MonitorSmartphoneIcon,
+  ShieldCheckIcon,
+} from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
@@ -251,6 +258,8 @@ function SecurityCard() {
   const signOutEverywhere = useSignOutEverywhere();
   const navigate = useNavigate();
   const [changing, setChanging] = useState(false);
+  const [twoStep, setTwoStep] = useState(false);
+  const session = useSession();
   return (
     <Card>
       <CardHeader>
@@ -276,7 +285,12 @@ function SecurityCard() {
             void navigate('/sign-in', { replace: true });
           }}
         />
+        <Button variant="outline" onClick={() => setTwoStep(true)}>
+          <ShieldCheckIcon /> Two-step verification{' '}
+          {session.data?.user.mfaEnabled ? '(on)' : '(off)'}
+        </Button>
         <ChangePasswordDialog open={changing} onOpenChange={setChanging} />
+        <TwoStepDialog open={twoStep} onOpenChange={setTwoStep} />
       </CardContent>
     </Card>
   );

@@ -21,6 +21,8 @@ import {
   type OtpChallengeResponse,
   sessionResponseSchema,
   type SessionResponse,
+  type SignInResult,
+  signInResultSchema,
 } from '@marketplace/validation';
 import type { Request, Response } from 'express';
 import {
@@ -50,10 +52,12 @@ import {
   MobileSignInDto,
   OtpResendDto,
   OtpVerifyDto,
+  MfaVerifyDto,
   ResetPasswordDto,
+  SellerSignUpDto,
   VerifyEmailDto,
 } from './auth.dtos';
-import { AuthService, type SignedIn } from './auth.service';
+import { AuthService, type SignedIn, type SignInOutcome } from './auth.service';
 import { randomToken, sha256 } from './crypto';
 import { OtpService } from './otp.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -179,12 +183,15 @@ export class AuthController {
   @Throttle(SIGN_IN_LIMIT)
   @ApiOperation({ summary: 'Customer sign-in, step 2: verify the SMS code' })
   @ApiBody({ schema: OtpVerifyDto.openApiSchema })
-  @ApiOkResponse({ schema: zodToOpenApi(sessionResponseSchema) })
+  @ApiOkResponse({
+    schema: zodToOpenApi(signInResultSchema),
+    description: 'A session, or { mfaRequired, mfaToken } when two-step verification is on',
+  })
   async verifyOtp(
     @Body() body: OtpVerifyDto,
     @ReqContext() context: RequestContext,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<SessionResponse> {
+  ): Promise<SignInResult> {
     requireApp(context, ['storefront']);
     return this.signedIn(
       response,
@@ -199,9 +206,34 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sign in with email and password (any app; roles must match the app)' })
   @ApiBody({ schema: EmailSignInDto.openApiSchema })
-  @ApiOkResponse({ schema: zodToOpenApi(sessionResponseSchema) })
+  @ApiOkResponse({
+    schema: zodToOpenApi(signInResultSchema),
+    description: 'A session, or { mfaRequired, mfaToken } when two-step verification is on',
+  })
   async signIn(
     @Body() body: EmailSignInDto,
+    @ReqContext() context: RequestContext,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<SignInResult> {
+    const app = requireApp(context);
+    return this.signedIn(
+      response,
+      app,
+      await this.auth.signInWithPassword(body.email, body.password, app, context),
+    );
+  }
+
+  @Post('mfa/verify')
+  @Public()
+  @Throttle(SIGN_IN_LIMIT)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Second sign-in step: the authenticator code (or a recovery code) for an mfaToken',
+  })
+  @ApiBody({ schema: MfaVerifyDto.openApiSchema })
+  @ApiOkResponse({ schema: zodToOpenApi(sessionResponseSchema) })
+  async verifyMfa(
+    @Body() body: MfaVerifyDto,
     @ReqContext() context: RequestContext,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SessionResponse> {
@@ -209,8 +241,25 @@ export class AuthController {
     return this.signedIn(
       response,
       app,
-      await this.auth.signInWithPassword(body.email, body.password, app, context),
+      await this.auth.completeMfaSignIn(body.mfaToken, body.code, app, context),
     );
+  }
+
+  @Post('sellers/sign-up')
+  @Public()
+  @Throttle(SIGN_IN_LIMIT)
+  @ApiOperation({
+    summary: 'Seller Center: register a business. Creates the owner account and a PENDING seller',
+  })
+  @ApiBody({ schema: SellerSignUpDto.openApiSchema })
+  @ApiCreatedResponse({ schema: zodToOpenApi(sessionResponseSchema) })
+  async sellerSignUp(
+    @Body() body: SellerSignUpDto,
+    @ReqContext() context: RequestContext,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<SessionResponse> {
+    requireApp(context, ['seller']);
+    return this.signedIn(response, 'seller', await this.auth.signUpSeller(body, context));
   }
 
   @Post('refresh')
@@ -322,7 +371,7 @@ export class AuthController {
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Send the verification email again' })
   async resendVerification(@CurrentUser() user: AuthenticatedUser): Promise<void> {
-    await this.auth.resendVerificationEmail(user.id);
+    await this.auth.resendVerificationEmail(user.id, user.app);
   }
 
   @Post('password/forgot')
@@ -385,7 +434,15 @@ export class AuthController {
     await this.auth.acceptInvitation(body.token, body.password, context);
   }
 
-  private signedIn(response: Response, app: ClientApp, result: SignedIn): SessionResponse {
+  /**
+   * Sets the session cookies, or, when two-step verification is on, returns the challenge
+   * without any cookie (the session starts only after POST /auth/mfa/verify).
+   */
+  private signedIn(response: Response, app: ClientApp, result: SignedIn): SessionResponse;
+  private signedIn(response: Response, app: ClientApp, result: SignInOutcome): SignInResult;
+  private signedIn(response: Response, app: ClientApp, result: SignInOutcome): SignInResult {
+    response.setHeader('Cache-Control', 'no-store');
+    if ('mfa' in result) return result.mfa;
     setSessionCookies(response, this.config, app, {
       accessToken: result.session.accessToken,
       refreshToken: result.session.refreshToken,

@@ -81,7 +81,18 @@ export interface TestUser {
   email: string;
   mobile: string | null;
   roles: UserRole[];
+  /** Set for users with seller roles: the seller they belong to. */
+  sellerId?: string;
 }
+
+const SELLER_ROLE_CODES: readonly UserRole[] = [
+  'SELLER_OWNER',
+  'SELLER_MANAGER',
+  'SELLER_ENCODER',
+  'SELLER_INVENTORY',
+  'SELLER_ORDER_PROCESSOR',
+  'SELLER_ACCOUNTING',
+];
 
 let rolesSynced: Promise<void> | undefined;
 
@@ -95,6 +106,12 @@ export async function createUser(
     password?: string | null;
     mobile?: string | null;
     emailVerified?: boolean;
+    /**
+     * For seller roles: join this seller. Without it, a SELLER_OWNER gets a new seller of
+     * `sellerStatus` (VERIFIED by default) and other seller roles join a new seller.
+     */
+    sellerId?: string;
+    sellerStatus?: 'PENDING' | 'UNDER_REVIEW' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED' | 'CLOSED';
   },
 ): Promise<TestUser> {
   const prisma = app.get(PrismaService);
@@ -120,7 +137,55 @@ export async function createUser(
       roles: { create: options.roles.map((roleCode) => ({ roleCode })) },
     },
   });
-  return { id: user.id, email: user.email, mobile: user.mobile, roles: options.roles };
+  let sellerId = options.sellerId;
+  if (options.roles.some((role) => SELLER_ROLE_CODES.includes(role))) {
+    if (!sellerId) {
+      const ownerId = options.roles.includes('SELLER_OWNER')
+        ? user.id
+        : (
+            await createUser(app, {
+              roles: ['SELLER_OWNER'],
+              label: 'owner',
+              sellerStatus: options.sellerStatus,
+            })
+          ).id;
+      sellerId =
+        ownerId === user.id
+          ? (await createSellerRecord(app, user.id, options.sellerStatus ?? 'VERIFIED')).id
+          : (await prisma.sellerMember.findUniqueOrThrow({ where: { userId: ownerId } })).sellerId;
+    }
+    if (!(await prisma.sellerMember.findUnique({ where: { userId: user.id } }))) {
+      await prisma.sellerMember.create({ data: { sellerId, userId: user.id } });
+    }
+  }
+  return { id: user.id, email: user.email, mobile: user.mobile, roles: options.roles, sellerId };
+}
+
+/** A seller owned by `ownerId` (also made its member), in the given status. */
+export async function createSellerRecord(
+  app: INestApplication,
+  ownerId: string,
+  status: 'PENDING' | 'UNDER_REVIEW' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED' | 'CLOSED',
+) {
+  const prisma = app.get(PrismaService);
+  const now = new Date();
+  const submitted = status !== 'PENDING';
+  const verified = status === 'VERIFIED' || status === 'SUSPENDED';
+  return prisma.seller.create({
+    data: {
+      businessName: `Test Trading ${randomUUID().slice(0, 6)}`,
+      businessType: 'SOLE_PROPRIETORSHIP',
+      ownerId,
+      email: uniqueEmail('business'),
+      mobile: randomMobile(),
+      status,
+      submittedAt: submitted ? now : null,
+      verifiedAt: verified ? now : null,
+      suspendedAt: status === 'SUSPENDED' ? now : null,
+      closedAt: status === 'CLOSED' ? now : null,
+      members: { create: { userId: ownerId } },
+    },
+  });
 }
 
 /** Creates a user and returns a client signed in to the given app. */

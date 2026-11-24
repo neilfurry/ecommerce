@@ -59,6 +59,8 @@ export const apiEnvSchema = z
     AUTH_JWT_SECRET: z.string().min(32, 'Use at least 32 random characters'),
     /** HMAC key for one-time SMS codes. At least 32 random characters. */
     AUTH_OTP_SECRET: z.string().min(32, 'Use at least 32 random characters'),
+    /** Encrypts authenticator-app secrets at rest. Changing it disables everyone's two-step verification. */
+    AUTH_MFA_ENCRYPTION_KEY: z.string().min(32, 'Use at least 32 random characters'),
     AUTH_ACCESS_TOKEN_TTL_SECONDS: envInteger(900, 60, 3600),
     AUTH_CUSTOMER_SESSION_DAYS: envInteger(30, 1, 365),
     AUTH_STAFF_SESSION_HOURS: envInteger(12, 1, 168),
@@ -87,6 +89,14 @@ export const apiEnvSchema = z
         code: 'custom',
         path: ['COOKIE_SECURE'],
         message: 'Must be true in production',
+      });
+    }
+    const secrets = [env.AUTH_JWT_SECRET, env.AUTH_OTP_SECRET, env.AUTH_MFA_ENCRYPTION_KEY];
+    if (new Set(secrets).size !== secrets.length && env.AUTH_JWT_SECRET !== env.AUTH_OTP_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUTH_MFA_ENCRYPTION_KEY'],
+        message: 'Must differ from AUTH_JWT_SECRET and AUTH_OTP_SECRET',
       });
     }
     if (env.AUTH_JWT_SECRET === env.AUTH_OTP_SECRET) {

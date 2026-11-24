@@ -27,6 +27,8 @@ const session = {
     roles: ['CUSTOMER_SUPPORT'],
     permissions: ['users.read'],
     wholesaleStatus: null,
+    mfaEnabled: false,
+    seller: null,
   },
   app: 'admin',
   accessTokenExpiresAt: '2026-11-25T09:15:00.000Z',
