@@ -132,3 +132,40 @@ describe('createApiClient', () => {
     await expect(client.health.live()).rejects.toBe(abort);
   });
 });
+
+describe('devTools client', () => {
+  it('uploads files as multipart without forcing a JSON content type', async () => {
+    const file = {
+      id: '0192f0a4-7b7c-7cc4-9a51-1f3a2b4c5d6e',
+      originalName: 'a.txt',
+      contentType: 'text/plain',
+      sizeBytes: 1,
+      checksumSha256: 'a'.repeat(64),
+      purpose: 'DEV_TEST',
+      status: 'AVAILABLE',
+      createdAt: '2026-11-24T09:00:00.000Z',
+      updatedAt: '2026-11-24T09:00:00.000Z',
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(file, 201));
+    const client = createApiClient({ baseUrl: '/api', fetchImpl });
+    await client.devTools.uploadFile(new File(['x'], 'a.txt', { type: 'text/plain' }));
+    const init = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('/api/v1/dev/files');
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+  });
+
+  it('treats 204 responses as empty success', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const client = createApiClient({ baseUrl: '/api', fetchImpl });
+    await expect(client.devTools.deleteFile('abc')).resolves.toBeUndefined();
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('encodes path segments', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const client = createApiClient({ baseUrl: '/api', fetchImpl });
+    await client.devTools.discardDeadLetter('system__12');
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('/api/v1/dev/dead-letters/system__12');
+  });
+});

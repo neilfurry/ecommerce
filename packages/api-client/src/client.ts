@@ -6,6 +6,7 @@ import {
   type LivenessResponse,
 } from '@marketplace/validation';
 import type { z } from 'zod';
+import { createDevToolsClient } from './dev-tools';
 import { ApiError } from './errors';
 
 export interface ApiClientOptions {
@@ -17,7 +18,7 @@ export interface ApiClientOptions {
 
 export interface RequestOptions<TSchema extends z.ZodType> {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  /** JSON-serialisable request body. */
+  /** JSON-serialisable request body, or FormData for file uploads. */
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
   /** Every response is validated, so the UI never renders data the contract does not allow. */
@@ -51,9 +52,17 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientOptions) {
         credentials: 'include',
         headers: {
           Accept: 'application/json',
-          ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          // FormData sets its own multipart boundary header.
+          ...(options.body !== undefined && !(options.body instanceof FormData)
+            ? { 'Content-Type': 'application/json' }
+            : {}),
         },
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        body:
+          options.body === undefined
+            ? undefined
+            : options.body instanceof FormData
+              ? options.body
+              : JSON.stringify(options.body),
         signal: options.signal,
       });
     } catch (error) {
@@ -85,6 +94,7 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientOptions) {
 
   return {
     request,
+    devTools: createDevToolsClient(request),
     health: {
       /** Readiness of the API and its dependencies. A 503 still carries a valid report. */
       get: (signal?: AbortSignal): Promise<HealthResponse> =>
