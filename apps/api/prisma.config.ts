@@ -15,5 +15,7 @@ export default defineConfig({
   },
   datasource: {
     url: env('DATABASE_URL'),
+    // Only needed by `pnpm db:check` (migration drift check); an empty, disposable database.
+    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL || undefined,
   },
 });

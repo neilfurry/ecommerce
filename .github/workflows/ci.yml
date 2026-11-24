@@ -74,6 +74,14 @@ jobs:
             cgr.dev/chainguard/minio:latest server /data
           for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
       - run: pnpm build:packages
+      - name: Check migrations match schema.prisma
+        run: |
+          PGPASSWORD=marketplace_dev_password psql -h localhost -U marketplace -d marketplace \
+            -c 'CREATE DATABASE marketplace_shadow'
+          pnpm db:generate
+          pnpm db:check
+        env:
+          SHADOW_DATABASE_URL: postgresql://marketplace:marketplace_dev_password@localhost:5432/marketplace_shadow
       - run: pnpm db:deploy
       - run: pnpm db:seed
       - run: pnpm test:e2e:api
