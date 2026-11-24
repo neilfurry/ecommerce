@@ -35,4 +35,39 @@ describe('WorkerConfig.load', () => {
       ),
     ).toThrow(/DEV_TOOLS_ENABLED/);
   });
+
+  it('defaults to the mock SMS provider outside production', () => {
+    expect(WorkerConfig.load({ REDIS_URL: 'redis://localhost:6379' }, false).sms.provider).toBe(
+      'mock',
+    );
+  });
+
+  it('refuses the mock SMS provider in production', () => {
+    expect(() =>
+      WorkerConfig.load(
+        { REDIS_URL: 'redis://localhost:6379', NODE_ENV: 'production', SMS_PROVIDER: 'mock' },
+        false,
+      ),
+    ).toThrow(/SMS_PROVIDER/);
+  });
+
+  it('requires an API key for Semaphore', () => {
+    expect(() =>
+      WorkerConfig.load({ REDIS_URL: 'redis://localhost:6379', SMS_PROVIDER: 'semaphore' }, false),
+    ).toThrow(/SEMAPHORE_API_KEY/);
+    const config = WorkerConfig.load(
+      {
+        REDIS_URL: 'redis://localhost:6379',
+        SMS_PROVIDER: 'semaphore',
+        SEMAPHORE_API_KEY: 'k',
+        SEMAPHORE_SENDER_NAME: 'MARKETPLACE',
+      },
+      false,
+    );
+    expect(config.sms).toEqual({
+      provider: 'semaphore',
+      semaphoreApiKey: 'k',
+      semaphoreSenderName: 'MARKETPLACE',
+    });
+  });
 });

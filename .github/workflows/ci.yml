@@ -129,6 +129,13 @@ jobs:
           if ($failed) { exit 1 }
       - name: setup.ps1
         run: ./scripts/setup.ps1
+      - name: setup.ps1 adds settings missing from an older .env
+        run: |
+          (Get-Content .env) | Where-Object { $_ -notmatch '^(AUTH_|SMS_PROVIDER=)' } | Set-Content .env
+          ./scripts/setup.ps1
+          foreach ($key in 'AUTH_JWT_SECRET', 'AUTH_OTP_SECRET', 'AUTH_MFA_ENCRYPTION_KEY', 'SMS_PROVIDER') {
+            if (-not (Select-String -Path .env -Pattern "^$key=" -Quiet)) { throw "$key was not added to .env" }
+          }
       - name: test.ps1 -Suite integration
         run: ./scripts/test.ps1 -Suite integration
       - name: backup-db.ps1, restore-db.ps1, reset-db.ps1

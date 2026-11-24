@@ -26,11 +26,18 @@ export default defineConfig({
     launchOptions: { executablePath },
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } } },
+    // Signs in to the staff apps once and saves the cookies (e2e/.auth/, git-ignored).
+    { name: 'setup', testMatch: /auth\.setup\.ts/, use: { launchOptions: { executablePath } } },
+    {
+      name: 'desktop',
+      use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } },
+      dependencies: ['setup'],
+    },
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'], launchOptions: { executablePath } },
       grep: /@responsive/,
+      dependencies: ['setup'],
     },
   ],
   webServer: [

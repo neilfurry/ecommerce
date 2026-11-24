@@ -1,6 +1,6 @@
 # ADR 0009: Secure-by-default authorization, and development-only tools
 
-- Status: Accepted
+- Status: Accepted. Phase 2 completed it: see ADR 0010 and ADR 0011.
 - Date: 2026-11-24
 
 ## Context

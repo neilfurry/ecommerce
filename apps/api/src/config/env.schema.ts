@@ -54,6 +54,27 @@ export const apiEnvSchema = z
     UPLOAD_MAX_BYTES: envInteger(5 * 1024 * 1024, 1024, 100 * 1024 * 1024),
 
     DEV_TOOLS_ENABLED: envBoolean(false),
+
+    /** Signs access tokens (HS256). At least 32 random characters; rotate by redeploying. */
+    AUTH_JWT_SECRET: z.string().min(32, 'Use at least 32 random characters'),
+    /** HMAC key for one-time SMS codes. At least 32 random characters. */
+    AUTH_OTP_SECRET: z.string().min(32, 'Use at least 32 random characters'),
+    /** Encrypts authenticator-app secrets at rest. Changing it disables everyone's two-step verification. */
+    AUTH_MFA_ENCRYPTION_KEY: z.string().min(32, 'Use at least 32 random characters'),
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: envInteger(900, 60, 3600),
+    AUTH_CUSTOMER_SESSION_DAYS: envInteger(30, 1, 365),
+    AUTH_STAFF_SESSION_HOURS: envInteger(12, 1, 168),
+    AUTH_MAX_FAILED_SIGN_INS: envInteger(5, 3, 20),
+    AUTH_LOCKOUT_MINUTES: envInteger(15, 1, 1440),
+    /** Secure-only cookies. Defaults to true in production; local http needs false. */
+    COOKIE_SECURE: envBoolean(false),
+    /** Optional parent domain for cookies, e.g. ".marketplace.ph". Unset = API host only. */
+    COOKIE_DOMAIN: z.string().optional(),
+
+    /** Public URLs of the frontends, used in links sent by email. */
+    STOREFRONT_URL: z.url().default('http://localhost:5173'),
+    SELLER_PORTAL_URL: z.url().default('http://localhost:5174'),
+    ADMIN_PORTAL_URL: z.url().default('http://localhost:5175'),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.S3_AUTO_CREATE_BUCKET) {
@@ -61,6 +82,28 @@ export const apiEnvSchema = z
         code: 'custom',
         path: ['S3_AUTO_CREATE_BUCKET'],
         message: 'Must be false in production; provision buckets explicitly',
+      });
+    }
+    if (env.NODE_ENV === 'production' && !env.COOKIE_SECURE) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['COOKIE_SECURE'],
+        message: 'Must be true in production',
+      });
+    }
+    const secrets = [env.AUTH_JWT_SECRET, env.AUTH_OTP_SECRET, env.AUTH_MFA_ENCRYPTION_KEY];
+    if (new Set(secrets).size !== secrets.length && env.AUTH_JWT_SECRET !== env.AUTH_OTP_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUTH_MFA_ENCRYPTION_KEY'],
+        message: 'Must differ from AUTH_JWT_SECRET and AUTH_OTP_SECRET',
+      });
+    }
+    if (env.AUTH_JWT_SECRET === env.AUTH_OTP_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUTH_OTP_SECRET'],
+        message: 'Must differ from AUTH_JWT_SECRET',
       });
     }
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {

@@ -88,3 +88,15 @@ export { Breadcrumbs, type BreadcrumbItem } from './patterns/breadcrumbs';
 export { ConfirmDialog, type ConfirmDialogProps } from './patterns/confirm-dialog';
 export { DataTable, type DataTableColumn, type DataTableProps } from './patterns/data-table';
 export { Pagination, pageWindow, type PaginationProps } from './patterns/pagination';
+export { Checkbox } from './components/checkbox';
+export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './components/dropdown-menu';
+export { PasswordInput } from './components/password-input';
+export { Tabs, TabsContent, TabsList, TabsTrigger } from './components/tabs';
+export { AuthShell, type AuthShellProps } from './patterns/auth-shell';

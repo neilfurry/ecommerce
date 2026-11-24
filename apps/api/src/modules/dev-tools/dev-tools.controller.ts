@@ -29,6 +29,8 @@ import { FilePurpose } from '@marketplace/database';
 import type { QueueName } from '@marketplace/config';
 import {
   deadLetterListResponseSchema,
+  devSmsOutboxSchema,
+  type DevSmsOutbox,
   enqueuedJobResponseSchema,
   type EnqueuedJobResponse,
   jobStatusResponseSchema,
@@ -42,7 +44,7 @@ import {
   type StoredFileDto,
   uuidSchema,
 } from '@marketplace/validation';
-import { Public } from '../../common/auth/auth.decorators';
+import { RequirePermissions } from '../../common/auth/auth.decorators';
 import { ApiException } from '../../common/errors/api.exception';
 import { zodToOpenApi } from '../../common/openapi/zod-openapi';
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe';
@@ -63,10 +65,10 @@ const PURPOSE = FilePurpose.DEV_TEST;
 /**
  * DEVELOPMENT ONLY (DEV_TOOLS_ENABLED=true; refused in production). Lets developers prove
  * the job pipeline and file storage end to end from the Admin Console.
- * Public until Phase 2, which restricts it to SUPER_ADMIN via @Roles.
+ * Requires the dev-tools.use permission (SUPER_ADMIN by default).
  */
 @ApiTags('Developer tools (development only)')
-@Public()
+@RequirePermissions('dev-tools.use')
 @UseGuards(DevToolsEnabledGuard)
 @Controller({ path: 'dev', version: '1' })
 export class DevToolsController {
@@ -103,6 +105,13 @@ export class DevToolsController {
     @Param('jobId', new ZodValidationPipe(jobIdParamSchema)) jobId: string,
   ): Promise<JobStatusResponse> {
     return this.jobs.getJob(queue as QueueName, jobId);
+  }
+
+  @Get('sms-outbox')
+  @ApiOperation({ summary: 'Text messages captured by the mock SMS provider, newest first' })
+  @ApiOkResponse({ schema: zodToOpenApi(devSmsOutboxSchema) })
+  smsOutbox(): Promise<DevSmsOutbox> {
+    return this.jobs.smsOutbox();
   }
 
   @Get('queues')

@@ -24,6 +24,19 @@ export class AppConfig {
   readonly database: { url: string };
   readonly redis: { url: string };
   readonly devToolsEnabled: boolean;
+  readonly auth: {
+    jwtSecret: string;
+    otpSecret: string;
+    mfaEncryptionKey: string;
+    accessTokenTtlSeconds: number;
+    customerSessionDays: number;
+    staffSessionHours: number;
+    maxFailedSignIns: number;
+    lockoutMinutes: number;
+    cookieSecure: boolean;
+    cookieDomain: string | undefined;
+  };
+  readonly appUrls: { storefront: string; seller: string; admin: string };
   readonly storage: {
     endpoint: string | undefined;
     publicEndpoint: string | undefined;
@@ -55,6 +68,23 @@ export class AppConfig {
     this.database = { url: env.DATABASE_URL };
     this.redis = { url: env.REDIS_URL };
     this.devToolsEnabled = env.DEV_TOOLS_ENABLED;
+    this.auth = {
+      jwtSecret: env.AUTH_JWT_SECRET,
+      otpSecret: env.AUTH_OTP_SECRET,
+      mfaEncryptionKey: env.AUTH_MFA_ENCRYPTION_KEY,
+      accessTokenTtlSeconds: env.AUTH_ACCESS_TOKEN_TTL_SECONDS,
+      customerSessionDays: env.AUTH_CUSTOMER_SESSION_DAYS,
+      staffSessionHours: env.AUTH_STAFF_SESSION_HOURS,
+      maxFailedSignIns: env.AUTH_MAX_FAILED_SIGN_INS,
+      lockoutMinutes: env.AUTH_LOCKOUT_MINUTES,
+      cookieSecure: env.COOKIE_SECURE,
+      cookieDomain: env.COOKIE_DOMAIN || undefined,
+    };
+    this.appUrls = {
+      storefront: env.STOREFRONT_URL.replace(/\/+$/, ''),
+      seller: env.SELLER_PORTAL_URL.replace(/\/+$/, ''),
+      admin: env.ADMIN_PORTAL_URL.replace(/\/+$/, ''),
+    };
     this.storage = {
       endpoint: env.S3_ENDPOINT,
       publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT,

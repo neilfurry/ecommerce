@@ -20,6 +20,10 @@ export const ALLOWED_CONTENT_TYPES: Record<FilePurpose, readonly string[]> = {
     'application/pdf',
     'text/plain',
   ],
+  // Scans and photos of permits, certificates and IDs.
+  [FilePurpose.SELLER_DOCUMENT]: ['application/pdf', 'image/jpeg', 'image/png'],
+  [FilePurpose.STORE_LOGO]: ['image/png', 'image/jpeg', 'image/webp'],
+  [FilePurpose.STORE_BANNER]: ['image/png', 'image/jpeg', 'image/webp'],
 };
 
 export interface UploadFileInput {

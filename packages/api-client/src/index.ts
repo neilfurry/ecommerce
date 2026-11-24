@@ -24,3 +24,4 @@ export {
   useRetryDeadLetter,
   useUploadDevFile,
 } from './react';
+export * from './auth-react';

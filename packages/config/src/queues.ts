@@ -129,6 +129,17 @@ export const SYSTEM_JOBS = {
 export const EMAIL_JOBS = {
   /** Development-only: sends a test email (delivered to Mailpit locally). */
   DEV_TEST: 'email.dev-test',
+  VERIFY_ADDRESS: 'email.verify-address',
+  PASSWORD_RESET: 'email.password-reset',
+  STAFF_INVITATION: 'email.staff-invitation',
+  WHOLESALE_DECISION: 'email.wholesale-decision',
+  SELLER_STATUS: 'email.seller-status',
+  SELLER_INVITATION: 'email.seller-invitation',
+} as const;
+
+export const NOTIFICATION_JOBS = {
+  /** One-time sign-in / sign-up code by SMS. Time-critical; never retried for long. */
+  SMS_OTP: 'notifications.sms-otp',
 } as const;
 
 export const DEAD_LETTER_JOBS = {

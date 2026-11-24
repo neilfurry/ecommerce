@@ -3,3 +3,5 @@
 
 /* Scan this app's own sources for utility classes. */
 @source "./";
+/* Shared sign-in and account screens. */
+@source "../../../packages/auth-ui/src";

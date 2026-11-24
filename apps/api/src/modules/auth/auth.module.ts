@@ -1,20 +1,42 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { AuthGuard } from '../../common/auth/auth.guard';
 import { RolesGuard } from '../../common/auth/roles.guard';
+import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { AccessTokenService } from './access-token.service';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { AuthenticationGuard } from './guards/authentication.guard';
+import { CsrfGuard } from './guards/csrf.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
+import { MfaController } from './mfa.controller';
+import { MfaService } from './mfa.service';
+import { OtpService } from './otp.service';
+import { PrincipalService } from './principal.service';
+import { SessionsService } from './sessions.service';
+import { VerificationTokensService } from './verification-tokens.service';
 
 /**
- * Authentication module (placeholder until Phase 2).
- *
- * Already active: the global AuthGuard (secure by default; @Public() opts out) and
- * RolesGuard (@Roles(...)). Phase 2 adds here: users and credentials (Argon2id),
- * access/refresh token issuing and rotation in HTTP-only cookies, a token-verifying step
- * that sets `request.user`, CSRF protection, configurable permissions and the audit log.
+ * Identity and access. Global guards run in this order (after the rate limiter):
+ * CSRF → authentication (secure by default; @Public() opts out) → @Roles → @RequirePermissions.
  */
+@Global()
 @Module({
+  imports: [AuditModule, NotificationsModule],
+  controllers: [AuthController, MfaController],
   providers: [
-    { provide: APP_GUARD, useClass: AuthGuard },
+    AccessTokenService,
+    SessionsService,
+    PrincipalService,
+    OtpService,
+    VerificationTokensService,
+    AuthService,
+    MfaService,
+    { provide: APP_GUARD, useClass: CsrfGuard },
+    { provide: APP_GUARD, useClass: AuthenticationGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
+  exports: [SessionsService, PrincipalService, VerificationTokensService, AuthService, MfaService],
 })
 export class AuthModule {}

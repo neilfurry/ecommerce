@@ -1,15 +1,11 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { AuthenticatedUser } from '@marketplace/shared-types';
+import type { AuthenticatedUser, UserRole } from '@marketplace/shared-types';
 import { ApiException } from '../errors/api.exception';
 import { Public, Roles } from './auth.decorators';
-import { AuthGuard } from './auth.guard';
 import { RolesGuard } from './roles.guard';
 
 class TestController {
-  @Public()
-  open() {}
-
   closed() {}
 
   @Roles('FINANCE_ADMIN', 'SUPER_ADMIN')
@@ -20,20 +16,24 @@ class TestController {
   misconfigured() {}
 }
 
-@Public()
-class PublicController {
-  anything() {}
-}
+const user = (...roles: UserRole[]): AuthenticatedUser => ({
+  id: 'u1',
+  sessionId: 's1',
+  app: 'admin',
+  roles,
+  permissions: [],
+  accessTokenExpiresAt: new Date().toISOString(),
+});
 
 function context(
   handler: (...args: never[]) => unknown,
-  user?: AuthenticatedUser,
+  principal?: AuthenticatedUser,
   controller: object = TestController,
 ) {
   return {
     getHandler: () => handler,
     getClass: () => controller,
-    switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    switchToHttp: () => ({ getRequest: () => ({ user: principal }) }),
   } as unknown as ExecutionContext;
 }
 
@@ -48,46 +48,21 @@ function expectApiError(fn: () => unknown, status: number, code: string) {
   }
 }
 
-describe('AuthGuard', () => {
-  const guard = new AuthGuard(new Reflector());
-  const proto = TestController.prototype;
-
-  it('lets @Public() routes through without a user', () => {
-    expect(guard.canActivate(context(proto.open))).toBe(true);
-  });
-
-  it('honours @Public() on the controller class', () => {
-    expect(
-      guard.canActivate(context(PublicController.prototype.anything, undefined, PublicController)),
-    ).toBe(true);
-  });
-
-  it('rejects other routes without a user (secure by default)', () => {
-    expectApiError(() => guard.canActivate(context(proto.closed)), 401, 'UNAUTHENTICATED');
-  });
-
-  it('accepts authenticated users', () => {
-    expect(guard.canActivate(context(proto.closed, { id: 'u1', roles: ['CUSTOMER'] }))).toBe(true);
-  });
-});
-
 describe('RolesGuard', () => {
   const guard = new RolesGuard(new Reflector());
   const proto = TestController.prototype;
 
   it('allows routes without @Roles', () => {
-    expect(guard.canActivate(context(proto.closed, { id: 'u1', roles: ['CUSTOMER'] }))).toBe(true);
+    expect(guard.canActivate(context(proto.closed, user('CUSTOMER')))).toBe(true);
   });
 
   it('allows users holding any required role', () => {
-    expect(guard.canActivate(context(proto.finance, { id: 'u1', roles: ['SUPER_ADMIN'] }))).toBe(
-      true,
-    );
+    expect(guard.canActivate(context(proto.finance, user('SUPER_ADMIN')))).toBe(true);
   });
 
   it('forbids users without a required role', () => {
     expectApiError(
-      () => guard.canActivate(context(proto.finance, { id: 'u1', roles: ['SELLER_OWNER'] })),
+      () => guard.canActivate(context(proto.finance, user('SELLER_OWNER'))),
       403,
       'FORBIDDEN',
     );

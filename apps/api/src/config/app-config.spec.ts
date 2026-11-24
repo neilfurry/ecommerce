@@ -8,6 +8,9 @@ const validEnv = {
   S3_SECRET_ACCESS_KEY: 'super-secret-value',
   S3_BUCKET: 'marketplace-dev',
   CORS_ORIGINS: 'http://localhost:5173,http://localhost:5174',
+  AUTH_JWT_SECRET: 'j'.repeat(32),
+  AUTH_OTP_SECRET: 'o'.repeat(32),
+  AUTH_MFA_ENCRYPTION_KEY: 'm'.repeat(32),
 };
 
 describe('AppConfig.load', () => {
@@ -59,6 +62,34 @@ describe('AppConfig.load', () => {
       signedUrlTtlSeconds: 300,
       uploadMaxBytes: 5 * 1024 * 1024,
     });
+  });
+
+  it('applies auth defaults', () => {
+    const config = AppConfig.load(validEnv, false);
+    expect(config.auth).toMatchObject({
+      accessTokenTtlSeconds: 900,
+      customerSessionDays: 30,
+      staffSessionHours: 12,
+      maxFailedSignIns: 5,
+      lockoutMinutes: 15,
+      cookieSecure: false,
+    });
+    expect(config.appUrls.storefront).toBe('http://localhost:5173');
+  });
+
+  it('rejects weak or reused auth secrets', () => {
+    expect(() => AppConfig.load({ ...validEnv, AUTH_JWT_SECRET: 'short' }, false)).toThrow(
+      /AUTH_JWT_SECRET/,
+    );
+    expect(() =>
+      AppConfig.load({ ...validEnv, AUTH_OTP_SECRET: validEnv.AUTH_JWT_SECRET }, false),
+    ).toThrow(/AUTH_OTP_SECRET/);
+  });
+
+  it('requires secure cookies in production', () => {
+    expect(() => AppConfig.load({ ...validEnv, NODE_ENV: 'production' }, false)).toThrow(
+      /COOKIE_SECURE/,
+    );
   });
 
   it('requires mandatory variables', () => {

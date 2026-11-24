@@ -39,3 +39,4 @@ backups/
 .DS_Store
 Thumbs.db
 desktop.ini
+e2e/.auth/

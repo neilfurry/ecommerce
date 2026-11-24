@@ -18,13 +18,20 @@ const healthReport = {
   ],
 };
 
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+const signedOut = () =>
+  json(
+    { error: { code: 'UNAUTHENTICATED', message: 'Sign in to continue.', statusCode: 401 } },
+    401,
+  );
+
 function renderAt(path: string, fetchImpl: typeof fetch = vi.fn()) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const queryClient = createQueryClient();
   queryClient.setDefaultOptions({ queries: { retry: false } });
   render(
     <AppProviders
-      apiClient={createApiClient({ baseUrl: '/api', fetchImpl })}
+      apiClient={createApiClient({ baseUrl: '/api', app: 'storefront', fetchImpl })}
       queryClient={queryClient}
     >
       <RouterProvider router={router} />
@@ -41,8 +48,12 @@ describe('storefront routes', () => {
   });
 
   it('renders live system status from the API', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify(healthReport)));
-    renderAt('/status', fetchImpl);
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/auth/session')
+        ? signedOut()
+        : new Response(JSON.stringify(healthReport)),
+    );
+    renderAt('/status', fetchImpl as unknown as typeof fetch);
     expect(await screen.findByText('All systems operational')).toBeInTheDocument();
     expect(fetchImpl).toHaveBeenCalledWith('/api/v1/health', expect.anything());
   });

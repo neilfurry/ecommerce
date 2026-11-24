@@ -1,6 +1,38 @@
 import { APP_NAME } from '@marketplace/config';
-import { BrandMark, cn } from '@marketplace/ui';
+import { useSession } from '@marketplace/api-client';
+import { UserMenu } from '@marketplace/auth-ui';
+import { BrandMark, Button, cn } from '@marketplace/ui';
+import { UserIcon } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router';
+
+/** Sign-in links for visitors; account link and menu for signed-in customers. */
+function AccountActions() {
+  const session = useSession();
+  if (session.isPending) return null;
+  if (session.data) {
+    return (
+      <div className="flex items-center gap-1">
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/account">
+            <UserIcon aria-hidden="true" />{' '}
+            <span className="sr-only sm:not-sr-only">My account</span>
+          </Link>
+        </Button>
+        <UserMenu />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Button asChild variant="ghost" size="sm">
+        <Link to="/sign-in">Sign in</Link>
+      </Button>
+      <Button asChild size="sm">
+        <Link to="/sign-up">Create account</Link>
+      </Button>
+    </div>
+  );
+}
 
 const NAV_LINKS = [{ to: '/', label: 'Home', end: true }];
 
@@ -15,12 +47,17 @@ export function StoreLayout() {
         Skip to content
       </a>
       <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6 lg:px-8">
-          <Link to="/" className="flex items-center gap-2 rounded-md font-semibold">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:gap-6 sm:px-6 lg:px-8">
+          <Link
+            to="/"
+            className="flex items-center gap-2 rounded-md font-semibold"
+            aria-label={`${APP_NAME} home`}
+          >
             <BrandMark />
-            <span className="text-lg">{APP_NAME}</span>
+            {/* The name is hidden on narrow phones; the logo still links home. */}
+            <span className="hidden text-lg sm:inline">{APP_NAME}</span>
           </Link>
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <nav aria-label="Main" className="hidden items-center gap-1 sm:flex">
             {NAV_LINKS.map((link) => (
               <NavLink
                 key={link.to}
@@ -37,6 +74,9 @@ export function StoreLayout() {
               </NavLink>
             ))}
           </nav>
+          <div className="ml-auto">
+            <AccountActions />
+          </div>
         </div>
       </header>
 

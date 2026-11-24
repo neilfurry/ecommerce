@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { AppProviders } from '../../app/providers';
 import { buildRoutes } from '../../app/routes';
+import { sessionFor } from '../../test/session';
 
 const now = '2026-11-24T09:00:00.000Z';
 const json = (body: unknown, status = 200) =>
@@ -52,6 +53,8 @@ const page = <T,>(items: T[]) => ({
 function fakeApi(overrides: Record<string, () => Response> = {}) {
   const deadLetters = [deadLetter];
   const routes: Record<string, () => Response> = {
+    'GET /api/v1/auth/csrf': () => json({ csrfToken: 'csrf-test' }),
+    'GET /api/v1/auth/session': () => json(sessionFor()),
     'GET /api/v1/dev/queues': () => json(queues),
     'GET /api/v1/dev/dead-letters': () => json(page(deadLetters)),
     'POST /api/v1/dev/jobs/sample': () => json({ queue: 'system', jobId: '42' }, 202),
@@ -95,6 +98,7 @@ function renderAt(path: string, fetchImpl: ReturnType<typeof fakeApi>, devTools 
     <AppProviders
       apiClient={createApiClient({
         baseUrl: '/api',
+        app: 'admin',
         fetchImpl: fetchImpl as unknown as typeof fetch,
       })}
       queryClient={queryClient}

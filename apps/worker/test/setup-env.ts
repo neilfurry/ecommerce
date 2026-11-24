@@ -8,3 +8,4 @@ process.env.SMTP_HOST = '127.0.0.1';
 process.env.SMTP_PORT = '2525';
 process.env.SMTP_USER = '';
 process.env.SMTP_PASSWORD = '';
+process.env.SMS_PROVIDER = 'mock';

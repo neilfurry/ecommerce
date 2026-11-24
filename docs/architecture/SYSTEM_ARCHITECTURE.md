@@ -47,7 +47,8 @@ Decisions and their reasons are recorded in [adr/](adr/).
 | `packages/ui`           | Design system: tokens, shadcn/ui components, layouts, form bindings, data table |
 | `packages/shared-types` | Types shared by everything: roles, API error codes, health, money               |
 | `packages/validation`   | Zod schemas: request/response contracts and env-variable helpers                |
-| `packages/api-client`   | Typed fetch client and TanStack Query hooks                                     |
+| `packages/api-client`   | Typed fetch client (app header, CSRF, token refresh) and TanStack Query hooks   |
+| `packages/auth-ui`      | Sign-in, password, invitation screens, route guards and the account menu        |
 | `packages/config`       | Non-secret constants: queue registry and retry policies, Redis keys, locale     |
 | `prisma`                | Schema, migrations, seed, generated client                                      |
 | `docker`                | Local infrastructure (Compose)                                                  |
@@ -60,12 +61,14 @@ apps/api/src
 ├── main.ts / bootstrap.ts   HTTP pipeline (shared with e2e tests)
 ├── config/                  Zod-validated env → typed AppConfig; fails fast at start-up
 ├── common/
-│   ├── auth/                @Public() @Roles() @CurrentUser(); AuthGuard, RolesGuard
+│   ├── auth/                @Public() @Roles() @RequirePermissions() @SkipCsrf() @CurrentUser(); RolesGuard;
+│   │                        sellerScope(user) for seller-isolated queries
 │   ├── errors/              ApiException + GlobalExceptionFilter (standard error envelope)
 │   ├── validation/          createZodDto, ZodGlobalValidationPipe, ZodValidationPipe
 │   └── openapi/             zodToOpenApi: Swagger schemas from the same Zod schemas
 ├── infrastructure/          Global technical modules: prisma, redis, storage, queue, throttling, logging
-└── modules/                 Domain modules: health, auth (placeholder), files, dev-tools
+└── modules/                 Domain modules: health, auth (incl. MFA), users, roles, wholesale, sellers, stores,
+                             seller-members, audit, notifications, files, dev-tools
 ```
 
 ### Request lifecycle
@@ -76,9 +79,12 @@ apps/api/src
 3. Body parsing: JSON and forms up to 1 MB. Multipart uploads go through multer, limited by
    `UPLOAD_MAX_BYTES`.
 4. Global guards, in order:
-   1. **ThrottlerGuard**: per-IP rate limit, stored in Redis.
-   2. **AuthGuard**: secure by default. Only `@Public()` routes pass without `request.user`.
-   3. **RolesGuard**: enforces `@Roles(...)`.
+   1. **ThrottlerGuard**: per-IP rate limit, stored in Redis (stricter on credential routes).
+   2. **CsrfGuard**: state-changing requests must echo the CSRF cookie in `X-CSRF-Token`.
+   3. **AuthenticationGuard**: resolves `request.user` from the access-token cookie of the app
+      named in `X-Client-App`. Secure by default: only `@Public()` routes pass without a user.
+   4. **RolesGuard**: enforces `@Roles(...)`.
+   5. **PermissionsGuard**: enforces `@RequirePermissions(...)`.
 5. **ZodGlobalValidationPipe** validates every `@Body()`, `@Query()` and `@Param()` typed with a
    `createZodDto(schema)` class, using the schema shared with the frontends.
 6. The controller calls a service, and services own the business rules. Multi-row writes use
@@ -86,13 +92,32 @@ apps/api/src
 7. Any error becomes `{ error: { code, message, statusCode, requestId, fieldErrors? } }`. Unknown
    errors become a generic 500; details go only to logs.
 
-### Authentication and authorization (foundation)
+### Authentication and authorization
 
-`AuthModule` registers the global `AuthGuard` and `RolesGuard` now, so every route requires
-authentication unless explicitly marked `@Public()`. Phase 2 adds the part that verifies access
-tokens and sets `request.user` (`AuthenticatedUser`: id, roles, optional sellerId), plus refresh-token
-rotation in HTTP-only cookies, CSRF protection, configurable permissions and the audit log.
-Seller-scoped services will always filter by `user.sellerId`.
+Decisions: ADR 0010 (sessions), ADR 0011 (roles and permissions), ADR 0012 (SMS codes),
+ADR 0013 (sellers and isolation), ADR 0014 (two-step verification).
+
+- **Who signs in where.** Customers sign up themselves in the storefront (mobile number
+  confirmed by SMS; email confirmed by link) and sign in with mobile + SMS code or email +
+  password. Wholesale customers shop at retail prices until an admin approves their business.
+  Sellers register their business in the Seller Center and become its owner; owners and
+  managers invite their own employees. Platform staff are created by an administrator and
+  activated by an emailed invitation. Platform staff use the Admin Console; seller staff use
+  the Seller Center. Any account can turn on two-step verification (authenticator app).
+- **Sessions** live in HttpOnly cookies, one pair per app; access tokens last 15 minutes and
+  refresh tokens rotate with reuse detection. Roles and permissions are resolved per request
+  (cached 60 s in Redis and invalidated on change), so suspensions and permission changes apply
+  immediately.
+- **Authorization**: `@RequirePermissions(...)` for operations, `@Roles(...)` for audiences.
+  Permissions are scoped `platform` or `seller`, and roles only contribute permissions of their
+  own scope. `SUPER_ADMIN` and `SELLER_OWNER` always hold every permission of their scope.
+- **Seller isolation**: a seller role counts only with an active membership of a seller. In the
+  Seller Center the principal carries `seller.id`, and every seller-side query filters by it
+  through `sellerScope(user)`; another seller's records answer 404.
+- **Audit**: `AuditService.record()` writes to the append-only `audit_logs` table, inside the
+  same transaction as the change it describes.
+- **Notifications**: the API enqueues email and SMS jobs after committing; the worker renders
+  templates and sends through SMTP and the `SmsProvider` port (mock or Semaphore).
 
 ## Background jobs
 
@@ -139,6 +164,9 @@ Seller-scoped services will always filter by `user.sellerId`.
   - Deletes are soft for metadata (`status = DELETED`, `deleted_at`) and hard for the object.
 - Downloads use short-lived signed URLs (`STORAGE_SIGNED_URL_TTL_SECONDS`), or stream through
   the API with `Content-Disposition: attachment`.
+- Seller verification documents (`SELLER_DOCUMENT`) are only ever streamed through the API after
+  the seller-scope or `sellers.read` check (`Cache-Control: private, no-store`), never by URL.
+  Staff views are audited. Store logos and banners are the only public seller files.
 
 ## Frontend architecture
 
@@ -154,7 +182,12 @@ Seller-scoped services will always filter by `user.sellerId`.
     Card, Alert, Skeleton, Spinner, Progress, Toaster;
   - patterns: ConfirmDialog, DataTable (loading, empty, error, pagination), Pagination,
     Breadcrumbs, EmptyState, ErrorState, PageHeader, SidebarLayout, NotFound,
-    SystemStatusPanel.
+    SystemStatusPanel, AuthShell;
+  - since Phase 2: Checkbox, Tabs, DropdownMenu, PasswordInput.
+- **Sessions in the browser:** `useSession()` is the single source of truth. `RequireSession`
+  sends signed-out users to `/sign-in` and back afterwards; `RequirePermission` hides pages a
+  role may not open; navigation only lists permitted pages. `SessionSync` clears cached data
+  when the API reports the session ended.
 - **Layouts:** the storefront uses a header and footer shell. Both portals use `SidebarLayout`:
   a fixed sidebar on desktop, a slide-out sheet on tablet and phone, plus a skip link.
 - **Builds:** vendor code is split into long-cached chunks (`react`, `data`, `vendor`).
@@ -168,11 +201,15 @@ Seller-scoped services will always filter by `user.sellerId`.
 - Structured JSON logs (pino) from the API and worker. Request ids appear in logs, response
   headers and error bodies.
 
-## Security baseline (Phase 1)
+## Security baseline
 
 | Concern                   | Implementation                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| Secure by default         | Global AuthGuard; only `@Public()` routes are reachable without a user                             |
+| Secure by default         | Global authentication guard; only `@Public()` routes are reachable without a user                  |
+| Sessions                  | HttpOnly, SameSite=Lax cookies (Secure in production); rotating refresh tokens; CSRF double-submit |
+| Passwords                 | Argon2id; 12+ characters; lock-out after 5 failures; no account enumeration                        |
+| One-time codes            | HMAC-stored, 5-minute, 5 attempts, per-number and per-IP send limits                               |
+| Audit                     | Append-only `audit_logs` (database trigger), no secrets in metadata                                |
 | Input validation          | Zod everywhere (global pipe); request size limits                                                  |
 | Injection                 | Prisma parameterized queries; no string-built SQL                                                  |
 | Security headers          | helmet (CSP relaxed only on the Swagger path)                                                      |

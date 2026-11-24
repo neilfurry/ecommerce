@@ -33,8 +33,10 @@ export interface SidebarLayoutProps {
   appTagline?: string;
   logo: ReactNode;
   sections: SidebarNavSection[];
-  /** Rendered on the right of the top bar (user menu in later phases). */
+  /** Rendered on the right of the top bar (the account menu). */
   headerActions?: ReactNode;
+  /** Page content; defaults to the nested routes (<Outlet />). */
+  content?: ReactNode;
 }
 
 function SidebarNav({
@@ -104,6 +106,7 @@ export function SidebarLayout({
   logo,
   sections,
   headerActions,
+  content,
 }: SidebarLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -156,7 +159,7 @@ export function SidebarLayout({
           <div className="ml-auto flex items-center gap-2">{headerActions}</div>
         </header>
         <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          {content ?? <Outlet />}
         </main>
       </div>
     </div>

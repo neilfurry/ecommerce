@@ -1,15 +1,18 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   EMAIL_JOBS,
   QUEUE_DEFINITIONS,
   QUEUE_NAMES,
   type QueueName,
+  REDIS_KEYS,
   SYSTEM_JOBS,
 } from '@marketplace/config';
 import type { PaginatedResponse } from '@marketplace/shared-types';
 import {
   type DeadLetterEntry,
   deadLetterDataSchema,
+  devSmsMessageSchema,
+  type DevSmsOutbox,
   type DevSampleJobData,
   type DevTestEmailRequest,
   type EnqueuedJobResponse,
@@ -19,8 +22,10 @@ import {
   type QueueStatsResponse,
 } from '@marketplace/validation';
 import type { Job } from 'bullmq';
+import type { Redis } from 'ioredis';
 import { ApiException } from '../../common/errors/api.exception';
 import { QueueRegistry } from '../../infrastructure/queue/queue.module';
+import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 
 function toJobState(state: string): JobState {
   return (JOB_STATES as readonly string[]).includes(state) ? (state as JobState) : 'unknown';
@@ -32,7 +37,24 @@ const iso = (epochMs: number | undefined | null) =>
 /** Development-only job operations: enqueue test jobs, inspect queues and dead letters. */
 @Injectable()
 export class DevJobsService {
-  constructor(private readonly queues: QueueRegistry) {}
+  constructor(
+    private readonly queues: QueueRegistry,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
+
+  /** Messages the worker's mock SMS provider captured (the list is capped by the worker). */
+  async smsOutbox(): Promise<DevSmsOutbox> {
+    const raw = await this.redis.lrange(REDIS_KEYS.DEV_SMS_OUTBOX, 0, 49);
+    const messages = raw.flatMap((entry) => {
+      try {
+        const parsed = devSmsMessageSchema.safeParse(JSON.parse(entry));
+        return parsed.success ? [parsed.data] : [];
+      } catch {
+        return [];
+      }
+    });
+    return { messages };
+  }
 
   async enqueueSample(data: DevSampleJobData): Promise<EnqueuedJobResponse> {
     const job = await this.queues.get(QUEUE_NAMES.SYSTEM).add(SYSTEM_JOBS.DEV_SAMPLE, data);

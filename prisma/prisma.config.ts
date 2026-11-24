@@ -10,7 +10,8 @@ export default defineConfig({
   schema: 'schema.prisma',
   migrations: {
     path: 'migrations',
-    seed: 'tsx seed.ts',
+    // "source" resolves workspace packages from TypeScript, so seeding works before any build.
+    seed: 'tsx --conditions=source seed.ts',
   },
   datasource: {
     url: env('DATABASE_URL'),

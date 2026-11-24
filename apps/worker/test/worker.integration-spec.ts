@@ -3,6 +3,7 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
   EMAIL_JOBS,
+  NOTIFICATION_JOBS,
   QUEUE_NAMES,
   REDIS_KEYS,
   SYSTEM_JOBS,
@@ -47,6 +48,7 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
   let systemQueue: Queue;
   let emailQueue: Queue;
   let reportsQueue: Queue;
+  let notificationsQueue: Queue;
   let deadLetterQueue: Queue;
   const received: { to: string[]; raw: string }[] = [];
   const smtp = new SMTPServer({
@@ -70,6 +72,7 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
     systemQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.SYSTEM));
     emailQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.EMAIL));
     reportsQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.REPORTS));
+    notificationsQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.NOTIFICATIONS));
     deadLetterQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.DEAD_LETTER));
     await redis.del(REDIS_KEYS.WORKER_HEARTBEAT);
     await app.init();
@@ -172,5 +175,44 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
       5_000,
     );
     expect(message.raw).toContain(`job ${job.id}`);
+  });
+
+  it('sends the email-verification email with its link', async () => {
+    const link = 'http://localhost:5173/verify-email?token=integration-token-1234567890abcdef';
+    const job = await emailQueue.add(EMAIL_JOBS.VERIFY_ADDRESS, {
+      to: 'new.customer@example.ph',
+      firstName: 'Juan',
+      link,
+    });
+    expect(await waitForState(job, ['completed', 'failed'])).toBe('completed');
+    const message = await waitFor(
+      async () => received.find((m) => m.to.includes('new.customer@example.ph')),
+      5_000,
+    );
+    expect(message.raw).toContain('Confirm your email address');
+    // Quoted-printable may wrap long lines; compare without soft line breaks.
+    expect(message.raw.replace(/=\r?\n/g, '')).toContain('integration-token-1234567890abcdef');
+  });
+
+  it('texts a one-time code through the mock SMS provider into the development outbox', async () => {
+    const mobile = '+639170009999';
+    const job = await notificationsQueue.add(
+      NOTIFICATION_JOBS.SMS_OTP,
+      { to: mobile, code: '482913', expiresInMinutes: 5 },
+      { removeOnComplete: false },
+    );
+    expect(await waitForState(job, ['completed', 'failed'])).toBe('completed');
+    const entry = await waitFor(async () => {
+      const raw = await redis.lrange(REDIS_KEYS.DEV_SMS_OUTBOX, 0, 9);
+      return raw
+        .map((r) => JSON.parse(r) as { to: string; body: string })
+        .find((m) => m.to === mobile);
+    }, 5_000);
+    expect(entry.body).toMatch(/^482913 is your Marketplace code/);
+    // The code is not kept in the job result.
+    expect(JSON.stringify((await notificationsQueue.getJob(job.id!))?.returnvalue)).not.toContain(
+      '482913',
+    );
+    await job.remove();
   });
 });

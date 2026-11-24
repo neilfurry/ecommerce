@@ -16,7 +16,7 @@ const healthy = {
 
 function wrapperWith(fetchImpl: typeof fetch) {
   const queryClient = createQueryClient();
-  const client = createApiClient({ baseUrl: '/api', fetchImpl });
+  const client = createApiClient({ baseUrl: '/api', app: 'admin', fetchImpl });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <ApiClientProvider client={client}>{children}</ApiClientProvider>

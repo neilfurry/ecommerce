@@ -67,6 +67,12 @@ enum FileStatus {
 enum FilePurpose {
   /// Uploaded from the development tools page; never available in production.
   DEV_TEST
+  /// Seller verification documents. Private: served only to the seller and to staff with
+  /// sellers.read, through the API (never a public or pre-signed URL).
+  SELLER_DOCUMENT
+  /// Store logo and banner images. Public.
+  STORE_LOGO
+  STORE_BANNER
 
   @@map("file_purpose")
 }
@@ -89,7 +95,616 @@ model StoredFile {
   updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
+  sellerDocument SellerDocument?
+  storeLogo      Store?          @relation("StoreLogo")
+  storeBanner    Store?          @relation("StoreBanner")
+
   @@unique([bucket, objectKey])
   @@index([purpose, status, createdAt])
   @@map("stored_files")
+}
+
+// -----------------------------------------------------------------------------
+// Identity and access (Phase 2)
+// -----------------------------------------------------------------------------
+
+enum UserStatus {
+  /// Can sign in.
+  ACTIVE
+  /// Staff account created by an admin; becomes ACTIVE when the invitation is accepted.
+  INVITED
+  /// Blocked by an admin; all sessions revoked.
+  SUSPENDED
+
+  @@map("user_status")
+}
+
+/// Every person who signs in: customers, seller staff and platform staff.
+model User {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  /// Stored lower-cased; unique across all users.
+  email             String     @unique @db.VarChar(254)
+  emailVerifiedAt   DateTime?  @map("email_verified_at") @db.Timestamptz(3)
+  /// E.164, e.g. +639171234567. Required for customers (SMS sign-in), optional for staff.
+  mobile            String?    @unique @db.VarChar(16)
+  mobileVerifiedAt  DateTime?  @map("mobile_verified_at") @db.Timestamptz(3)
+  /// Argon2id hash. Null until an invited staff member sets a password.
+  passwordHash      String?    @map("password_hash") @db.VarChar(255)
+  passwordChangedAt DateTime?  @map("password_changed_at") @db.Timestamptz(3)
+  firstName         String     @map("first_name") @db.VarChar(80)
+  lastName          String     @map("last_name") @db.VarChar(80)
+  status            UserStatus @default(ACTIVE)
+  failedSignInCount Int        @default(0) @map("failed_sign_in_count")
+  lockedUntil       DateTime?  @map("locked_until") @db.Timestamptz(3)
+  lastSignInAt      DateTime?  @map("last_sign_in_at") @db.Timestamptz(3)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles                UserRoleAssignment[]
+  sessions             Session[]
+  otpChallenges        OtpChallenge[]
+  verificationTokens   VerificationToken[]
+  wholesaleApplication WholesaleApplication?  @relation("WholesaleApplicant")
+  reviewedApplications WholesaleApplication[] @relation("WholesaleReviewer")
+  auditLogs            AuditLog[]
+  ownedSeller          Seller?                @relation("SellerOwner")
+  reviewedSellers      Seller[]               @relation("SellerReviewer")
+  sellerMembership     SellerMember?          @relation("SellerMemberUser")
+  invitedSellerMembers SellerMember[]         @relation("SellerMemberInviter")
+  sellerInvitations    SellerInvitation[]     @relation("SellerInvitationInviter")
+  uploadedSellerDocs   SellerDocument[]
+  sellerEvents         SellerEvent[]
+  mfa                  UserMfa?
+  mfaRecoveryCodes     MfaRecoveryCode[]
+
+  @@index([status, createdAt])
+  @@map("users")
+}
+
+/// The 14 platform roles (codes match USER_ROLES in @marketplace/shared-types).
+model Role {
+  code        String   @id @db.VarChar(40)
+  name        String   @db.VarChar(80)
+  description String   @db.VarChar(255)
+  /// Locked roles (SUPER_ADMIN) always hold every permission and cannot be edited.
+  isLocked    Boolean  @default(false) @map("is_locked")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  permissions RolePermission[]
+  users       UserRoleAssignment[]
+
+  @@map("roles")
+}
+
+/// Permission codes checked in code (PERMISSION_CATALOG in @marketplace/shared-types).
+model Permission {
+  code        String   @id @db.VarChar(80)
+  /// "platform" or "seller": a role holds only permissions of its own scope.
+  scope       String   @default("platform") @db.VarChar(20)
+  description String   @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles         RolePermission[]
+  sellerMembers SellerMemberPermission[]
+
+  @@map("permissions")
+}
+
+/// Which permissions each role holds. Editable by SUPER_ADMIN in the Admin Console.
+model RolePermission {
+  roleCode       String   @map("role_code") @db.VarChar(40)
+  permissionCode String   @map("permission_code") @db.VarChar(80)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  role       Role       @relation(fields: [roleCode], references: [code], onDelete: Cascade, onUpdate: Cascade)
+  permission Permission @relation(fields: [permissionCode], references: [code], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([roleCode, permissionCode])
+  @@index([permissionCode])
+  @@map("role_permissions")
+}
+
+/// Roles held by a user.
+model UserRoleAssignment {
+  userId    String   @map("user_id") @db.Uuid
+  roleCode  String   @map("role_code") @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  role Role @relation(fields: [roleCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([userId, roleCode])
+  @@index([roleCode])
+  @@map("user_roles")
+}
+
+/// The frontend a session belongs to; each app has its own cookies and allowed roles.
+enum ClientApp {
+  STOREFRONT
+  SELLER
+  ADMIN
+
+  @@map("client_app")
+}
+
+enum SessionRevokeReason {
+  SIGNED_OUT
+  /// Replaced by a newer refresh token (normal rotation).
+  ROTATED
+  /// A rotated refresh token was used again: the whole family is revoked.
+  REUSE_DETECTED
+  PASSWORD_CHANGED
+  ADMIN_REVOKED
+  USER_SUSPENDED
+  /// Seller staff suspended or removed by their seller.
+  SELLER_MEMBERSHIP_ENDED
+
+  @@map("session_revoke_reason")
+}
+
+/// One row per refresh token. Rotation creates a new row in the same family and revokes
+/// the previous one; presenting a revoked token revokes the whole family.
+model Session {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  userId           String               @map("user_id") @db.Uuid
+  /// Shared by every rotation of one sign-in.
+  familyId         String               @map("family_id") @db.Uuid
+  app              ClientApp
+  /// SHA-256 of the refresh token; the token itself is never stored.
+  refreshTokenHash String               @unique @map("refresh_token_hash") @db.Char(64)
+  expiresAt        DateTime             @map("expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime?            @map("revoked_at") @db.Timestamptz(3)
+  revokedReason    SessionRevokeReason? @map("revoked_reason")
+  replacedById     String?              @unique @map("replaced_by_id") @db.Uuid
+  ipAddress        String?              @map("ip_address") @db.VarChar(45)
+  userAgent        String?              @map("user_agent") @db.VarChar(512)
+  lastUsedAt       DateTime             @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  replacedBy Session? @relation("SessionRotation", fields: [replacedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  replaces   Session? @relation("SessionRotation")
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@map("sessions")
+}
+
+enum OtpPurpose {
+  SIGN_UP
+  SIGN_IN
+
+  @@map("otp_purpose")
+}
+
+/// A one-time SMS code. Only an HMAC of the code is stored.
+model OtpChallenge {
+  id         String     @id @default(uuid(7)) @db.Uuid
+  purpose    OtpPurpose
+  /// E.164 destination.
+  mobile     String     @db.VarChar(16)
+  /// Known account (sign-in). Null for sign-up, and for sign-in to an unknown number.
+  userId     String?    @map("user_id") @db.Uuid
+  codeHash   String     @map("code_hash") @db.Char(64)
+  /// Pending sign-up details (names, email, password hash). Cleared when consumed.
+  payload    Json?
+  attempts   Int        @default(0)
+  sendCount  Int        @default(1) @map("send_count")
+  expiresAt  DateTime   @map("expires_at") @db.Timestamptz(3)
+  lastSentAt DateTime   @default(now()) @map("last_sent_at") @db.Timestamptz(3)
+  consumedAt DateTime?  @map("consumed_at") @db.Timestamptz(3)
+  ipAddress  String?    @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([mobile, createdAt])
+  @@index([userId])
+  @@map("otp_challenges")
+}
+
+enum VerificationTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  INVITATION
+
+  @@map("verification_token_purpose")
+}
+
+/// Single-use links sent by email. Only a SHA-256 of the token is stored.
+model VerificationToken {
+  id         String                   @id @default(uuid(7)) @db.Uuid
+  userId     String                   @map("user_id") @db.Uuid
+  purpose    VerificationTokenPurpose
+  tokenHash  String                   @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime                 @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime?                @map("consumed_at") @db.Timestamptz(3)
+  createdAt  DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, purpose])
+  @@map("verification_tokens")
+}
+
+enum WholesaleApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("wholesale_application_status")
+}
+
+/// A customer's request for wholesale pricing. Approval grants the WHOLESALE_CUSTOMER role.
+/// One per customer; a rejected application can be resubmitted (back to PENDING).
+model WholesaleApplication {
+  id              String                     @id @default(uuid(7)) @db.Uuid
+  userId          String                     @unique @map("user_id") @db.Uuid
+  businessName    String                     @map("business_name") @db.VarChar(160)
+  /// Philippine TIN, digits only (9 + optional 3–5 branch digits).
+  tin             String                     @db.VarChar(14)
+  businessAddress String                     @map("business_address") @db.VarChar(500)
+  status          WholesaleApplicationStatus @default(PENDING)
+  reviewedById    String?                    @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime?                  @map("reviewed_at") @db.Timestamptz(3)
+  reviewNote      String?                    @map("review_note") @db.VarChar(500)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User  @relation("WholesaleApplicant", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  reviewedBy User? @relation("WholesaleReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([status, createdAt])
+  @@index([reviewedById])
+  @@map("wholesale_applications")
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+
+  @@map("audit_outcome")
+}
+
+/// Append-only record of security-relevant and administrative actions. A database trigger
+/// rejects UPDATE and DELETE, so entries cannot be altered after the fact (no updated_at).
+model AuditLog {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  /// Dotted action name, e.g. "auth.sign_in", "user.suspended".
+  action     String       @db.VarChar(100)
+  outcome    AuditOutcome
+  actorId    String?      @map("actor_id") @db.Uuid
+  entityType String?      @map("entity_type") @db.VarChar(60)
+  entityId   String?      @map("entity_id") @db.VarChar(100)
+  ipAddress  String?      @map("ip_address") @db.VarChar(45)
+  userAgent  String?      @map("user_agent") @db.VarChar(512)
+  requestId  String?      @map("request_id") @db.VarChar(128)
+  /// Extra context. Never contains passwords, codes or tokens.
+  metadata   Json         @default("{}")
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// Two-step verification (Phase 2, optional per account)
+// -----------------------------------------------------------------------------
+
+/// Authenticator-app (TOTP, RFC 6238) enrolment. A row with enabled_at null is an
+/// unfinished set-up. The secret is encrypted with AES-256-GCM (AUTH_MFA_ENCRYPTION_KEY).
+model UserMfa {
+  userId              String    @id @map("user_id") @db.Uuid
+  totpSecretEncrypted String    @map("totp_secret_encrypted") @db.VarChar(255)
+  enabledAt           DateTime? @map("enabled_at") @db.Timestamptz(3)
+  /// Last accepted 30-second time step; a code is never accepted twice.
+  lastUsedStep        BigInt?   @map("last_used_step")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("user_mfa")
+}
+
+/// Single-use codes for when the authenticator is lost. Only SHA-256 hashes are stored.
+model MfaRecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash") @db.Char(64)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([userId, codeHash])
+  @@map("mfa_recovery_codes")
+}
+
+// -----------------------------------------------------------------------------
+// Sellers, verification, staff and stores (Phase 2)
+// -----------------------------------------------------------------------------
+
+enum SellerStatus {
+  /// Registered; completing the profile and documents (or asked for more information).
+  PENDING
+  /// Submitted; waiting for an admin decision.
+  UNDER_REVIEW
+  /// Approved: may create stores and sell.
+  VERIFIED
+  /// Not approved; the seller may correct the details and submit again.
+  REJECTED
+  /// Blocked by an admin; stores are hidden and changes are refused.
+  SUSPENDED
+  /// Permanently closed.
+  CLOSED
+
+  @@map("seller_status")
+}
+
+enum BusinessType {
+  SOLE_PROPRIETORSHIP
+  PARTNERSHIP
+  CORPORATION
+  ONE_PERSON_CORPORATION
+  COOPERATIVE
+
+  @@map("business_type")
+}
+
+/// A business that sells on the marketplace. Owned by one user (SELLER_OWNER).
+model Seller {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  status             SellerStatus @default(PENDING)
+  businessName       String       @map("business_name") @db.VarChar(160)
+  businessType       BusinessType @map("business_type")
+  ownerId            String       @unique @map("owner_id") @db.Uuid
+  /// Business contact details (the owner's sign-in email can differ).
+  email              String       @db.VarChar(254)
+  /// E.164.
+  mobile             String       @db.VarChar(16)
+  addressLine1       String?      @map("address_line1") @db.VarChar(160)
+  addressLine2       String?      @map("address_line2") @db.VarChar(160)
+  barangay           String?      @db.VarChar(100)
+  city               String?      @db.VarChar(100)
+  province           String?      @db.VarChar(100)
+  /// Philippine postal code, 4 digits.
+  postalCode         String?      @map("postal_code") @db.VarChar(4)
+  /// DTI, SEC or CDA registration number, depending on the business type.
+  registrationNumber String?      @map("registration_number") @db.VarChar(40)
+  /// BIR TIN, digits only (9 + optional 3–5 branch digits).
+  tin                String?      @db.VarChar(14)
+  vatRegistered      Boolean      @default(false) @map("vat_registered")
+  /// The latest message for the seller: rejection reason, information requested or suspension reason.
+  statusNote         String?      @map("status_note") @db.VarChar(1000)
+  submittedAt        DateTime?    @map("submitted_at") @db.Timestamptz(3)
+  reviewedAt         DateTime?    @map("reviewed_at") @db.Timestamptz(3)
+  reviewedById       String?      @map("reviewed_by_id") @db.Uuid
+  verifiedAt         DateTime?    @map("verified_at") @db.Timestamptz(3)
+  suspendedAt        DateTime?    @map("suspended_at") @db.Timestamptz(3)
+  closedAt           DateTime?    @map("closed_at") @db.Timestamptz(3)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner       User               @relation("SellerOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reviewedBy  User?              @relation("SellerReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  documents   SellerDocument[]
+  events      SellerEvent[]
+  members     SellerMember[]
+  invitations SellerInvitation[]
+  stores      Store[]
+
+  @@index([status, submittedAt])
+  @@index([reviewedById])
+  @@map("sellers")
+}
+
+enum SellerDocumentType {
+  BUSINESS_REGISTRATION
+  BIR_REGISTRATION
+  MAYORS_PERMIT
+  OWNER_ID
+  OTHER
+
+  @@map("seller_document_type")
+}
+
+/// A verification document. The file itself is private (stored_files purpose SELLER_DOCUMENT).
+model SellerDocument {
+  id           String             @id @default(uuid(7)) @db.Uuid
+  sellerId     String             @map("seller_id") @db.Uuid
+  type         SellerDocumentType
+  fileId       String             @unique @map("file_id") @db.Uuid
+  description  String?            @db.VarChar(200)
+  uploadedById String             @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller     Seller     @relation(fields: [sellerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  file       StoredFile @relation(fields: [fileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  uploadedBy User       @relation(fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([sellerId, createdAt])
+  @@index([uploadedById])
+  @@map("seller_documents")
+}
+
+enum SellerEventType {
+  REGISTERED
+  SUBMITTED
+  INFO_REQUESTED
+  APPROVED
+  REJECTED
+  SUSPENDED
+  REINSTATED
+  CLOSED
+
+  @@map("seller_event_type")
+}
+
+/// Verification and status history shown to the seller and to admins.
+model SellerEvent {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  sellerId   String          @map("seller_id") @db.Uuid
+  type       SellerEventType
+  fromStatus SellerStatus?   @map("from_status")
+  toStatus   SellerStatus    @map("to_status")
+  note       String?         @db.VarChar(1000)
+  actorId    String?         @map("actor_id") @db.Uuid
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([sellerId, createdAt])
+  @@index([actorId])
+  @@map("seller_events")
+}
+
+enum SellerMemberStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("seller_member_status")
+}
+
+/// A person working for a seller (the owner included). A user belongs to at most one
+/// seller. Seller roles are in user_roles; extra seller permissions are in
+/// seller_member_permissions. Removing an employee deletes the row (the audit log keeps it).
+model SellerMember {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  sellerId    String             @map("seller_id") @db.Uuid
+  userId      String             @unique @map("user_id") @db.Uuid
+  status      SellerMemberStatus @default(ACTIVE)
+  invitedById String?            @map("invited_by_id") @db.Uuid
+  joinedAt    DateTime           @default(now()) @map("joined_at") @db.Timestamptz(3)
+  suspendedAt DateTime?          @map("suspended_at") @db.Timestamptz(3)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller      Seller                   @relation(fields: [sellerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user        User                     @relation("SellerMemberUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  invitedBy   User?                    @relation("SellerMemberInviter", fields: [invitedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  permissions SellerMemberPermission[]
+
+  @@index([sellerId, status])
+  @@index([invitedById])
+  @@map("seller_members")
+}
+
+/// Seller permissions granted to one employee on top of their roles.
+model SellerMemberPermission {
+  memberId       String   @map("member_id") @db.Uuid
+  permissionCode String   @map("permission_code") @db.VarChar(80)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  member     SellerMember @relation(fields: [memberId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission Permission   @relation(fields: [permissionCode], references: [code], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([memberId, permissionCode])
+  @@index([permissionCode])
+  @@map("seller_member_permissions")
+}
+
+/// An emailed invitation to join a seller as an employee. Only a SHA-256 of the token is
+/// stored. Issuing a new invitation to the same email revokes the open one.
+model SellerInvitation {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  sellerId    String    @map("seller_id") @db.Uuid
+  /// Lower-cased.
+  email       String    @db.VarChar(254)
+  roles       String[]  @db.VarChar(40)
+  permissions String[]  @db.VarChar(80)
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  invitedById String    @map("invited_by_id") @db.Uuid
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller    Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  invitedBy User   @relation("SellerInvitationInviter", fields: [invitedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([sellerId, email])
+  @@index([invitedById])
+  @@map("seller_invitations")
+}
+
+enum StoreStatus {
+  /// Visible to shoppers.
+  ACTIVE
+  /// Hidden by the seller.
+  INACTIVE
+  /// Hidden by an admin; the seller cannot reopen it.
+  SUSPENDED
+
+  @@map("store_status")
+}
+
+/// A seller's storefront. Shown to shoppers only when ACTIVE and the seller is VERIFIED.
+model Store {
+  id           String      @id @default(uuid(7)) @db.Uuid
+  sellerId     String      @map("seller_id") @db.Uuid
+  name         String      @db.VarChar(120)
+  /// URL name, unique across the marketplace: lowercase letters, digits and hyphens.
+  slug         String      @unique @db.VarChar(60)
+  description  String?     @db.VarChar(2000)
+  logoFileId   String?     @unique @map("logo_file_id") @db.Uuid
+  bannerFileId String?     @unique @map("banner_file_id") @db.Uuid
+  email        String?     @db.VarChar(254)
+  /// E.164.
+  phone        String?     @db.VarChar(16)
+  addressLine1 String?     @map("address_line1") @db.VarChar(160)
+  addressLine2 String?     @map("address_line2") @db.VarChar(160)
+  barangay     String?     @db.VarChar(100)
+  city         String?     @db.VarChar(100)
+  province     String?     @db.VarChar(100)
+  postalCode   String?     @map("postal_code") @db.VarChar(4)
+  /// { facebook, instagram, tiktok, youtube, website } as https URLs.
+  socialLinks  Json        @default("{}") @map("social_links")
+  status       StoreStatus @default(ACTIVE)
+  statusNote   String?     @map("status_note") @db.VarChar(1000)
+  /// Reserved for custom domains (a later phase); unique when set.
+  customDomain String?     @unique @map("custom_domain") @db.VarChar(253)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller     Seller         @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  logoFile   StoredFile?    @relation("StoreLogo", fields: [logoFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  bannerFile StoredFile?    @relation("StoreBanner", fields: [bannerFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  settings   StoreSettings?
+
+  @@index([sellerId, createdAt])
+  @@index([status])
+  @@map("stores")
+}
+
+/// Store settings and branding (prepared for custom themes and domains).
+model StoreSettings {
+  storeId         String   @id @map("store_id") @db.Uuid
+  /// #rrggbb.
+  primaryColor    String   @default("#1d4ed8") @map("primary_color") @db.Char(7)
+  accentColor     String?  @map("accent_color") @db.Char(7)
+  announcement    String?  @db.VarChar(280)
+  shippingPolicy  String?  @map("shipping_policy") @db.VarChar(5000)
+  returnPolicy    String?  @map("return_policy") @db.VarChar(5000)
+  /// Shown to shoppers while the seller is away (orders are paused in later phases).
+  vacationMode    Boolean  @default(false) @map("vacation_mode")
+  vacationMessage String?  @map("vacation_message") @db.VarChar(280)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("store_settings")
 }

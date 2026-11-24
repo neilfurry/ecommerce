@@ -4,7 +4,8 @@
 
 .DESCRIPTION
     1. Checks Node.js, pnpm and Docker Desktop.
-    2. Creates .env from .env.example if it does not exist.
+    2. Creates .env from .env.example if it does not exist, or adds settings that newer
+       versions introduced (existing values are never changed).
     3. Installs dependencies with pnpm.
     4. Starts PostgreSQL, Redis, MinIO and Mailpit with docker compose.
     5. Applies database migrations and seeds reference data.
@@ -52,7 +53,23 @@ Write-Ok 'Docker Desktop is running'
 
 Write-Step 'Preparing environment file'
 if (Test-Path '.env') {
-    Write-Ok '.env already exists (left unchanged)'
+    # Later phases add settings; copy only the missing ones so local values are kept.
+    $existing = Read-DotEnv
+    $missing = @()
+    foreach ($line in Get-Content '.env.example') {
+        if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=' -and -not $existing.ContainsKey($Matches[1])) {
+            $missing += $line
+        }
+    }
+    if ($missing.Count -gt 0) {
+        $stamp = Get-Date -Format 'yyyy-MM-dd'
+        Add-Content -Path '.env' -Value (@('', "# Added by setup.ps1 from .env.example on $stamp") + $missing)
+        $names = ($missing | ForEach-Object { ($_ -split '=', 2)[0].Trim() }) -join ', '
+        Write-Ok "Added new settings to .env: $names"
+    }
+    else {
+        Write-Ok '.env already has every setting (left unchanged)'
+    }
 }
 else {
     Copy-Item '.env.example' '.env'

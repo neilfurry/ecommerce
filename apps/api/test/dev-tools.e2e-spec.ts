@@ -4,6 +4,7 @@ import { DEAD_LETTER_JOBS, QUEUE_NAMES, SYSTEM_JOBS } from '@marketplace/config'
 import {
   apiErrorBodySchema,
   deadLetterListResponseSchema,
+  devSmsOutboxSchema,
   enqueuedJobResponseSchema,
   jobStatusResponseSchema,
   queueStatsResponseSchema,
@@ -12,8 +13,8 @@ import {
   storedFileSchema,
 } from '@marketplace/validation';
 import type { Queue } from 'bullmq';
-import request from 'supertest';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
+import { signedInClient, TestClient } from './auth-helpers';
 import { createTestApp } from './test-app';
 
 const PNG = Buffer.concat([
@@ -28,13 +29,13 @@ const PNG = Buffer.concat([
  */
 describe('Developer tools (e2e)', () => {
   let app: NestExpressApplication;
-  let http: ReturnType<NestExpressApplication['getHttpServer']>;
+  let admin: TestClient;
   let systemQueue: Queue;
   let deadLetterQueue: Queue;
 
   beforeAll(async () => {
     app = await createTestApp();
-    http = app.getHttpServer();
+    admin = (await signedInClient(app, 'admin', ['SUPER_ADMIN'], 'devtools')).client;
     systemQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.SYSTEM));
     deadLetterQueue = app.get<Queue>(getQueueToken(QUEUE_NAMES.DEAD_LETTER));
   });
@@ -43,16 +44,47 @@ describe('Developer tools (e2e)', () => {
     await app.close();
   });
 
+  describe('access', () => {
+    it('requires a signed-in user', async () => {
+      const anonymous = await new TestClient(app.getHttpServer(), 'admin').init();
+      const res = await anonymous.get('/api/v1/dev/queues').expect(401);
+      expect(apiErrorBodySchema.parse(res.body).error.code).toBe('UNAUTHENTICATED');
+    });
+
+    it('requires the dev-tools.use permission (ADMIN does not have it by default)', async () => {
+      const { client } = await signedInClient(app, 'admin', ['ADMIN'], 'devtools-admin');
+      const res = await client.get('/api/v1/dev/queues').expect(403);
+      expect(apiErrorBodySchema.parse(res.body).error.code).toBe('FORBIDDEN');
+    });
+
+    it('rejects state-changing requests without the CSRF token', async () => {
+      const res = await admin.agent
+        .post('/api/v1/dev/jobs/sample')
+        .set('X-Client-App', 'admin')
+        .set('X-Forwarded-For', admin.ip)
+        .send({ message: 'no csrf' })
+        .expect(403);
+      expect(apiErrorBodySchema.parse(res.body).error.code).toBe('CSRF_FAILED');
+    });
+  });
+
+  describe('SMS outbox', () => {
+    it('lists captured messages, newest first, skipping malformed entries', async () => {
+      const res = await admin.get('/api/v1/dev/sms-outbox').expect(200);
+      expect(devSmsOutboxSchema.parse(res.body).messages.length).toBeLessThanOrEqual(50);
+    });
+  });
+
   describe('jobs', () => {
     it('enqueues the sample job with the system queue retry policy and reports its status', async () => {
-      const res = await request(http)
+      const res = await admin
         .post('/api/v1/dev/jobs/sample')
         .send({ message: 'e2e', simulateFailures: 1, durationMs: 0 })
         .expect(202);
       const { queue, jobId } = enqueuedJobResponseSchema.parse(res.body);
       expect(queue).toBe('system');
 
-      const status = await request(http).get(`/api/v1/dev/jobs/system/${jobId}`).expect(200);
+      const status = await admin.get(`/api/v1/dev/jobs/system/${jobId}`).expect(200);
       const body = jobStatusResponseSchema.parse(status.body);
       expect(body).toMatchObject({ jobId, name: SYSTEM_JOBS.DEV_SAMPLE, maxAttempts: 3 });
       expect(['waiting', 'active', 'completed', 'delayed']).toContain(body.state);
@@ -60,7 +92,7 @@ describe('Developer tools (e2e)', () => {
     });
 
     it('validates request bodies with the shared schema (global pipe)', async () => {
-      const res = await request(http)
+      const res = await admin
         .post('/api/v1/dev/jobs/sample')
         .send({ message: '', simulateFailures: 99 })
         .expect(400);
@@ -73,7 +105,7 @@ describe('Developer tools (e2e)', () => {
     });
 
     it('enqueues a test email', async () => {
-      const res = await request(http)
+      const res = await admin
         .post('/api/v1/dev/jobs/test-email')
         .send({ to: 'dev@example.ph' })
         .expect(202);
@@ -81,12 +113,12 @@ describe('Developer tools (e2e)', () => {
     });
 
     it('rejects unknown queues and returns 404 for unknown jobs', async () => {
-      await request(http).get('/api/v1/dev/jobs/not-a-queue/1').expect(400);
-      await request(http).get('/api/v1/dev/jobs/system/999999999').expect(404);
+      await admin.get('/api/v1/dev/jobs/not-a-queue/1').expect(400);
+      await admin.get('/api/v1/dev/jobs/system/999999999').expect(404);
     });
 
     it('lists every queue with its retry policy and counts', async () => {
-      const res = await request(http).get('/api/v1/dev/queues').expect(200);
+      const res = await admin.get('/api/v1/dev/queues').expect(200);
       const { queues } = queueStatsResponseSchema.parse(res.body);
       expect(queues.map((q) => q.name).sort()).toEqual(
         [
@@ -125,14 +157,14 @@ describe('Developer tools (e2e)', () => {
       const toDiscard = await addDeadLetter('b');
 
       const list = deadLetterListResponseSchema.parse(
-        (await request(http).get('/api/v1/dev/dead-letters?pageSize=100').expect(200)).body,
+        (await admin.get('/api/v1/dev/dead-letters?pageSize=100').expect(200)).body,
       );
       expect(list.items.map((i) => i.id)).toEqual(
         expect.arrayContaining([toRetry.id, toDiscard.id]),
       );
 
       const retried = enqueuedJobResponseSchema.parse(
-        (await request(http).post(`/api/v1/dev/dead-letters/${toRetry.id}/retry`).expect(202)).body,
+        (await admin.post(`/api/v1/dev/dead-letters/${toRetry.id}/retry`).expect(202)).body,
       );
       expect(retried.queue).toBe('system');
       const requeued = await systemQueue.getJob(retried.jobId);
@@ -140,21 +172,21 @@ describe('Developer tools (e2e)', () => {
       expect(await deadLetterQueue.getJob(toRetry.id!)).toBeUndefined();
       await requeued?.remove();
 
-      await request(http).delete(`/api/v1/dev/dead-letters/${toDiscard.id}`).expect(204);
+      await admin.delete(`/api/v1/dev/dead-letters/${toDiscard.id}`).expect(204);
       expect(await deadLetterQueue.getJob(toDiscard.id!)).toBeUndefined();
-      await request(http).delete(`/api/v1/dev/dead-letters/${toDiscard.id}`).expect(404);
+      await admin.delete(`/api/v1/dev/dead-letters/${toDiscard.id}`).expect(404);
     });
 
     it('paginates', async () => {
-      const res = await request(http).get('/api/v1/dev/dead-letters?page=1&pageSize=1').expect(200);
+      const res = await admin.get('/api/v1/dev/dead-letters?page=1&pageSize=1').expect(200);
       expect(deadLetterListResponseSchema.parse(res.body).pageSize).toBe(1);
-      await request(http).get('/api/v1/dev/dead-letters?pageSize=500').expect(400);
+      await admin.get('/api/v1/dev/dead-letters?pageSize=500').expect(400);
     });
   });
 
   describe('files', () => {
     it('uploads to storage, records metadata, serves downloads and deletes', async () => {
-      const upload = await request(http)
+      const upload = await admin
         .post('/api/v1/dev/files')
         .attach('file', PNG, { filename: '../../etc/product photo.png', contentType: 'image/png' })
         .expect(201);
@@ -168,20 +200,20 @@ describe('Developer tools (e2e)', () => {
       });
 
       const list = storedFileListResponseSchema.parse(
-        (await request(http).get('/api/v1/dev/files').expect(200)).body,
+        (await admin.get('/api/v1/dev/files').expect(200)).body,
       );
       expect(list.items[0]?.id).toBe(file.id);
 
-      await request(http).get(`/api/v1/dev/files/${file.id}`).expect(200);
+      await admin.get(`/api/v1/dev/files/${file.id}`).expect(200);
 
       const signed = signedUrlResponseSchema.parse(
-        (await request(http).get(`/api/v1/dev/files/${file.id}/download-url`).expect(200)).body,
+        (await admin.get(`/api/v1/dev/files/${file.id}/download-url`).expect(200)).body,
       );
       const direct = await fetch(signed.url);
       expect(direct.status).toBe(200);
       expect(Buffer.from(await direct.arrayBuffer()).equals(PNG)).toBe(true);
 
-      const streamed = await request(http)
+      const streamed = await admin
         .get(`/api/v1/dev/files/${file.id}/content`)
         .buffer(true)
         .parse((res, done) => {
@@ -194,8 +226,8 @@ describe('Developer tools (e2e)', () => {
       expect(streamed.headers['content-disposition']).toContain('attachment');
       expect((streamed.body as Buffer).equals(PNG)).toBe(true);
 
-      await request(http).delete(`/api/v1/dev/files/${file.id}`).expect(204);
-      await request(http).get(`/api/v1/dev/files/${file.id}`).expect(404);
+      await admin.delete(`/api/v1/dev/files/${file.id}`).expect(204);
+      await admin.get(`/api/v1/dev/files/${file.id}`).expect(404);
       const row = await app.get(PrismaService).storedFile.findUnique({ where: { id: file.id } });
       expect(row).toMatchObject({ status: 'DELETED' });
       expect(row?.deletedAt).toBeInstanceOf(Date);
@@ -203,7 +235,7 @@ describe('Developer tools (e2e)', () => {
 
     it('rejects files whose content is not an allowed type, whatever their name says', async () => {
       const exe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(64, 0)]);
-      const res = await request(http)
+      const res = await admin
         .post('/api/v1/dev/files')
         .attach('file', exe, { filename: 'cat.png', contentType: 'image/png' })
         .expect(415);
@@ -212,7 +244,7 @@ describe('Developer tools (e2e)', () => {
 
     it('rejects oversized uploads with 413', async () => {
       const big = Buffer.alloc(1_100_000, 0x41);
-      const res = await request(http)
+      const res = await admin
         .post('/api/v1/dev/files')
         .attach('file', big, { filename: 'big.txt', contentType: 'text/plain' })
         .expect(413);
@@ -220,8 +252,8 @@ describe('Developer tools (e2e)', () => {
     });
 
     it('requires a file and a valid id', async () => {
-      await request(http).post('/api/v1/dev/files').expect(400);
-      await request(http).get('/api/v1/dev/files/not-a-uuid').expect(400);
+      await admin.post('/api/v1/dev/files').expect(400);
+      await admin.get('/api/v1/dev/files/not-a-uuid').expect(400);
     });
   });
 });
