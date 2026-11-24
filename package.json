@@ -24,6 +24,7 @@
     "db:migrate": "pnpm --filter @marketplace/database run migrate:dev",
     "db:deploy": "pnpm --filter @marketplace/database run migrate:deploy",
     "db:seed": "pnpm --filter @marketplace/database run seed",
+    "db:bootstrap-admin": "pnpm --filter @marketplace/database run bootstrap-admin",
     "db:reset": "pnpm --filter @marketplace/database run migrate:reset",
     "db:studio": "pnpm --filter @marketplace/database run studio",
     "db:check": "pnpm --filter @marketplace/database run migrate:check",

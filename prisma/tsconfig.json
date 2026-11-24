@@ -7,5 +7,5 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["src", "seed.ts", "prisma.config.ts"]
+  "include": ["src", "seed.ts", "bootstrap-super-admin.ts", "prisma.config.ts"]
 }

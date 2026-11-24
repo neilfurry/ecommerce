@@ -15,6 +15,8 @@ const config = AppConfig.load(
     S3_SECRET_ACCESS_KEY: 'secret-value',
     S3_BUCKET: 'bucket-name',
     APP_VERSION: '9.9.9',
+    AUTH_JWT_SECRET: 'j'.repeat(32),
+    AUTH_OTP_SECRET: 'o'.repeat(32),
   },
   false,
 );

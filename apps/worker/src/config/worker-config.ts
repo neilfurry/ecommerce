@@ -27,6 +27,9 @@ export const workerEnvSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASSWORD: z.string().optional(),
     MAIL_FROM: z.string().min(3).default('Marketplace <no-reply@marketplace.local>'),
+    SMS_PROVIDER: z.enum(['mock', 'semaphore']).default('mock'),
+    SEMAPHORE_API_KEY: z.string().optional(),
+    SEMAPHORE_SENDER_NAME: z.string().max(11).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {
@@ -34,6 +37,20 @@ export const workerEnvSchema = z
         code: 'custom',
         path: ['DEV_TOOLS_ENABLED'],
         message: 'Must be false in production',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.SMS_PROVIDER === 'mock') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMS_PROVIDER'],
+        message: 'The mock provider sends nothing; use a real provider in production',
+      });
+    }
+    if (env.SMS_PROVIDER === 'semaphore' && !env.SEMAPHORE_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SEMAPHORE_API_KEY'],
+        message: 'Required when SMS_PROVIDER=semaphore',
       });
     }
   });
@@ -56,6 +73,11 @@ export class WorkerConfig {
     password: string | undefined;
     from: string;
   };
+  readonly sms: {
+    provider: 'mock' | 'semaphore';
+    semaphoreApiKey: string | undefined;
+    semaphoreSenderName: string | undefined;
+  };
 
   constructor(env: WorkerEnv) {
     this.nodeEnv = env.NODE_ENV;
@@ -72,6 +94,11 @@ export class WorkerConfig {
       user: env.SMTP_USER || undefined,
       password: env.SMTP_PASSWORD || undefined,
       from: env.MAIL_FROM,
+    };
+    this.sms = {
+      provider: env.SMS_PROVIDER,
+      semaphoreApiKey: env.SEMAPHORE_API_KEY || undefined,
+      semaphoreSenderName: env.SEMAPHORE_SENDER_NAME || undefined,
     };
   }
 

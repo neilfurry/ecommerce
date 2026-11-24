@@ -4,6 +4,13 @@ import { WorkerConfig } from '../config/worker-config';
 import { DevSampleHandler } from '../jobs/dev-sample.handler';
 import { DevTestEmailHandler } from '../jobs/dev-test-email.handler';
 import { HeartbeatHandler } from '../jobs/heartbeat.handler';
+import { SmsOtpHandler } from '../jobs/sms-otp.handler';
+import {
+  PasswordResetEmailHandler,
+  StaffInvitationEmailHandler,
+  VerifyEmailHandler,
+  WholesaleDecisionEmailHandler,
+} from '../jobs/transactional-email.handlers';
 import { DeadLetterService } from './dead-letter.service';
 import { DomainProcessor } from './domain.processor';
 
@@ -28,15 +35,28 @@ export class SystemProcessor extends DomainProcessor {
 
 @Processor(QUEUE_NAMES.EMAIL)
 export class EmailProcessor extends DomainProcessor {
-  constructor(config: WorkerConfig, deadLetters: DeadLetterService, devTest: DevTestEmailHandler) {
-    super(QUEUE_NAMES.EMAIL, [devTest], config, deadLetters);
+  constructor(
+    config: WorkerConfig,
+    deadLetters: DeadLetterService,
+    devTest: DevTestEmailHandler,
+    verifyEmail: VerifyEmailHandler,
+    passwordReset: PasswordResetEmailHandler,
+    staffInvitation: StaffInvitationEmailHandler,
+    wholesaleDecision: WholesaleDecisionEmailHandler,
+  ) {
+    super(
+      QUEUE_NAMES.EMAIL,
+      [devTest, verifyEmail, passwordReset, staffInvitation, wholesaleDecision],
+      config,
+      deadLetters,
+    );
   }
 }
 
 @Processor(QUEUE_NAMES.NOTIFICATIONS)
 export class NotificationsProcessor extends DomainProcessor {
-  constructor(config: WorkerConfig, deadLetters: DeadLetterService) {
-    super(QUEUE_NAMES.NOTIFICATIONS, [], config, deadLetters);
+  constructor(config: WorkerConfig, deadLetters: DeadLetterService, smsOtp: SmsOtpHandler) {
+    super(QUEUE_NAMES.NOTIFICATIONS, [smsOtp], config, deadLetters);
   }
 }
 

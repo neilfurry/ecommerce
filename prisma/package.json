@@ -28,9 +28,13 @@
     "migrate:check": "prisma migrate diff --from-migrations migrations --to-schema schema.prisma --exit-code",
     "migrate:status": "prisma migrate status",
     "seed": "prisma generate && prisma db seed",
-    "studio": "prisma studio"
+    "studio": "prisma studio",
+    "bootstrap-admin": "prisma generate && tsx bootstrap-super-admin.ts"
   },
   "dependencies": {
+    "@marketplace/shared-types": "workspace:*",
+    "@marketplace/validation": "workspace:*",
+    "@node-rs/argon2": "^2.2.2",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "dotenv": "^17.0.0",

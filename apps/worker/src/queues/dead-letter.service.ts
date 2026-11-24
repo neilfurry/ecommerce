@@ -1,6 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import { DEAD_LETTER_JOBS, QUEUE_NAMES } from '@marketplace/config';
+import { DEAD_LETTER_JOBS, NOTIFICATION_JOBS, QUEUE_NAMES } from '@marketplace/config';
 import type { DeadLetterData } from '@marketplace/validation';
 import type { Job, Queue } from 'bullmq';
 
@@ -28,7 +28,7 @@ export class DeadLetterService {
       sourceQueue,
       sourceJobId: job.id,
       jobName: job.name,
-      data: job.data as unknown,
+      data: deadLetterSafeData(job.name, job.data),
       failedReason: error.message.slice(0, 1_000),
       attemptsMade: job.attemptsMade,
       failedAt: new Date().toISOString(),
@@ -46,4 +46,15 @@ export class DeadLetterService {
 /** BullMQ job ids must not contain ":"; "__" separates queue and job id instead. */
 export function deadLetterJobId(sourceQueue: string, sourceJobId: string): string {
   return `${sourceQueue}__${sourceJobId}`;
+}
+
+/**
+ * Dead letters are kept until an admin acts, so one-time codes are removed first (they
+ * expire within minutes anyway; a retried SMS job without its code fails validation).
+ */
+export function deadLetterSafeData(jobName: string, data: unknown): unknown {
+  if (jobName === NOTIFICATION_JOBS.SMS_OTP && data && typeof data === 'object') {
+    return { ...(data as Record<string, unknown>), code: '[removed]' };
+  }
+  return data;
 }

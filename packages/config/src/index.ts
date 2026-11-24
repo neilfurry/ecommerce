@@ -24,6 +24,14 @@ export const WORKER_HEARTBEAT_SCHEDULER_ID = 'system-heartbeat';
 export const REDIS_KEYS = {
   WORKER_HEARTBEAT: 'marketplace:worker:heartbeat',
   THROTTLE_PREFIX: 'marketplace:throttle:',
+  /** Marker for a revoked session, kept for the access-token lifetime. */
+  REVOKED_SESSION_PREFIX: 'marketplace:auth:revoked-session:',
+  /** Cached roles/permissions/status per user. */
+  PRINCIPAL_PREFIX: 'marketplace:auth:principal:',
+  /** Incremented whenever role permissions change; part of every principal cache key. */
+  PERMISSIONS_VERSION: 'marketplace:auth:permissions-version',
+  /** Development SMS provider: newest-first list of sent messages. */
+  DEV_SMS_OUTBOX: 'marketplace:dev:sms-outbox',
 } as const;
 
 /** The API reports the worker as down if its last heartbeat is older than this. */
