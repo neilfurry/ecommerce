@@ -1,4 +1,9 @@
-import { ApiClientProvider, createQueryClient, type ApiClient } from '@marketplace/api-client';
+import {
+  ApiClientProvider,
+  createQueryClient,
+  SessionSync,
+  type ApiClient,
+} from '@marketplace/api-client';
 import { Toaster } from '@marketplace/ui';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
@@ -18,6 +23,7 @@ export function AppProviders({
   return (
     <QueryClientProvider client={queryClient}>
       <ApiClientProvider client={apiClient}>
+        <SessionSync />
         {children}
         <Toaster />
       </ApiClientProvider>

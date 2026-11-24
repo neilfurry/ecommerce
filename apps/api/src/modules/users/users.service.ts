@@ -346,12 +346,16 @@ export class UsersService {
     }
   }
 
-  /** Staff accounts can be managed only by someone allowed to grant all of their roles. */
+  /**
+   * Platform staff accounts can be managed only by someone allowed to grant all of their
+   * platform roles (an admin cannot suspend a super admin). Customers and seller staff can
+   * be managed by anyone holding the permission for the action.
+   */
   private assertCanManage(actor: AuthenticatedUser, user: UserWithRoles): void {
-    const staffRoles = user.roles
+    const platformRoles = user.roles
       .map((r) => r.roleCode as UserRole)
-      .filter((role) => !isCustomerRole(role));
-    this.assertCanGrant(actor, staffRoles);
+      .filter((role) => (PLATFORM_STAFF_ROLES as readonly UserRole[]).includes(role));
+    this.assertCanGrant(actor, platformRoles);
   }
 
   private async assertNotLastSuperAdmin(userId: string): Promise<void> {

@@ -29,7 +29,7 @@
     "migrate:status": "prisma migrate status",
     "seed": "prisma generate && prisma db seed",
     "studio": "prisma studio",
-    "bootstrap-admin": "prisma generate && tsx bootstrap-super-admin.ts"
+    "bootstrap-admin": "prisma generate && tsx --conditions=source bootstrap-super-admin.ts"
   },
   "dependencies": {
     "@marketplace/shared-types": "workspace:*",

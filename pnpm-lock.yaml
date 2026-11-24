@@ -74,9 +74,15 @@ importers:
       '@marketplace/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@marketplace/auth-ui':
+        specifier: workspace:*
+        version: link:../../packages/auth-ui
       '@marketplace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@marketplace/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       '@marketplace/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -271,9 +277,15 @@ importers:
       '@marketplace/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@marketplace/auth-ui':
+        specifier: workspace:*
+        version: link:../../packages/auth-ui
       '@marketplace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@marketplace/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       '@marketplace/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -350,9 +362,15 @@ importers:
       '@marketplace/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@marketplace/auth-ui':
+        specifier: workspace:*
+        version: link:../../packages/auth-ui
       '@marketplace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@marketplace/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       '@marketplace/ui':
         specifier: workspace:*
         version: link:../../packages/ui

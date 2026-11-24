@@ -100,7 +100,7 @@ describe('Authentication (e2e)', () => {
       const done = await c
         .post('/api/v1/auth/customers/sign-up/verify')
         .send({ challengeId: challenge.challengeId, code })
-        .expect(200);
+        .expect(201);
       const session = sessionResponseSchema.parse(done.body);
       expect(session.app).toBe('storefront');
       expect(session.user).toMatchObject({
@@ -153,7 +153,7 @@ describe('Authentication (e2e)', () => {
           await c
             .post('/api/v1/auth/customers/sign-up/verify')
             .send({ challengeId: challenge.challengeId, code })
-            .expect(200)
+            .expect(201)
         ).body,
       );
       // Retail access immediately; wholesale only after approval.

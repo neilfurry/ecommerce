@@ -139,6 +139,7 @@ export class AuthController {
   }
 
   @Post('otp/resend')
+  @HttpCode(HttpStatus.OK)
   @Public()
   @Throttle(OTP_LIMIT)
   @ApiOperation({ summary: 'Send a new code for an existing sign-up or sign-in challenge' })
@@ -173,6 +174,7 @@ export class AuthController {
   }
 
   @Post('customers/sign-in/otp/verify')
+  @HttpCode(HttpStatus.OK)
   @Public()
   @Throttle(SIGN_IN_LIMIT)
   @ApiOperation({ summary: 'Customer sign-in, step 2: verify the SMS code' })

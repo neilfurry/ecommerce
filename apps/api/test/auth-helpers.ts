@@ -17,7 +17,8 @@ export const TEST_PASSWORD = 'Correct-horse-battery-2026';
  */
 export const randomIp = () => `10.${randomInt(256)}.${randomInt(256)}.${randomInt(1, 255)}`;
 export const randomMobile = () => `+639${randomInt(0, 1_000_000_000).toString().padStart(9, '0')}`;
-export const uniqueEmail = (label: string) => `${label}.${randomUUID().slice(0, 8)}@e2e.test`;
+export const uniqueEmail = (label: string) =>
+  `${label.toLowerCase().replace(/[^a-z0-9]+/g, '.')}.${randomUUID().slice(0, 8)}@e2e.test`;
 
 type Server = ReturnType<INestApplication['getHttpServer']>;
 
