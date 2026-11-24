@@ -230,8 +230,7 @@ New in this iteration:
 winget install --id Git.Git -e
 winget install --id OpenJS.NodeJS.LTS -e
 winget install --id Docker.DockerDesktop -e
-corepack enable
-corepack prepare pnpm@10.28.0 --activate
+npm install --global pnpm@10.28.0   # no administrator rights needed
 
 # Get the code and set up (safe to re-run)
 git clone https://github.com/neilfurry/ecommerce.git

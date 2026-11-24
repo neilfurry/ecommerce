@@ -25,12 +25,15 @@ Restart Windows, then start **Docker Desktop**. Under **Settings → General**, 
 based engine** ticked. Under **Settings → Resources**, give Docker at least 4 GB of memory. Wait
 until the status bar shows **Engine running**.
 
-Close and reopen PowerShell so the new programs are on `PATH`, then enable pnpm:
+Close and reopen PowerShell so the new programs are on `PATH`, then install pnpm (no administrator
+rights needed; `setup.ps1` also does this if pnpm is missing):
 
 ```powershell
-corepack enable
-corepack prepare pnpm@10.28.0 --activate
+npm install --global pnpm@10.28.0
 ```
+
+> Avoid `corepack enable` in a normal PowerShell: it writes into `C:\Program Files\nodejs` and fails
+> with `EPERM: operation not permitted` unless PowerShell runs as Administrator.
 
 Check the versions:
 

@@ -14,7 +14,12 @@ Use `powershell -ExecutionPolicy Bypass -File .\scripts\<script>.ps1`, or run on
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 **`'pnpm' is not recognized`**
-Run `corepack enable` (an Administrator PowerShell may be required), then reopen PowerShell.
+Run `npm install --global pnpm@10.28.0`, then close and reopen PowerShell and check `pnpm --version`.
+
+**`EPERM: operation not permitted, open 'C:\Program Files\nodejs\pnpm'`**
+`corepack enable` needs administrator rights because it writes into the Node.js install folder.
+Install pnpm with npm instead (above), which uses your user folder (`%APPDATA%\npm`). The current
+`setup.ps1` does this automatically.
 
 **Node version errors / `ERR_REQUIRE_ESM` / `require() of ES Module`**
 NestJS 12 is ESM-only and is loaded through Node's `require(esm)`, which needs Node 22.12+.

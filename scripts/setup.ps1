@@ -34,9 +34,16 @@ if ($nodeMajor -lt 22 -or ($nodeMajor -eq 22 -and $nodeMinor -lt 22)) {
 Write-Ok "Node.js $nodeVersion"
 
 if (-not (Test-CommandExists 'pnpm')) {
-    Write-Warn 'pnpm not found. Enabling it through Corepack...'
-    Invoke-Checked 'corepack' @('enable')
-    Invoke-Checked 'corepack' @('prepare', 'pnpm@10.28.0', '--activate')
+    # npm installs global tools into %APPDATA%\npm, which needs no administrator rights.
+    # ('corepack enable' writes into C:\Program Files\nodejs and fails without them.)
+    Write-Warn 'pnpm not found. Installing pnpm 10.28.0 with npm (no administrator rights needed)...'
+    Invoke-Checked 'npm' @('install', '--global', 'pnpm@10.28.0')
+    # Make the new command visible in this session without reopening PowerShell.
+    $npmPrefix = (npm prefix --global).Trim()
+    if ($npmPrefix -and ($env:Path -notlike "*$npmPrefix*")) { $env:Path = "$npmPrefix;$env:Path" }
+    if (-not (Test-CommandExists 'pnpm')) {
+        Stop-WithError 'pnpm was installed but is not on PATH. Close and reopen PowerShell, then run setup.ps1 again.'
+    }
 }
 Write-Ok "pnpm $(pnpm --version)"
 
