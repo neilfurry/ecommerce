@@ -35,7 +35,7 @@ if (-not $Force) {
 
 $containerPath = '/tmp/restore.dump'
 Write-Step "Restoring $resolved"
-Invoke-Checked 'docker' @('compose', 'cp', $resolved, "postgres:$containerPath")
-Invoke-Checked 'docker' @('compose', 'exec', '-T', 'postgres', 'pg_restore', '-U', $dbUser, '-d', $dbName, '--clean', '--if-exists', '--no-owner', '--single-transaction', $containerPath)
-Invoke-Checked 'docker' @('compose', 'exec', '-T', 'postgres', 'rm', '-f', $containerPath)
+Invoke-Checked 'docker' (Get-ComposeArgs @('cp', $resolved, "postgres:$containerPath"))
+Invoke-Checked 'docker' (Get-ComposeArgs @('exec', '-T', 'postgres', 'pg_restore', '-U', $dbUser, '-d', $dbName, '--clean', '--if-exists', '--no-owner', '--single-transaction', $containerPath))
+Invoke-Checked 'docker' (Get-ComposeArgs @('exec', '-T', 'postgres', 'rm', '-f', $containerPath))
 Write-Ok 'Restore complete'

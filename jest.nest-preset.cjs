@@ -44,7 +44,8 @@ module.exports = function nestJestPreset() {
     transformIgnorePatterns: ['/node_modules/(?!(\\.pnpm|@nestjs)/)'],
     // Run shared workspace packages from source so tests never use stale builds.
     moduleNameMapper: {
-      '^@marketplace/(types|validation|config)$': `${packagesDir}/$1/src`,
+      '^@marketplace/(shared-types|validation|config)$': `${packagesDir}/$1/src`,
+      '^@marketplace/database$': `${path.resolve(__dirname, 'prisma')}/src`,
       // NodeNext-style relative imports ("./client.js") that point at .ts sources, as used by
       // the generated Prisma client.
       '^(\\.{1,2}/.*)\\.js$': '$1',

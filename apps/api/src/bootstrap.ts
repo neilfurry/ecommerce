@@ -7,6 +7,7 @@ import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { GlobalExceptionFilter } from './common/errors/global-exception.filter';
+import { ZodGlobalValidationPipe } from './common/validation/zod-global-validation.pipe';
 import type { AppConfig } from './config/app-config';
 
 export const JSON_BODY_LIMIT = '1mb';
@@ -47,6 +48,8 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.setGlobalPrefix(API_PREFIX);
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: API_DEFAULT_VERSION });
   app.useGlobalFilters(new GlobalExceptionFilter());
+  // Validates every parameter typed with a createZodDto() class against its shared schema.
+  app.useGlobalPipes(new ZodGlobalValidationPipe());
   app.enableShutdownHooks();
 
   if (config.http.swaggerEnabled) {

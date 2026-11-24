@@ -1,4 +1,8 @@
-import { COMPONENT_STATUSES, HEALTH_COMPONENT_NAMES, SYSTEM_STATUSES } from '@marketplace/types';
+import {
+  COMPONENT_STATUSES,
+  HEALTH_COMPONENT_NAMES,
+  SYSTEM_STATUSES,
+} from '@marketplace/shared-types';
 import { z } from 'zod';
 
 export const componentHealthSchema = z.object({

@@ -13,10 +13,12 @@ import {
   type LivenessResponse,
 } from '@marketplace/validation';
 import type { Response } from 'express';
+import { Public } from '../../common/auth/auth.decorators';
 import { zodToOpenApi } from '../../common/openapi/zod-openapi';
 import { HealthService } from './health.service';
 
 @ApiTags('Health')
+@Public()
 @Controller({ path: 'health', version: '1' })
 export class HealthController {
   constructor(private readonly health: HealthService) {}

@@ -23,8 +23,12 @@ export class AppConfig {
   readonly rateLimit: { windowSeconds: number; maxRequests: number };
   readonly database: { url: string };
   readonly redis: { url: string };
+  readonly devToolsEnabled: boolean;
   readonly storage: {
     endpoint: string | undefined;
+    publicEndpoint: string | undefined;
+    signedUrlTtlSeconds: number;
+    uploadMaxBytes: number;
     region: string;
     accessKeyId: string;
     secretAccessKey: string;
@@ -50,8 +54,12 @@ export class AppConfig {
     };
     this.database = { url: env.DATABASE_URL };
     this.redis = { url: env.REDIS_URL };
+    this.devToolsEnabled = env.DEV_TOOLS_ENABLED;
     this.storage = {
       endpoint: env.S3_ENDPOINT,
+      publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT,
+      signedUrlTtlSeconds: env.STORAGE_SIGNED_URL_TTL_SECONDS,
+      uploadMaxBytes: env.UPLOAD_MAX_BYTES,
       region: env.S3_REGION,
       accessKeyId: env.S3_ACCESS_KEY_ID,
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,

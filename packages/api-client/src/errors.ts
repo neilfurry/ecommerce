@@ -1,4 +1,4 @@
-import type { ApiErrorCode, ApiFieldError } from '@marketplace/types';
+import type { ApiErrorCode, ApiFieldError } from '@marketplace/shared-types';
 import { apiErrorBodySchema } from '@marketplace/validation';
 
 /** Client-side codes for failures that never produced an API error body. */

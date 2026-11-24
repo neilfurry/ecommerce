@@ -16,7 +16,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@marketplace/types": "workspace:*",
+    "@marketplace/shared-types": "workspace:*",
     "@marketplace/validation": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

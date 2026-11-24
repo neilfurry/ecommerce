@@ -1,0 +1,102 @@
+# Local development infrastructure. The apps themselves run on the host with `pnpm dev`
+# (fast hot reload on Windows); production container images arrive in Phase 10.
+#
+# Use the wrappers from the repository root (they pass the right file and .env):
+#   .\scripts\start.ps1 -InfraOnly   or   pnpm infra:up     start and wait until healthy
+#   .\scripts\stop.ps1               or   pnpm infra:down   stop (data is kept)
+#   .\scripts\stop.ps1 -RemoveData                          stop AND delete all local data
+# Raw equivalent: docker compose --env-file .env -f docker/docker-compose.yml <command>
+#
+# Values come from the repository-root .env (see .env.example). Ports bind to 127.0.0.1
+# only, so the services are not reachable from other machines on your network.
+name: marketplace
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marketplace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marketplace_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-marketplace}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ requires "noeviction" so queued jobs are never silently dropped.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    # MinIO Inc. stopped publishing community images in Oct 2025; Chainguard maintains a
+    # free build. Override MINIO_IMAGE in .env to use any other MinIO/S3-compatible image.
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio:latest-dev}
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    # Local development only: run as root so the named volume is always writable.
+    user: '0:0'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-marketplace}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-marketplace_dev_secret}
+    ports:
+      - '127.0.0.1:${MINIO_API_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    # The "-dev" image variant includes a shell, needed for this health check.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -O /dev/null http://127.0.0.1:9000/minio/health/live || curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/live',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    # Catches every email sent in development; nothing reaches real inboxes.
+    # Web UI: http://localhost:8025  SMTP: localhost:1025
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:latest}
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: '5000'
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+      TZ: UTC
+    ports:
+      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+    volumes:
+      - mailpit-data:/data
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  mailpit-data:

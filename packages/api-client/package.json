@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@marketplace/config": "workspace:*",
-    "@marketplace/types": "workspace:*",
+    "@marketplace/shared-types": "workspace:*",
     "@marketplace/validation": "workspace:*",
     "zod": "^4.6.7"
   },

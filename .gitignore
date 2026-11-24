@@ -7,7 +7,7 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
-apps/api/src/generated/
+prisma/src/generated/
 
 # Environment files (only the example is committed)
 .env

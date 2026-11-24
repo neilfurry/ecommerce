@@ -4,7 +4,7 @@ import type { ComponentHealth } from '@marketplace/validation';
 import type { Redis } from 'ioredis';
 import { AppConfig } from '../../config/app-config';
 import type { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import type { StorageService } from '../../infrastructure/storage/storage.service';
+import type { ObjectStorage } from '../../infrastructure/storage/object-storage';
 import { HealthService, overallStatus } from './health.service';
 
 const config = AppConfig.load(
@@ -40,14 +40,14 @@ function createService(overrides: {
     get: overrides.get ?? jest.fn().mockResolvedValue(freshHeartbeat()),
   };
   const storage = {
-    assertBucketReachable: overrides.head ?? jest.fn().mockResolvedValue(undefined),
+    assertReachable: overrides.head ?? jest.fn().mockResolvedValue(undefined),
   };
   return {
     service: new HealthService(
       config,
       prisma as unknown as PrismaService,
       redis as unknown as Redis,
-      storage as unknown as StorageService,
+      storage as unknown as ObjectStorage,
     ),
     redis,
   };

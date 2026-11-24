@@ -1,5 +1,5 @@
 import { HttpStatus, type PipeTransform } from '@nestjs/common';
-import type { ApiFieldError } from '@marketplace/types';
+import type { ApiFieldError } from '@marketplace/shared-types';
 import type { z } from 'zod';
 import { ApiException } from '../errors/api.exception';
 

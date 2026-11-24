@@ -1,0 +1,47 @@
+{
+  "name": "@marketplace/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma schema, migrations, seed and the generated database client",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "dev": "prisma generate && tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "test": "prisma generate && vitest run",
+    "test:unit": "prisma generate && vitest run",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:reset": "prisma generate && prisma migrate reset --force",
+    "migrate:check": "prisma migrate diff --from-migrations migrations --to-schema schema.prisma --exit-code",
+    "migrate:status": "prisma migrate status",
+    "seed": "prisma generate && prisma db seed",
+    "studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "dotenv": "^17.0.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.16.0",
+    "prisma": "7.10.1",
+    "tsx": "^4.20.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.1"
+  }
+}

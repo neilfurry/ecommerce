@@ -1,12 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { REDIS_KEYS, WORKER_HEARTBEAT_STALE_AFTER_SECONDS } from '@marketplace/config';
-import type { HealthComponentName, SystemStatus, WorkerHeartbeat } from '@marketplace/types';
+import type { HealthComponentName, SystemStatus, WorkerHeartbeat } from '@marketplace/shared-types';
 import type { ComponentHealth, HealthResponse } from '@marketplace/validation';
 import type { Redis } from 'ioredis';
 import { AppConfig } from '../../config/app-config';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
-import { StorageService } from '../../infrastructure/storage/storage.service';
+import { ObjectStorage } from '../../infrastructure/storage/object-storage';
 
 /** A check that does not answer within this time is reported as down. */
 export const HEALTH_CHECK_TIMEOUT_MS = 3000;
@@ -30,7 +30,7 @@ export class HealthService {
     private readonly config: AppConfig,
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-    private readonly storage: StorageService,
+    private readonly storage: ObjectStorage,
   ) {}
 
   async check(): Promise<HealthResponse> {
@@ -56,7 +56,7 @@ export class HealthService {
         name: 'storage',
         critical: true,
         failureMessage: 'Object storage is unreachable or the bucket is missing.',
-        run: () => this.storage.assertBucketReachable(),
+        run: () => this.storage.assertReachable(),
       },
       {
         name: 'worker',

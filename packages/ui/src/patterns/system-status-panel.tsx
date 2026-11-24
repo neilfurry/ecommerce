@@ -1,4 +1,4 @@
-import type { HealthComponentName, SystemStatus } from '@marketplace/types';
+import type { HealthComponentName, SystemStatus } from '@marketplace/shared-types';
 import type { HealthResponse } from '@marketplace/validation';
 import {
   ActivityIcon,

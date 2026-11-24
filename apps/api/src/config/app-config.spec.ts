@@ -45,6 +45,22 @@ describe('AppConfig.load', () => {
     ).toThrow(/S3_AUTO_CREATE_BUCKET/);
   });
 
+  it('refuses developer tools in production', () => {
+    expect(() =>
+      AppConfig.load({ ...validEnv, NODE_ENV: 'production', DEV_TOOLS_ENABLED: 'true' }, false),
+    ).toThrow(/DEV_TOOLS_ENABLED/);
+  });
+
+  it('defaults storage limits and the public endpoint', () => {
+    const config = AppConfig.load({ ...validEnv, S3_ENDPOINT: 'http://localhost:9000' }, false);
+    expect(config.devToolsEnabled).toBe(false);
+    expect(config.storage).toMatchObject({
+      publicEndpoint: 'http://localhost:9000',
+      signedUrlTtlSeconds: 300,
+      uploadMaxBytes: 5 * 1024 * 1024,
+    });
+  });
+
   it('requires mandatory variables', () => {
     expect(() => AppConfig.load({}, false)).toThrow(/DATABASE_URL/);
   });

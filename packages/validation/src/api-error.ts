@@ -1,4 +1,4 @@
-import { API_ERROR_CODES, type ApiErrorBody } from '@marketplace/types';
+import { API_ERROR_CODES, type ApiErrorBody } from '@marketplace/shared-types';
 import { z } from 'zod';
 
 export const apiFieldErrorSchema = z.object({

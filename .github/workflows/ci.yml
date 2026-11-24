@@ -57,6 +57,9 @@ jobs:
         ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ['1025:1025', '8025:8025']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -135,7 +138,7 @@ jobs:
           if (-not $dump) { throw 'No backup file was created' }
           ./scripts/restore-db.ps1 -File $dump.FullName -Force
           ./scripts/reset-db.ps1 -Force
-          docker compose exec -T postgres psql -U marketplace -d marketplace -tAc "select code from currencies"
+          docker compose --env-file .env -f docker/docker-compose.yml exec -T postgres psql -U marketplace -d marketplace -tAc "select code from currencies"
       - name: Compose logs on failure
         if: failure()
-        run: docker compose logs --tail 100
+        run: docker compose --env-file .env -f docker/docker-compose.yml logs --tail 100

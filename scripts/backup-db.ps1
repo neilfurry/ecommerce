@@ -36,9 +36,9 @@ $containerPath = "/tmp/$fileName"
 $hostPath = Join-Path $backupDir $fileName
 
 Write-Step "Backing up database '$dbName'"
-Invoke-Checked 'docker' @('compose', 'exec', '-T', 'postgres', 'pg_dump', '-U', $dbUser, '-d', $dbName, '--format=custom', '--no-owner', '--file', $containerPath)
-Invoke-Checked 'docker' @('compose', 'cp', "postgres:$containerPath", $hostPath)
-Invoke-Checked 'docker' @('compose', 'exec', '-T', 'postgres', 'rm', '-f', $containerPath)
+Invoke-Checked 'docker' (Get-ComposeArgs @('exec', '-T', 'postgres', 'pg_dump', '-U', $dbUser, '-d', $dbName, '--format=custom', '--no-owner', '--file', $containerPath))
+Invoke-Checked 'docker' (Get-ComposeArgs @('cp', "postgres:$containerPath", $hostPath))
+Invoke-Checked 'docker' (Get-ComposeArgs @('exec', '-T', 'postgres', 'rm', '-f', $containerPath))
 
 $size = [math]::Round((Get-Item $hostPath).Length / 1KB, 1)
 Write-Ok "Saved $hostPath ($size KB)"

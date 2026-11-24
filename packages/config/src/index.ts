@@ -17,20 +17,6 @@ export const API_DEFAULT_VERSION = '1';
 /** Header used to correlate a request across API logs, worker logs and error responses. */
 export const REQUEST_ID_HEADER = 'x-request-id';
 
-/** BullMQ queue names. Each queue is owned by one business domain. */
-export const QUEUE_NAMES = {
-  SYSTEM: 'system',
-} as const;
-export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
-
-/** Redis key prefix for all BullMQ data, shared by producers (API) and consumers (worker). */
-export const BULLMQ_PREFIX = 'marketplace:bull';
-
-/** Job names on the system queue. */
-export const SYSTEM_JOBS = {
-  HEARTBEAT: 'system.heartbeat',
-} as const;
-
 /** Job-scheduler id for the recurring worker heartbeat. */
 export const WORKER_HEARTBEAT_SCHEDULER_ID = 'system-heartbeat';
 
@@ -49,3 +35,5 @@ export const FRONTEND_DEV_PORTS = {
   sellerPortal: 5174,
   adminPortal: 5175,
 } as const;
+
+export * from './queues';

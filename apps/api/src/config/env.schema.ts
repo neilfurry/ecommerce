@@ -40,6 +40,8 @@ export const apiEnvSchema = z
     REDIS_URL: redisUrlSchema,
 
     S3_ENDPOINT: z.url().optional(),
+    /** Endpoint written into signed URLs (what browsers can reach). Defaults to S3_ENDPOINT. */
+    S3_PUBLIC_ENDPOINT: z.url().optional(),
     S3_REGION: z.string().min(1).default('us-east-1'),
     S3_ACCESS_KEY_ID: z.string().min(1),
     S3_SECRET_ACCESS_KEY: z.string().min(8),
@@ -48,6 +50,10 @@ export const apiEnvSchema = z
       .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, 'Must be a valid S3 bucket name'),
     S3_FORCE_PATH_STYLE: envBoolean(true),
     S3_AUTO_CREATE_BUCKET: envBoolean(false),
+    STORAGE_SIGNED_URL_TTL_SECONDS: envInteger(300, 30, 86_400),
+    UPLOAD_MAX_BYTES: envInteger(5 * 1024 * 1024, 1024, 100 * 1024 * 1024),
+
+    DEV_TOOLS_ENABLED: envBoolean(false),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.S3_AUTO_CREATE_BUCKET) {
@@ -55,6 +61,13 @@ export const apiEnvSchema = z
         code: 'custom',
         path: ['S3_AUTO_CREATE_BUCKET'],
         message: 'Must be false in production; provision buckets explicitly',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DEV_TOOLS_ENABLED'],
+        message: 'Must be false in production',
       });
     }
   });

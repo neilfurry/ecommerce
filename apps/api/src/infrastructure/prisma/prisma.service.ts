@@ -1,7 +1,6 @@
 import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { createPgAdapter, PrismaClient } from '@marketplace/database';
 import { AppConfig } from '../../config/app-config';
-import { PrismaClient } from '../../generated/prisma/client';
-import { createPgAdapter } from './pg-adapter';
 
 /**
  * The single PrismaClient for the API process (Prisma 7 + node-postgres driver adapter).

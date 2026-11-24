@@ -73,12 +73,18 @@ function Assert-DockerRunning {
     }
 }
 
+# Arguments for docker compose: the file lives in docker/ and values come from the root .env.
+function Get-ComposeArgs([string[]]$Arguments) {
+    $base = @('compose', '--env-file', (Join-Path $script:RepoRoot '.env'), '-f', (Join-Path $script:RepoRoot 'docker/docker-compose.yml'))
+    return $base + $Arguments
+}
+
 function Start-Infrastructure {
-    Write-Step 'Starting PostgreSQL, Redis and MinIO (docker compose)'
+    Write-Step 'Starting PostgreSQL, Redis, MinIO and Mailpit (docker compose)'
     Assert-DockerRunning
     Push-Location $script:RepoRoot
     try {
-        Invoke-Checked 'docker' @('compose', 'up', '-d', '--wait')
+        Invoke-Checked 'docker' (Get-ComposeArgs @('up', '-d', '--wait'))
     }
     finally {
         Pop-Location

@@ -13,6 +13,6 @@
     "declaration": false,
     "incremental": true
   },
-  "include": ["src", "test", "prisma"],
+  "include": ["src", "test"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,16 +1,21 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { BULLMQ_PREFIX, QUEUE_NAMES } from '@marketplace/config';
+import { BULLMQ_PREFIX, defaultJobOptions, QUEUE_NAMES } from '@marketplace/config';
 import { LoggerModule } from 'nestjs-pino';
 import { WorkerConfig } from './config/worker-config';
 import { WorkerConfigModule } from './config/worker-config.module';
-import { HeartbeatScheduler } from './heartbeat/heartbeat.scheduler';
-import { SystemProcessor } from './heartbeat/system.processor';
+import { DevSampleHandler } from './jobs/dev-sample.handler';
+import { DevTestEmailHandler } from './jobs/dev-test-email.handler';
+import { HeartbeatHandler } from './jobs/heartbeat.handler';
+import { HeartbeatScheduler } from './jobs/heartbeat.scheduler';
+import { MailerService } from './mail/mailer.service';
+import { DeadLetterService } from './queues/dead-letter.service';
+import { DOMAIN_PROCESSORS } from './queues/processors';
 import { redisClientProvider, RedisShutdown } from './redis.provider';
 
 /**
- * Root module of the worker process. Each business domain adds its processor here as
- * later phases introduce queues (notifications, settlements, reports...).
+ * Root module of the worker process: one processor per domain queue, job handlers,
+ * dead-letter handling and the heartbeat schedule.
  */
 @Module({
   imports: [
@@ -22,6 +27,7 @@ import { redisClientProvider, RedisShutdown } from './redis.provider';
         pinoHttp: {
           level: config.logLevel,
           base: { service: 'worker' },
+          redact: { paths: ['*.password', '*.token', '*.secret'], censor: '[REDACTED]' },
           transport:
             config.nodeEnv === 'development'
               ? {
@@ -40,8 +46,23 @@ import { redisClientProvider, RedisShutdown } from './redis.provider';
         prefix: BULLMQ_PREFIX,
       }),
     }),
-    BullModule.registerQueue({ name: QUEUE_NAMES.SYSTEM }),
+    BullModule.registerQueue(
+      ...Object.values(QUEUE_NAMES).map((name) => ({
+        name,
+        defaultJobOptions: defaultJobOptions(name),
+      })),
+    ),
   ],
-  providers: [redisClientProvider, RedisShutdown, SystemProcessor, HeartbeatScheduler],
+  providers: [
+    redisClientProvider,
+    RedisShutdown,
+    MailerService,
+    DeadLetterService,
+    HeartbeatHandler,
+    DevSampleHandler,
+    DevTestEmailHandler,
+    HeartbeatScheduler,
+    ...DOMAIN_PROCESSORS,
+  ],
 })
 export class WorkerModule {}

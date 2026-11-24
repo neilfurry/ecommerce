@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { ApiErrorBody, ApiErrorCode, ApiFieldError } from '@marketplace/types';
+import type { ApiErrorBody, ApiErrorCode, ApiFieldError } from '@marketplace/shared-types';
 import type { Request, Response } from 'express';
 import { ApiException } from './api.exception';
 
@@ -17,6 +17,7 @@ const CODE_BY_STATUS: Record<number, ApiErrorCode> = {
   404: 'NOT_FOUND',
   409: 'CONFLICT',
   413: 'PAYLOAD_TOO_LARGE',
+  415: 'UNSUPPORTED_MEDIA_TYPE',
   429: 'RATE_LIMITED',
   503: 'SERVICE_UNAVAILABLE',
 };

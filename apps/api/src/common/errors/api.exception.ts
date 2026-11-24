@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import type { ApiErrorCode, ApiFieldError } from '@marketplace/types';
+import type { ApiErrorCode, ApiFieldError } from '@marketplace/shared-types';
 
 /**
  * Throw this from services and pipes to return a specific machine-readable error code.

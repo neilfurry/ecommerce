@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { REDIS_KEYS } from '@marketplace/config';
-import type { WorkerHeartbeat } from '@marketplace/types';
+import type { WorkerHeartbeat } from '@marketplace/shared-types';
 import { healthResponseSchema, livenessResponseSchema } from '@marketplace/validation';
 import type { Redis } from 'ioredis';
 import request from 'supertest';
