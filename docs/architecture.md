@@ -62,13 +62,13 @@ Rules that every domain module follows (enforced in review):
 
 ## Shared packages
 
-| Package                  | Consumed by           | Build                                           |
-| ------------------------ | --------------------- | ----------------------------------------------- |
-| `@marketplace/types`     | all                   | `tsc` → CommonJS `dist/` (API/worker); source for Vite |
-| `@marketplace/validation`| all                   | same                                            |
-| `@marketplace/config`    | all                   | same                                            |
-| `@marketplace/api-client`| frontends             | source only (Vite)                              |
-| `@marketplace/ui`        | frontends             | source only (Vite + Tailwind `@source`)         |
+| Package                   | Consumed by | Build                                                  |
+| ------------------------- | ----------- | ------------------------------------------------------ |
+| `@marketplace/types`      | all         | `tsc` → CommonJS `dist/` (API/worker); source for Vite |
+| `@marketplace/validation` | all         | same                                                   |
+| `@marketplace/config`     | all         | same                                                   |
+| `@marketplace/api-client` | frontends   | source only (Vite)                                     |
+| `@marketplace/ui`         | frontends   | source only (Vite + Tailwind `@source`)                |
 
 Vite and Vitest resolve the custom `source` export condition, so frontends always use live
 TypeScript sources. Jest maps the packages to `src/` for the same reason.

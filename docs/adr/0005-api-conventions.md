@@ -18,7 +18,7 @@
   on `code` (a closed list in `@marketplace/types`). Unknown errors are a generic `INTERNAL_ERROR`;
   details go to logs only.
 - **Pagination:** `?page=&pageSize=` (max 100), responses `{ items, page, pageSize, totalItems,
-  totalPages }`.
+totalPages }`.
 - **Request ids:** `X-Request-Id` on every response and in error bodies. A well-formed incoming
   id is reused for tracing across services.
 - **Rate limiting:** global per-IP limit stored in Redis (`RedisThrottlerStorage`, atomic Lua
