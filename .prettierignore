@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+prisma/src/generated
+prisma/migrations
+playwright-report
+test-results

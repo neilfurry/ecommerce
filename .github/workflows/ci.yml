@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  quality:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp .env.example .env
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test:unit
+      - name: Build every app
+        run: pnpm build
+
+  integration:
+    name: API e2e, worker integration, browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: quality
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: marketplace
+          POSTGRES_PASSWORD: marketplace_dev_password
+          POSTGRES_DB: marketplace
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U marketplace" --health-interval 5s --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ['1025:1025', '8025:8025']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cp .env.example .env
+      - name: Start MinIO
+        # Service containers cannot pass a command, so MinIO is started manually.
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=marketplace -e MINIO_ROOT_PASSWORD=marketplace_dev_secret \
+            cgr.dev/chainguard/minio:latest server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+      - run: pnpm build:packages
+      - name: Check migrations match schema.prisma
+        run: |
+          PGPASSWORD=marketplace_dev_password psql -h localhost -U marketplace -d marketplace \
+            -c 'CREATE DATABASE marketplace_shadow'
+          pnpm db:generate
+          pnpm db:check
+        env:
+          SHADOW_DATABASE_URL: postgresql://marketplace:marketplace_dev_password@localhost:5432/marketplace_shadow
+      - run: pnpm db:deploy
+      - run: pnpm db:seed
+      - run: pnpm test:e2e:api
+      - run: pnpm test:integration:worker
+      - run: pnpm --filter @marketplace/api --filter @marketplace/worker run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:ui
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  scripts:
+    name: PowerShell scripts + docker compose (pwsh on Linux)
+    # Exercises the Windows developer workflow end to end with the real docker-compose.yml.
+    # Runs on Linux because GitHub's Windows runners cannot start Linux containers.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: quality
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Parse every script
+        run: |
+          $failed = $false
+          foreach ($file in Get-ChildItem scripts -Recurse -Filter *.ps1) {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { $failed = $true; $errors | ForEach-Object { Write-Error "$($file.Name): $_" } }
+          }
+          if ($failed) { exit 1 }
+      - name: setup.ps1
+        run: ./scripts/setup.ps1
+      - name: test.ps1 -Suite integration
+        run: ./scripts/test.ps1 -Suite integration
+      - name: backup-db.ps1, restore-db.ps1, reset-db.ps1
+        run: |
+          ./scripts/backup-db.ps1 -RetentionDays 0
+          $dump = Get-ChildItem backups -Filter *.dump | Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $dump) { throw 'No backup file was created' }
+          ./scripts/restore-db.ps1 -File $dump.FullName -Force
+          ./scripts/reset-db.ps1 -Force
+          docker compose --env-file .env -f docker/docker-compose.yml exec -T postgres psql -U marketplace -d marketplace -tAc "select code from currencies"
+      - name: stop.ps1, start.ps1 -InfraOnly, stop.ps1 -RemoveData
+        run: |
+          ./scripts/stop.ps1
+          ./scripts/start.ps1 -InfraOnly
+          ./scripts/stop.ps1 -RemoveData -Force
+          $left = docker volume ls -q --filter name=marketplace_
+          if ($left) { throw "Volumes not removed: $left" }
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose --env-file .env -f docker/docker-compose.yml logs --tail 100

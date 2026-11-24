@@ -1,0 +1,5 @@
+@import 'tailwindcss';
+@import '@marketplace/ui/styles.css';
+
+/* Scan this app's own sources for utility classes. */
+@source "./";
