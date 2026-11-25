@@ -214,7 +214,9 @@ function Reservations() {
       id: 'expires',
       header: 'Expires',
       hideOnMobile: true,
-      cell: (r) => formatDateTime(r.expiresAt),
+      // Holds of placed orders last until the order ships or is cancelled.
+      cell: (r) =>
+        r.expiresAt ? formatDateTime(r.expiresAt) : r.orderItemId ? 'Until shipped' : '—',
     },
   ];
   return (

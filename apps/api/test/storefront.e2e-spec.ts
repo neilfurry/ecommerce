@@ -121,16 +121,14 @@ describe('Storefront (e2e)', () => {
 
       // A barangay from another city is refused.
       const qc = await place(app, 'Bagong Pag-asa', 'Quezon City');
-      const mismatch = await buyer.client
-        .post('/api/v1/account/addresses')
-        .send({
-          recipientName: 'X Y',
-          mobile: '09181234567',
-          ...cebu,
-          barangayCode: qc.barangayCode,
-          postalCode: '6000',
-          streetAddress: '1 Street',
-        });
+      const mismatch = await buyer.client.post('/api/v1/account/addresses').send({
+        recipientName: 'X Y',
+        mobile: '09181234567',
+        ...cebu,
+        barangayCode: qc.barangayCode,
+        postalCode: '6000',
+        streetAddress: '1 Street',
+      });
       expect(mismatch.status).toBe(422);
       expect(apiErrorBodySchema.parse(mismatch.body).error.fieldErrors?.[0]?.path).toBe(
         'barangayCode',

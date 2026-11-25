@@ -254,7 +254,10 @@ export class FlashSalesService {
           variantId: variant.id,
           flashPrice,
           quantityLimit: Number(input.quantityLimit),
-          perOrderLimit: input.perOrderLimit == null ? null : Number(input.perOrderLimit),
+          perOrderLimit:
+            input.perOrderLimit === null || input.perOrderLimit === undefined
+              ? null
+              : Number(input.perOrderLimit),
         },
       });
       await this.audit.record(

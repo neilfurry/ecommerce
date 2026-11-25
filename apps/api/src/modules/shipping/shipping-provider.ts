@@ -46,5 +46,8 @@ export abstract class ShippingProvider {
    * `db` is the transaction checkout runs in, for providers that read settings from the
    * database (so a checkout never needs a second connection while it holds row locks).
    */
-  abstract quote(request: ShippingQuoteRequest, db?: Prisma.TransactionClient): Promise<ShippingRate[]>;
+  abstract quote(
+    request: ShippingQuoteRequest,
+    db?: Prisma.TransactionClient,
+  ): Promise<ShippingRate[]>;
 }

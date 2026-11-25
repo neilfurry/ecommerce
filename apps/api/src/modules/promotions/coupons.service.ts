@@ -139,7 +139,10 @@ export class CouponsService {
           minSpend: new Prisma.Decimal(input.minSpend ?? '0'),
           startsAt: new Date(input.startsAt),
           endsAt: new Date(input.endsAt),
-          usageLimit: input.usageLimit == null ? null : Number(input.usageLimit),
+          usageLimit:
+            input.usageLimit === null || input.usageLimit === undefined
+              ? null
+              : Number(input.usageLimit),
           perCustomerLimit: Number(input.perCustomerLimit ?? 1),
           status: input.status ?? 'ACTIVE',
           createdById: user.id,
@@ -176,7 +179,11 @@ export class CouponsService {
     if (!current) throw notFound();
     const endsAt = input.endsAt ? new Date(input.endsAt) : current.endsAt;
     if (endsAt <= current.startsAt) throw invalid('endsAt', 'Must be after the start');
-    if (input.usageLimit != null && Number(input.usageLimit) < current.usedCount) {
+    if (
+      input.usageLimit !== null &&
+      input.usageLimit !== undefined &&
+      Number(input.usageLimit) < current.usedCount
+    ) {
       throw invalid('usageLimit', `Already used ${current.usedCount} times`);
     }
     const row = await this.prisma.$transaction(async (tx) => {

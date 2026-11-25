@@ -33,7 +33,9 @@ test.describe('Storefront shopping', () => {
     await search.press('Enter');
     await expect(page).toHaveURL(/\/search\?q=keytap/);
     await page.getByRole('link', { name: 'Keytap Mechanical Keyboard' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Keytap Mechanical Keyboard' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Keytap Mechanical Keyboard' }),
+    ).toBeVisible();
     await expect(page.getByTestId('unit-price')).toHaveText('₱2,199.00');
     await page.getByRole('button', { name: 'Add to cart' }).click();
     await expect(page.getByText('Added to cart')).toBeVisible();
@@ -66,7 +68,8 @@ test.describe('Storefront shopping', () => {
     await expect(coupons).toContainText('FREESHIP');
     const placeButton = page.getByRole('button', { name: /Place order/ });
     await expect(placeButton).toBeEnabled();
-    const total = (await page.getByRole('definition').filter({ hasText: /₱/ }).last().textContent()) ?? '';
+    const total =
+      (await page.getByRole('definition').filter({ hasText: /₱/ }).last().textContent()) ?? '';
 
     await placeButton.click();
     await expect(page).toHaveURL(/\/account\/orders\/.+\?placed=1/);
@@ -74,7 +77,9 @@ test.describe('Storefront shopping', () => {
     await expect(page.getByText(/split into 2 packages/)).toBeVisible();
     await expect(page.getByTestId('order-status')).toHaveText('Placed');
     await expect(page.getByTestId('order-total')).toHaveText(total.trim());
-    await expect(page.getByRole('region', { name: /Package 1: / }).or(page.getByLabel(/Package 1: /))).toBeVisible();
+    await expect(
+      page.getByRole('region', { name: /Package 1: / }).or(page.getByLabel(/Package 1: /)),
+    ).toBeVisible();
     await expect(page.getByLabel(/Package 2: /)).toBeVisible();
 
     // It is in the order history.
@@ -90,7 +95,9 @@ test.describe('Storefront shopping', () => {
 
     await page.goto(`${STOREFRONT}/search?q=sinandomeng`);
     await page.getByRole('link', { name: 'Sinandomeng Rice 25 kg' }).first().click();
-    await expect(page.getByText('Your wholesale account gets these prices automatically.')).toBeVisible();
+    await expect(
+      page.getByText('Your wholesale account gets these prices automatically.'),
+    ).toBeVisible();
     await page.getByLabel('Quantity', { exact: true }).fill('50');
     await expect(page.getByTestId('unit-price')).toHaveText('₱420.00');
   });
