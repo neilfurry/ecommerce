@@ -63,7 +63,7 @@ function AccountActions() {
       <Button asChild variant="ghost" size="sm">
         <Link to="/sign-in">Sign in</Link>
       </Button>
-      <Button asChild size="sm" className="hidden sm:inline-flex">
+      <Button asChild size="sm">
         <Link to="/sign-up">Create account</Link>
       </Button>
     </div>

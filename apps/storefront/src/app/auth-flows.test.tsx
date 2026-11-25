@@ -127,6 +127,7 @@ describe('customer sign-up', () => {
     expect(await screen.findByRole('heading', { name: 'Hello, Maria' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/account');
     expect(screen.getByTestId('account-type')).toHaveTextContent('Retail');
+    expect(screen.getByText(/email address is not confirmed yet/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('link', { name: 'Profile and security' }));
     expect(await screen.findByText('Not confirmed')).toBeInTheDocument();
   });

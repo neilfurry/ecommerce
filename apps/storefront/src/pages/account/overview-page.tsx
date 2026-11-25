@@ -8,6 +8,8 @@ import {
 } from '@marketplace/api-client';
 import { ORDER_STATUS_LABELS } from '@marketplace/shared-types';
 import {
+  Alert,
+  AlertDescription,
   Badge,
   Button,
   Card,
@@ -40,6 +42,17 @@ export function AccountOverviewPage() {
         title={`Hello, ${user?.firstName ?? ''}`}
         description="Your orders, saved items and account in one place."
       />
+      {user && !user.emailVerified ? (
+        <Alert>
+          <AlertDescription>
+            Your email address is not confirmed yet. Open the link we emailed you, or{' '}
+            <Link to="/account/settings" className="font-medium text-primary underline">
+              send a new confirmation link
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">

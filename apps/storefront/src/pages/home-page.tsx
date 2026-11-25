@@ -64,7 +64,8 @@ function HeroCarousel({ banners }: { banners: BannerDto[] }) {
       aria-label="Promotions"
       className="relative overflow-hidden rounded-xl bg-muted"
     >
-      <div aria-live="polite">
+      {/* Slides change on a timer, so they are not announced as they rotate. */}
+      <div aria-live="off">
         {bannerLink(
           banner,
           <div className="relative aspect-[16/7] sm:aspect-[16/5]">
@@ -202,7 +203,11 @@ export function HomePage() {
     <div className="pb-4">
       <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
         {data.heroBanners.length > 0 ? (
-          <HeroCarousel banners={data.heroBanners} />
+          <>
+            {/* The page heading, for screen readers and search engines, when banners lead. */}
+            <h1 className="sr-only">Shop from trusted sellers across the Philippines</h1>
+            <HeroCarousel banners={data.heroBanners} />
+          </>
         ) : (
           <DefaultHero />
         )}

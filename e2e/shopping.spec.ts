@@ -19,6 +19,23 @@ test.describe('Storefront shopping', () => {
     browser,
   }) => {
     test.setTimeout(180_000);
+
+    // Staff create a one-off marketplace free-shipping coupon in the Admin Console (so the
+    // test can be repeated: the demo coupons have a per-customer limit).
+    const couponCode = `SHIP${Date.now().toString(36).toUpperCase()}`;
+    const staffContext = await browser.newContext({ storageState: ADMIN_STATE });
+    const staff = await staffContext.newPage();
+    await staff.goto(`${ADMIN}/promotions`);
+    await staff.getByRole('button', { name: 'New coupon' }).click();
+    const dialog = staff.getByRole('dialog');
+    await dialog.getByLabel('Code').fill(couponCode);
+    await dialog.getByLabel('Name').fill('E2E free shipping');
+    await dialog.getByRole('combobox', { name: 'Discount' }).click();
+    await staff.getByRole('option', { name: 'Free shipping' }).click();
+    await dialog.getByRole('button', { name: 'Create coupon' }).click();
+    await expect(staff.getByText(couponCode)).toBeVisible();
+    await staffContext.close();
+
     await page.goto(STOREFRONT);
     // Home page sections come from the API.
     // A running flash sale (the demo "Payday Flash Sale", or one ending sooner).
@@ -63,10 +80,11 @@ test.describe('Storefront shopping', () => {
     await expect(page.getByText(/from Lahug, City of Cebu/)).toBeVisible();
 
     // A marketplace coupon is checked by the server and shared by both packages.
-    await page.getByLabel('Coupon code').fill('FREESHIP');
+    await page.getByLabel('Coupon code').fill(couponCode);
     await page.getByRole('button', { name: 'Apply' }).click();
     const coupons = page.getByRole('list', { name: 'Coupons' });
-    await expect(coupons).toContainText('FREESHIP');
+    await expect(coupons).toContainText(couponCode);
+    await expect(coupons).not.toContainText(/cannot|already/i);
     const placeButton = page.getByRole('button', { name: /Place order/ });
     await expect(placeButton).toBeEnabled();
     const total =
