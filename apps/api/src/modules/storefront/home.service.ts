@@ -124,9 +124,9 @@ export class HomeService {
     };
   }
 
-  /** The running flash sale ending soonest, with its products. */
+  /** The running flash sale ending soonest that still has units at the flash price. */
   private async flashSale(now: Date): Promise<HomePage['flashSale']> {
-    const sale = await this.prisma.flashSale.findFirst({
+    const sales = await this.prisma.flashSale.findMany({
       where: {
         status: 'ACTIVE',
         startsAt: { lte: now },
@@ -135,12 +135,17 @@ export class HomeService {
       },
       include: { items: { where: { status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } } },
       orderBy: { endsAt: 'asc' },
+      take: 10,
     });
-    if (!sale) return null;
-    const productIds = [...new Set(sale.items.map((i) => i.productId))].slice(0, SECTION_SIZE);
-    const products = (await this.cards.cards(productIds, now)).filter((c) => c.flashSale);
-    if (products.length === 0) return null;
-    return { id: sale.id, title: sale.title, endsAt: sale.endsAt.toISOString(), products };
+    for (const sale of sales) {
+      const withUnits = sale.items.filter((i) => i.soldQuantity < i.quantityLimit);
+      const productIds = [...new Set(withUnits.map((i) => i.productId))].slice(0, SECTION_SIZE);
+      const products = (await this.cards.cards(productIds, now)).filter((c) => c.flashSale);
+      if (products.length > 0) {
+        return { id: sale.id, title: sale.title, endsAt: sale.endsAt.toISOString(), products };
+      }
+    }
+    return null;
   }
 
   /**

@@ -8,7 +8,7 @@
        versions introduced (existing values are never changed).
     3. Installs dependencies with pnpm.
     4. Starts PostgreSQL, Redis, MinIO and Mailpit with docker compose.
-    5. Applies database migrations and seeds reference data.
+    5. Applies database migrations and seeds reference data (with demo photos when demo data is on).
     6. Builds the shared packages.
 
 .EXAMPLE
@@ -89,6 +89,14 @@ Invoke-Checked 'pnpm' @('db:seed')
 
 Write-Step 'Building shared packages'
 Invoke-Checked 'pnpm' @('build:packages')
+
+# Demo product photos and home page banners (development demo data only).
+$envValues = Read-DotEnv
+if ((Get-EnvValue $envValues 'SEED_DEMO_USERS' 'false') -eq 'true') {
+    Write-Step 'Adding demo photos and banners'
+    Invoke-Checked 'pnpm' @('--filter', '@marketplace/api', 'run', 'build')
+    Invoke-Checked 'pnpm' @('--filter', '@marketplace/api', 'run', 'seed:media')
+}
 
 Write-Host ''
 Write-Host 'Setup complete.' -ForegroundColor Green

@@ -53,6 +53,17 @@ function fakeApi(handlers: Record<string, Handler>) {
       return state.signedIn ? json(session()) : apiError('UNAUTHENTICATED', 'Sign in', 401);
     }
     if (route === 'GET /account/wholesale-application') return json({ application: null });
+    if (route === 'GET /cart')
+      return json({
+        groups: [],
+        saved: [],
+        itemCount: 0,
+        subtotal: '0.00',
+        wholesaleSavings: '0.00',
+        currency: 'PHP',
+        buyerIsWholesale: false,
+        ready: false,
+      });
     return apiError('NOT_FOUND', 'Not found', 404);
   });
   return { fetchImpl: fetchImpl as unknown as typeof fetch, state };
@@ -113,9 +124,11 @@ describe('customer sign-up', () => {
 
     await userEvent.type(screen.getByLabelText('Code'), '123456');
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByRole('heading', { name: 'My account' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Hello, Maria' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/account');
-    expect(screen.getByText('Not confirmed')).toBeInTheDocument();
+    expect(screen.getByTestId('account-type')).toHaveTextContent('Retail');
+    await userEvent.click(screen.getByRole('link', { name: 'Profile and security' }));
+    expect(await screen.findByText('Not confirmed')).toBeInTheDocument();
   });
 
   it('asks for business details only for wholesale accounts and shows API field errors', async () => {
@@ -164,7 +177,7 @@ describe('customer sign-in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
     await userEvent.type(await screen.findByLabelText('Code'), '654321');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('heading', { name: 'My account' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Hello, Maria' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/account');
   });
 

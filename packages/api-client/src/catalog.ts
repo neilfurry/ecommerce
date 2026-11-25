@@ -40,10 +40,6 @@ import {
   productListSchema,
   type ProductListQuery,
   type ProductPricingRequest,
-  type PublicProduct,
-  type PublicProductList,
-  publicProductListSchema,
-  publicProductSchema,
   type PutCategoryAttributesRequest,
   type PutPriceTiersRequest,
   type RecordMovementRequest,
@@ -95,23 +91,6 @@ export function createCatalogClient(request: Request) {
       }),
     brands: (query: Partial<BrandListQuery>, signal?: AbortSignal): Promise<BrandList> =>
       request('/brands', { query: asQuery(query), schema: brandListSchema, signal }),
-    products: (
-      query: {
-        page?: number;
-        pageSize?: number;
-        categoryId?: string;
-        storeId?: string;
-        search?: string;
-      },
-      signal?: AbortSignal,
-    ): Promise<PublicProductList> =>
-      request('/catalog/products', {
-        query: asQuery(query),
-        schema: publicProductListSchema,
-        signal,
-      }),
-    product: (productId: string, signal?: AbortSignal): Promise<PublicProduct> =>
-      request(`/catalog/products/${id(productId)}`, { schema: publicProductSchema, signal }),
     /** The server's price for the signed-in customer; only ids and quantities are sent. */
     quote: (body: PriceQuoteRequest): Promise<PriceQuote> =>
       request('/pricing/quote', { method: 'POST', body, schema: priceQuoteSchema }),
