@@ -110,8 +110,8 @@ export type PutCategoryAttributesRequest = z.input<typeof putCategoryAttributesS
 
 export const createCategorySchema = z.object({
   name: z.string().trim().min(2, 'Enter a name').max(100),
-  /** Generated from the name when omitted. */
-  slug: catalogSlugSchema(100).optional(),
+  /** Generated from the name when omitted or blank. */
+  slug: z.union([z.literal('').transform(() => undefined), catalogSlugSchema(100)]).optional(),
   parentId: z.uuid().nullable().optional(),
   description: optionalText(2000),
   status: categoryStatusSchema.default('ACTIVE'),
@@ -262,7 +262,7 @@ const productContentShape = {
 export const createProductSchema = z.object({
   storeId: z.uuid('Choose a store'),
   ...productContentShape,
-  slug: catalogSlugSchema(220).optional(),
+  slug: z.union([z.literal('').transform(() => undefined), catalogSlugSchema(220)]).optional(),
   ...seoShape,
   sku: skuSchema,
   regularPrice: priceSchema,
