@@ -282,6 +282,19 @@ export const updateProductSchema = z
   .partial();
 export type UpdateProductRequest = z.input<typeof updateProductSchema>;
 
+/**
+ * The Seller Center details form: optional category attributes the seller has not filled in
+ * are `undefined` (or '') in the form and are dropped before the PATCH is sent.
+ */
+export const productDetailsFormSchema = updateProductSchema.extend({
+  attributeValues: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_]*$/),
+      z.union([z.string().trim().max(200), z.number(), z.boolean(), z.undefined()]),
+    )
+    .optional(),
+});
+
 /** PUT /products/{id}/pricing: product-level pricing configuration. */
 export const productPricingSchema = z
   .object({

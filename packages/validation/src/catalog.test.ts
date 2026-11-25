@@ -5,6 +5,8 @@ import {
   customerPriceInputSchema,
   priceQuoteRequestSchema,
   priceSchema,
+  productDetailsFormSchema,
+  updateProductSchema,
   putCategoryAttributesSchema,
   setProductOptionsSchema,
   slugify,
@@ -20,6 +22,15 @@ describe('catalog contracts', () => {
     expect(slugify('Sinandomeng Rice 25 kg!')).toBe('sinandomeng-rice-25-kg');
     expect(slugify('  Ñiño — Café  ')).toBe('nino-cafe');
     expect(slugify('***')).toBe('');
+  });
+
+  it('lets the details form leave optional attributes empty, but not the API', () => {
+    const body = {
+      name: 'Dinorado Rice 5 kg',
+      attributeValues: { net_weight: 5, variety: undefined },
+    };
+    expect(productDetailsFormSchema.safeParse(body).success).toBe(true);
+    expect(updateProductSchema.safeParse(body).success).toBe(false);
   });
 
   it('accepts prices as decimal strings only, above zero, with centavos at most', () => {

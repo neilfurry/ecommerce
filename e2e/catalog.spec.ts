@@ -53,7 +53,7 @@ test.describe('Catalog, approval and inventory', () => {
     const admin = await adminContext.newPage();
     await admin.goto(`${ADMIN}/catalog/products`);
     await admin.getByRole('link', { name }).click();
-    await expect(admin.getByText('5 kg')).toBeVisible();
+    await expect(admin.getByText('5 kg', { exact: true })).toBeVisible();
     await admin.getByRole('button', { name: /Approve/ }).click();
     await admin.getByRole('alertdialog').getByRole('button', { name: 'Approve' }).click();
     await expect(admin.getByText('Product approved')).toBeVisible();

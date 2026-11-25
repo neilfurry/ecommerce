@@ -182,6 +182,17 @@ function api(overrides: Routes = {}, sessionBody: unknown = session()) {
             isRequired: true,
             sortOrder: 0,
           },
+          {
+            id: '0192f0a4-7b7c-7cc4-9a51-1f3a2b4c5e11',
+            categoryId: CATEGORY_ID,
+            code: 'variety',
+            name: 'Variety',
+            type: 'SELECT',
+            options: ['Sinandomeng', 'Dinorado'],
+            unit: null,
+            isRequired: false,
+            sortOrder: 1,
+          },
         ],
       }),
     'GET /brands': () => json(page([])),
@@ -328,6 +339,20 @@ describe('Seller Center catalog', () => {
   it('shows category attributes on the details tab', async () => {
     renderAt(`/products/${PRODUCT_ID}`, api());
     expect(await screen.findByLabelText('Net weight (kg) *')).toHaveValue('25');
+  });
+
+  it('saves details with an optional attribute left empty', async () => {
+    const fetchImpl = api({ [`PATCH /products/${PRODUCT_ID}`]: () => json(detail()) });
+    renderAt(`/products/${PRODUCT_ID}`, fetchImpl);
+    const weight = await screen.findByLabelText('Net weight (kg) *');
+    await userEvent.clear(weight);
+    await userEvent.type(weight, '5');
+    await userEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await vi.waitFor(() =>
+      expect(bodyOf(fetchImpl, 'PATCH', `/products/${PRODUCT_ID}`)?.attributeValues).toEqual({
+        net_weight: 5,
+      }),
+    );
   });
 
   it('warns that content changes to an approved product need approval again', async () => {

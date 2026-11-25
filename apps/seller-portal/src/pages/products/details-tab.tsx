@@ -30,7 +30,7 @@ import {
   type CategoryAttributeDto,
   type ProductDetail,
   type UpdateProductRequest,
-  updateProductSchema,
+  productDetailsFormSchema,
 } from '@marketplace/validation';
 import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
@@ -40,7 +40,7 @@ import { CategorySelect } from '../../components/catalog/category-select';
 
 type Values = UpdateProductRequest & {
   specifications: { name: string; value: string }[];
-  attributeValues: Record<string, string | number | boolean>;
+  attributeValues: Record<string, string | number | boolean | undefined>;
 };
 
 function AttributeField({
@@ -126,7 +126,7 @@ export function DetailsTab({ product, editable }: { product: ProductDetail; edit
   const stores = useMyStores();
   const [formError, setFormError] = useState<string | null>(null);
   const form = useForm<Values>({
-    resolver: zodResolver(updateProductSchema) as never,
+    resolver: zodResolver(productDetailsFormSchema) as never,
     values: {
       storeId: product.storeId,
       name: product.name,
@@ -151,9 +151,9 @@ export function DetailsTab({ product, editable }: { product: ProductDetail; edit
     const known = new Set((attributes.data?.attributes ?? []).map((a) => a.code));
     const attributeValues = Object.fromEntries(
       Object.entries(values.attributeValues ?? {}).filter(
-        ([code, v]) => known.has(code) && v !== '',
+        ([code, v]) => known.has(code) && v !== '' && v !== undefined,
       ),
-    );
+    ) as Record<string, string | number | boolean>;
     try {
       const saved = await update.mutateAsync({
         productId: product.id,
