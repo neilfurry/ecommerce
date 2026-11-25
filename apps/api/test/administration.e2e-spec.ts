@@ -1,3 +1,4 @@
+import { randomInt, randomUUID } from 'node:crypto';
 import { EMAIL_JOBS } from '@marketplace/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
@@ -171,6 +172,35 @@ describe('Administration (e2e)', () => {
       );
       expect(customers.totalItems).toBe(0);
       await admin.get('/api/v1/users?pageSize=500').expect(400);
+    });
+
+    it('matches mobile numbers only for phone-like searches', async () => {
+      // A staff email with exactly four digits, and a customer whose mobile contains them.
+      const four = String(randomInt(1000, 10_000));
+      const letters = randomUUID()
+        .replace(/[^a-f]/g, '')
+        .slice(0, 10);
+      const staff = await createUser(app, { roles: ['DELIVERY_STAFF'] });
+      staff.email = `digits.${letters}.${four}@e2e.test`;
+      await prisma.user.update({ where: { id: staff.id }, data: { email: staff.email } });
+      const customer = await createUser(app, {
+        roles: ['CUSTOMER'],
+        mobile: `+639${four}${String(randomInt(0, 100_000)).padStart(5, '0')}`,
+      });
+      const byEmail = adminUserListSchema.parse(
+        (await admin.get('/api/v1/users').query({ search: staff.email }).expect(200)).body,
+      );
+      expect(byEmail.items.map((u) => u.id)).toEqual([staff.id]);
+      const local = `0${customer.mobile!.slice(3)}`;
+      const byMobile = adminUserListSchema.parse(
+        (
+          await admin
+            .get('/api/v1/users')
+            .query({ search: `${local.slice(0, 4)} ${local.slice(4)}` })
+            .expect(200)
+        ).body,
+      );
+      expect(byMobile.items.map((u) => u.id)).toContain(customer.id);
     });
 
     it('changes staff roles; the new permissions apply on the next request', async () => {

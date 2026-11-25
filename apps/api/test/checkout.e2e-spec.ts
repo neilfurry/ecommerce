@@ -215,6 +215,77 @@ describe('Checkout (e2e)', () => {
     expect(await prisma.order.count({ where: { customerId: buyer.userId } })).toBe(1);
   });
 
+  it('creates one order when the same checkout is submitted twice at the same moment', async () => {
+    const buyer = await shopper(app);
+    const key = randomUUID();
+    const body = {
+      addressId: buyer.addressId,
+      buyNow: { variantId: mouse.variantId, quantity: 1 },
+    };
+    const [a, b] = await Promise.all([
+      placeOrder(buyer.client, body, key),
+      placeOrder(buyer.client, body, key),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect(a.body.id).toBe(b.body.id);
+    expect(await prisma.order.count({ where: { customerId: buyer.userId } })).toBe(1);
+    // Only one order's worth of stock is held.
+    expect(
+      await prisma.stockReservation.count({
+        where: { orderItem: { order: { customerId: buyer.userId } } },
+      }),
+    ).toBe(1);
+  });
+
+  it('checks out the cart without the lines saved for later, and merges a browser cart', async () => {
+    const buyer = await shopper(app);
+    await addToCart(buyer.client, laptop.variantId);
+    const withMouse = await addToCart(buyer.client, mouse.variantId);
+    const mouseLine = withMouse.groups
+      .flatMap((g) => g.lines)
+      .find((l) => l.variantId === mouse.variantId)!;
+    const saved = cartSchema.parse(
+      (
+        await buyer.client
+          .patch(`/api/v1/cart/items/${mouseLine.id}`)
+          .send({ savedForLater: true })
+          .expect(200)
+      ).body,
+    );
+    expect(saved.groups.flatMap((g) => g.lines.map((l) => l.variantId))).toEqual([
+      laptop.variantId,
+    ]);
+    expect(saved.saved.map((l) => l.variantId)).toEqual([mouse.variantId]);
+
+    // Signing in with a browser cart: new lines are added; for a variant already in the
+    // cart the larger quantity is kept (so merging twice never doubles it).
+    const browserCart = {
+      items: [
+        { variantId: keyboard.variantId, quantity: 2 },
+        { variantId: laptop.variantId, quantity: 1 },
+      ],
+    };
+    await buyer.client.post('/api/v1/cart/merge').send(browserCart).expect(200);
+    const merged = cartSchema.parse(
+      (await buyer.client.post('/api/v1/cart/merge').send(browserCart).expect(200)).body,
+    );
+    const quantities = Object.fromEntries(
+      merged.groups.flatMap((g) => g.lines.map((l) => [l.variantId, l.quantity])),
+    );
+    expect(quantities).toEqual({ [laptop.variantId]: 1, [keyboard.variantId]: 2 });
+
+    // The quote and the order cover the cart lines only; the saved mouse stays behind.
+    const q = await quote(buyer.client, { addressId: buyer.addressId });
+    expect(q.groups.flatMap((g) => g.lines.map((l) => l.variantId)).sort()).toEqual(
+      [laptop.variantId, keyboard.variantId].sort(),
+    );
+    const placed = await placeOrder(buyer.client, { addressId: buyer.addressId });
+    expect(placed.status).toBe(201);
+    const after = cartSchema.parse((await buyer.client.get('/api/v1/cart').expect(200)).body);
+    expect(after.groups).toEqual([]);
+    expect(after.saved.map((l) => l.variantId)).toEqual([mouse.variantId]);
+  });
+
   it('never accepts a client total: a different expected total is refused', async () => {
     const buyer = await shopper(app);
     const res = await buyer.client
@@ -588,9 +659,32 @@ describe('Checkout (e2e)', () => {
         ['NOSUCHCODE', 'NOT_APPLIED', 'This code is not valid.'],
       ]);
       expect(q.totals.couponDiscount).toBe('0.00');
-      // A sellers cannot create marketplace coupons; customers cannot create any.
+      // Sellers cannot create marketplace coupons; customers cannot create any.
       await sellerA.client.post('/api/v1/coupons').send({}).expect(403);
       await buyer.client.post('/api/v1/seller/coupons').send({}).expect(403);
+
+      // Once per customer: the second order cannot use it again.
+      const once = await coupon(admin, '/api/v1/coupons', {
+        code: code('ONCE'),
+        name: 'Once each',
+        type: 'FIXED_AMOUNT',
+        value: '50',
+        perCustomerLimit: 1,
+      });
+      const body = {
+        addressId: buyer.addressId,
+        buyNow: { variantId: mouse.variantId, quantity: 1 },
+        couponCodes: [once.code],
+      };
+      expect((await placeOrder(buyer.client, body)).status).toBe(201);
+      const again = await quote(buyer.client, body);
+      expect(again.coupons).toEqual([
+        expect.objectContaining({
+          code: once.code,
+          status: 'NOT_APPLIED',
+          message: 'You have already used this coupon.',
+        }),
+      ]);
     });
 
     it('never lets a limited coupon be used more often than its limit, even at once', async () => {
@@ -648,6 +742,16 @@ describe('Checkout (e2e)', () => {
         .send({ variantId: laptop.variantId, quantity: 999 });
       expect(add.status).toBe(409);
       expect(errorCode(add)).toBe('INSUFFICIENT_STOCK');
+
+      // An order cannot be placed without an idempotency key.
+      const noKey = await buyer.client.post('/api/v1/checkout/orders').send({
+        addressId: buyer.addressId,
+        buyNow: { variantId: mouse.variantId, quantity: 1 },
+        paymentMethod: 'COD',
+        expectedGrandTotal: '1.00',
+      });
+      expect(noKey.status).toBe(400);
+      expect(await prisma.order.count({ where: { customerId: buyer.userId } })).toBe(0);
     });
 
     it('reports sellers that cannot ship yet and products that stopped selling', async () => {

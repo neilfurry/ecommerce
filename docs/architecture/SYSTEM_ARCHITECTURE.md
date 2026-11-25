@@ -69,8 +69,12 @@ apps/api/src
 ├── infrastructure/          Global technical modules: prisma, redis, storage, queue, throttling, logging
 └── modules/                 Domain modules: health, auth (incl. MFA), users, roles, wholesale, sellers, stores,
                              seller-members, audit, notifications, files, dev-tools,
-                             catalog (categories, brands), products (incl. photos, public catalog),
-                             pricing (price engine, quotes), inventory (warehouses, ledger, reservations)
+                             catalog (categories, brands), products (incl. photos),
+                             pricing (price engine, quotes), inventory (warehouses, ledger, reservations),
+                             storefront (search provider, catalog, home page, banners, featured),
+                             locations, addresses, wishlist, reviews, cart, promotions (coupons,
+                             flash sales), shipping (provider interface, mock), checkout (pricing,
+                             placing orders), orders, settings
 ```
 
 ### Catalog, pricing and inventory (Phase 3)
@@ -86,6 +90,30 @@ apps/api/src
 - **Product photos** are validated (extension, content, size, pixel limits) and re-encoded to
   WebP with sharp inside the API request (large 1600 px + 400 px thumbnail, metadata removed).
   The `image-processing` queue is kept for heavier work later.
+
+### Storefront, cart and checkout (Phase 4)
+
+- **Search** goes through the `SearchProvider` interface; `PostgresSearchProvider` uses
+  full-text prefix search, trigram similarity and a per-product current-price subquery
+  ([ADR 0018](adr/0018-storefront-search-behind-a-provider.md)).
+- **Locations** are the PSGC tables in `ph_locations`, imported by `pnpm db:import-locations`;
+  addresses and warehouses store the codes
+  ([ADR 0020](adr/0020-philippine-locations-from-psgc.md)).
+- **Carts** are stored for signed-in customers and kept in the browser for guests (variant ids
+  and quantities only), merged at sign-in. Every read re-prices the lines.
+- **Checkout** has one calculation, `CheckoutPricingService.plan()`, used for the quote and
+  again inside the order transaction. It produces one parent order, one seller order per
+  seller with its shipping group, and order items with price snapshots, discounts, VAT and
+  commission. Coupon uses, flash-sale units and stock are taken with guarded updates or row
+  locks, so parallel checkouts cannot oversell. Placing an order needs an idempotency key
+  ([ADR 0019](adr/0019-checkout-pricing-and-multi-seller-orders.md)).
+- **Shipping** quotes come from a `ShippingProvider`; the development `MockShippingProvider`
+  uses an editable rate table and is refused in production
+  ([ADR 0021](adr/0021-shipping-provider-interface-and-mock-rates.md)).
+- **Settings** (VAT, charges, payment methods and window, shipping rates) are validated JSON
+  in `platform_settings` with defaults in code; commission rates are in `commission_rules`.
+- **Order cancellation** (`cancelOrderInTx` in `@marketplace/database`) is shared by the API
+  (customer cancels) and the worker (unpaid orders expire).
 
 ### Request lifecycle
 
@@ -166,6 +194,11 @@ ADR 0013 (sellers and isolation), ADR 0014 (two-step verification).
   function as the API (from `@marketplace/database`).
 - **Catalog emails.** `email.product-decision` (approved, rejected, taken down) and
   `email.low-stock` are sent through the email queue.
+- **Order emails and expiry (Phase 4).** `email.order-placed` (customer), `email.seller-new-order`
+  (one per seller, only that seller's items) and `email.order-cancelled`. A second scheduler on
+  `order-processing` runs `order-processing.expire-unpaid-orders` every 60 s. It cancels orders
+  waiting for an online payment past their deadline, gives back their stock, coupon uses and
+  flash-sale units, and emails the customer.
 - **Development samples.** `system.dev-sample` can simulate failures to demonstrate retries and
   dead-lettering, and `email.dev-test` sends a test email (to Mailpit locally). Both refuse to run
   unless `DEV_TOOLS_ENABLED=true`.
@@ -208,7 +241,13 @@ ADR 0013 (sellers and isolation), ADR 0014 (two-step verification).
   - patterns: ConfirmDialog, DataTable (loading, empty, error, pagination), Pagination,
     Breadcrumbs, EmptyState, ErrorState, PageHeader, SidebarLayout, NotFound,
     SystemStatusPanel, AuthShell;
-  - since Phase 2: Checkbox, Tabs, DropdownMenu, PasswordInput.
+  - since Phase 2: Checkbox, Tabs, DropdownMenu, PasswordInput;
+  - since Phase 4: `formatMoney`, `SellerOrderView` and `SellerOrderStatusBadge` (one suborder
+    view shared by the Seller Center and the Admin Console). `@marketplace/auth-ui` also holds
+    `CouponManager`, used by both portals.
+- **Storefront shopping:** the guest cart lives in `localStorage` behind `useSyncExternalStore`
+  (`lib/guest-cart.ts`). The checkout page shows only amounts from `POST /checkout/quote` and
+  sends the shown total as `expectedGrandTotal`, with one idempotency key per attempt.
 - **Sessions in the browser:** `useSession()` is the single source of truth. `RequireSession`
   sends signed-out users to `/sign-in` and back afterwards; `RequirePermission` hides pages a
   role may not open; navigation only lists permitted pages. `SessionSync` clears cached data

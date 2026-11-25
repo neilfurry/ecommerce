@@ -645,8 +645,18 @@ describe('Inventory (e2e)', () => {
     await move(seller, { warehouseId: main.id, variantId, type: 'STOCK_IN', quantity: 7 }).expect(
       201,
     );
+    // Look the seller up by name: a database used for many runs has more sellers than a page.
+    const { businessName } = await prisma.seller.findUniqueOrThrow({
+      where: { id: seller.sellerId },
+      select: { businessName: true },
+    });
     const overview = inventoryOverviewSchema.parse(
-      (await admin.get('/api/v1/inventory/overview?pageSize=100').expect(200)).body,
+      (
+        await admin
+          .get('/api/v1/inventory/overview')
+          .query({ search: businessName, pageSize: 100 })
+          .expect(200)
+      ).body,
     );
     expect(overview.totals.onHand).toBeGreaterThanOrEqual(7);
     expect(overview.sellers.items.find((s) => s.sellerId === seller.sellerId)).toMatchObject({
