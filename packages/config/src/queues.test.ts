@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultJobOptions,
   EMAIL_JOBS,
+  ORDER_JOBS,
   QUEUE_DEFINITIONS,
   QUEUE_NAMES,
   SYSTEM_JOBS,
@@ -54,5 +55,7 @@ describe('queue registry', () => {
   it('namespaces job names by queue', () => {
     for (const job of Object.values(SYSTEM_JOBS)) expect(job.startsWith('system.')).toBe(true);
     for (const job of Object.values(EMAIL_JOBS)) expect(job.startsWith('email.')).toBe(true);
+    for (const job of Object.values(ORDER_JOBS))
+      expect(job.startsWith('order-processing.')).toBe(true);
   });
 });

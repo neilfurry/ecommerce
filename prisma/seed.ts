@@ -4,7 +4,8 @@
  *
  * Always: reference data (currencies) and the role/permission catalog.
  * Development only (SEED_DEMO_USERS=true and NODE_ENV is not production): one demo
- * account per frontend, all with the password in SEED_DEMO_PASSWORD.
+ * account per frontend, all with the password in SEED_DEMO_PASSWORD; a demo seller with a
+ * store; demo categories, brands, warehouses and an approved product with stock.
  */
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
@@ -15,6 +16,7 @@ import {
   ensureUser,
   syncRolesAndPermissions,
 } from './src/seed-identity';
+import { ensureCatalogReference, ensureDemoCatalog } from './src/seed-catalog';
 
 loadDotenv({ path: path.resolve(__dirname, '../.env'), quiet: true });
 
@@ -57,6 +59,9 @@ async function main(): Promise<void> {
         `Demo accounts: ${created} created, ${DEMO_USERS.length - created} already present.`,
       );
       if (await ensureDemoSeller(prisma)) console.log('Demo seller and store created.');
+      await ensureCatalogReference(prisma);
+      console.log('Demo categories and brands synchronised.');
+      if (await ensureDemoCatalog(prisma)) console.log('Demo warehouses and product created.');
     }
   } finally {
     await prisma.$disconnect();

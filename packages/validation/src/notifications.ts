@@ -51,6 +51,33 @@ export const sellerInvitationJobSchema = z.object({
   link: z.url(),
   expiresInHours: z.number().int(),
 });
+/** A product was approved, rejected or taken down. Sent to the seller's business email. */
+export const productDecisionJobSchema = z.object({
+  to: z.email(),
+  businessName: z.string(),
+  productName: z.string(),
+  decision: z.enum(['APPROVED', 'REJECTED', 'TAKEN_DOWN']),
+  note: z.string().nullable(),
+  link: z.url(),
+});
+/** Available stock of one or more variants fell to their low-stock threshold. */
+export const lowStockJobSchema = z.object({
+  to: z.email(),
+  businessName: z.string(),
+  items: z
+    .array(
+      z.object({
+        productName: z.string(),
+        variantTitle: z.string(),
+        sku: z.string(),
+        warehouse: z.string(),
+        available: z.number().int(),
+        threshold: z.number().int(),
+      }),
+    )
+    .min(1),
+  link: z.url(),
+});
 export const smsOtpJobSchema = z.object({
   /** E.164 */
   to: z.string().regex(/^\+[1-9]\d{7,14}$/),
@@ -65,3 +92,5 @@ export type WholesaleDecisionJob = z.infer<typeof wholesaleDecisionJobSchema>;
 export type SmsOtpJob = z.infer<typeof smsOtpJobSchema>;
 export type SellerStatusJob = z.infer<typeof sellerStatusJobSchema>;
 export type SellerInvitationJob = z.infer<typeof sellerInvitationJobSchema>;
+export type ProductDecisionJob = z.infer<typeof productDecisionJobSchema>;
+export type LowStockJob = z.infer<typeof lowStockJobSchema>;

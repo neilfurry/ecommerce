@@ -82,7 +82,12 @@ jobs:
           PGPASSWORD=marketplace_dev_password psql -h localhost -U marketplace -d marketplace \
             -c 'CREATE DATABASE marketplace_shadow'
           pnpm db:generate
-          pnpm db:check
+          if ! pnpm db:check; then
+            echo "::error::Migrations differ from schema.prisma. SQL that would bring them in line:"
+            pnpm --filter @marketplace/database exec prisma migrate diff \
+              --from-migrations migrations --to-schema schema.prisma --script
+            exit 1
+          fi
         env:
           SHADOW_DATABASE_URL: postgresql://marketplace:marketplace_dev_password@localhost:5432/marketplace_shadow
       - run: pnpm db:deploy

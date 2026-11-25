@@ -5,8 +5,11 @@ import { DevSampleHandler } from '../jobs/dev-sample.handler';
 import { DevTestEmailHandler } from '../jobs/dev-test-email.handler';
 import { HeartbeatHandler } from '../jobs/heartbeat.handler';
 import { SmsOtpHandler } from '../jobs/sms-otp.handler';
+import { ReleaseExpiredReservationsHandler } from '../jobs/reservation-sweep';
 import {
+  LowStockEmailHandler,
   PasswordResetEmailHandler,
+  ProductDecisionEmailHandler,
   SellerInvitationEmailHandler,
   SellerStatusEmailHandler,
   StaffInvitationEmailHandler,
@@ -47,6 +50,8 @@ export class EmailProcessor extends DomainProcessor {
     wholesaleDecision: WholesaleDecisionEmailHandler,
     sellerStatus: SellerStatusEmailHandler,
     sellerInvitation: SellerInvitationEmailHandler,
+    productDecision: ProductDecisionEmailHandler,
+    lowStock: LowStockEmailHandler,
   ) {
     super(
       QUEUE_NAMES.EMAIL,
@@ -58,6 +63,8 @@ export class EmailProcessor extends DomainProcessor {
         wholesaleDecision,
         sellerStatus,
         sellerInvitation,
+        productDecision,
+        lowStock,
       ],
       config,
       deadLetters,
@@ -95,8 +102,12 @@ export class PaymentEventsProcessor extends DomainProcessor {
 
 @Processor(QUEUE_NAMES.ORDER_PROCESSING)
 export class OrderProcessingProcessor extends DomainProcessor {
-  constructor(config: WorkerConfig, deadLetters: DeadLetterService) {
-    super(QUEUE_NAMES.ORDER_PROCESSING, [], config, deadLetters);
+  constructor(
+    config: WorkerConfig,
+    deadLetters: DeadLetterService,
+    releaseExpiredReservations: ReleaseExpiredReservationsHandler,
+  ) {
+    super(QUEUE_NAMES.ORDER_PROCESSING, [releaseExpiredReservations], config, deadLetters);
   }
 }
 

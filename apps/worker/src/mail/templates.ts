@@ -3,6 +3,8 @@ import type {
   PasswordResetJob,
   SellerInvitationJob,
   SellerStatusJob,
+  ProductDecisionJob,
+  LowStockJob,
   StaffInvitationJob,
   VerifyEmailJob,
   WholesaleDecisionJob,
@@ -182,6 +184,55 @@ export function sellerInvitationTemplate(job: SellerInvitationJob): RenderedEmai
     ],
     action: { label: 'Accept invitation', url: job.link },
     footnote: `This invitation expires in ${plural(job.expiresInHours, 'hour')}. If you were not expecting it, ignore this email.`,
+  });
+}
+
+const PRODUCT_DECISION_COPY: Record<
+  ProductDecisionJob['decision'],
+  { subject: string; body: (name: string) => string; action: string }
+> = {
+  APPROVED: {
+    subject: 'Product approved',
+    body: (name) => `"${name}" is approved and visible to shoppers.`,
+    action: 'View product',
+  },
+  REJECTED: {
+    subject: 'Product not approved',
+    body: (name) => `"${name}" was not approved. Make the changes below and submit it again.`,
+    action: 'Fix the product',
+  },
+  TAKEN_DOWN: {
+    subject: 'Product taken down',
+    body: (name) =>
+      `"${name}" was taken down and is hidden from shoppers. Make the changes below and submit it for approval again.`,
+    action: 'Fix the product',
+  },
+};
+
+export function productDecisionTemplate(job: ProductDecisionJob): RenderedEmail {
+  const copy = PRODUCT_DECISION_COPY[job.decision];
+  return render(`${copy.subject}: ${job.productName}`, {
+    greeting: `Hello ${job.businessName},`,
+    paragraphs: [
+      copy.body(job.productName),
+      ...(job.note ? [`Message from the marketplace team: ${job.note}`] : []),
+    ],
+    action: { label: copy.action, url: job.link },
+  });
+}
+
+export function lowStockTemplate(job: LowStockJob): RenderedEmail {
+  return render(`Low stock: ${plural(job.items.length, 'item')}`, {
+    greeting: `Hello ${job.businessName},`,
+    paragraphs: [
+      'These items have reached their low-stock level:',
+      ...job.items.map(
+        (i) =>
+          `${i.productName} — ${i.variantTitle} (${i.sku}) in ${i.warehouse}: ${i.available} available (alert at ${i.threshold}).`,
+      ),
+      'Restock them to avoid missing sales.',
+    ],
+    action: { label: 'Open inventory', url: job.link },
   });
 }
 

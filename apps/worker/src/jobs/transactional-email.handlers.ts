@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { EMAIL_JOBS } from '@marketplace/config';
 import {
+  lowStockJobSchema,
   passwordResetJobSchema,
+  productDecisionJobSchema,
   sellerInvitationJobSchema,
   sellerStatusJobSchema,
   staffInvitationJobSchema,
@@ -12,7 +14,9 @@ import { type Job, UnrecoverableError } from 'bullmq';
 import type { z } from 'zod';
 import { MailerService, type SentEmail } from '../mail/mailer.service';
 import {
+  lowStockTemplate,
   passwordResetTemplate,
+  productDecisionTemplate,
   type RenderedEmail,
   sellerInvitationTemplate,
   sellerStatusTemplate,
@@ -111,7 +115,31 @@ export class SellerInvitationEmailHandler extends TemplatedEmailHandler<
   }
 }
 
+@Injectable()
+export class ProductDecisionEmailHandler extends TemplatedEmailHandler<
+  typeof productDecisionJobSchema
+> {
+  readonly jobName = EMAIL_JOBS.PRODUCT_DECISION;
+  protected readonly schema = productDecisionJobSchema;
+  protected render = productDecisionTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
+@Injectable()
+export class LowStockEmailHandler extends TemplatedEmailHandler<typeof lowStockJobSchema> {
+  readonly jobName = EMAIL_JOBS.LOW_STOCK;
+  protected readonly schema = lowStockJobSchema;
+  protected render = lowStockTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
 export const TRANSACTIONAL_EMAIL_HANDLERS = [
+  ProductDecisionEmailHandler,
+  LowStockEmailHandler,
   SellerStatusEmailHandler,
   SellerInvitationEmailHandler,
   VerifyEmailHandler,

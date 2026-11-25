@@ -7,7 +7,12 @@ import { WorkerConfigModule } from './config/worker-config.module';
 import { DevSampleHandler } from './jobs/dev-sample.handler';
 import { DevTestEmailHandler } from './jobs/dev-test-email.handler';
 import { HeartbeatHandler } from './jobs/heartbeat.handler';
+import { WorkerDatabase } from './database/database.provider';
 import { HeartbeatScheduler } from './jobs/heartbeat.scheduler';
+import {
+  ReleaseExpiredReservationsHandler,
+  ReservationSweepScheduler,
+} from './jobs/reservation-sweep';
 import { SmsOtpHandler } from './jobs/sms-otp.handler';
 import { TRANSACTIONAL_EMAIL_HANDLERS } from './jobs/transactional-email.handlers';
 import { MailerService } from './mail/mailer.service';
@@ -71,6 +76,9 @@ import { smsProvider } from './sms/sms.module';
     smsProvider,
     SmsOtpHandler,
     HeartbeatScheduler,
+    WorkerDatabase,
+    ReleaseExpiredReservationsHandler,
+    ReservationSweepScheduler,
     ...DOMAIN_PROCESSORS,
   ],
 })

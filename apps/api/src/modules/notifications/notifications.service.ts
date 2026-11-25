@@ -4,6 +4,8 @@ import { EMAIL_JOBS, NOTIFICATION_JOBS, QUEUE_NAMES } from '@marketplace/config'
 import type {
   PasswordResetJob,
   SellerInvitationJob,
+  ProductDecisionJob,
+  LowStockJob,
   SellerStatusJob,
   SmsOtpJob,
   StaffInvitationJob,
@@ -47,6 +49,14 @@ export class NotificationsService {
 
   sendSellerInvitation(job: SellerInvitationJob) {
     return this.emailQueue.add(EMAIL_JOBS.SELLER_INVITATION, job);
+  }
+
+  sendProductDecision(job: ProductDecisionJob) {
+    return this.emailQueue.add(EMAIL_JOBS.PRODUCT_DECISION, job);
+  }
+
+  sendLowStock(job: LowStockJob) {
+    return this.emailQueue.add(EMAIL_JOBS.LOW_STOCK, job);
   }
 
   /**

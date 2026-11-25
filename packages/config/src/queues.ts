@@ -135,11 +135,18 @@ export const EMAIL_JOBS = {
   WHOLESALE_DECISION: 'email.wholesale-decision',
   SELLER_STATUS: 'email.seller-status',
   SELLER_INVITATION: 'email.seller-invitation',
+  PRODUCT_DECISION: 'email.product-decision',
+  LOW_STOCK: 'email.low-stock',
 } as const;
 
 export const NOTIFICATION_JOBS = {
   /** One-time sign-in / sign-up code by SMS. Time-critical; never retried for long. */
   SMS_OTP: 'notifications.sms-otp',
+} as const;
+
+export const ORDER_JOBS = {
+  /** Periodic: gives back stock held by checkout reservations that expired. */
+  RELEASE_EXPIRED_RESERVATIONS: 'order-processing.release-expired-reservations',
 } as const;
 
 export const DEAD_LETTER_JOBS = {

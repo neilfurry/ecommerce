@@ -24,6 +24,10 @@ export const ALLOWED_CONTENT_TYPES: Record<FilePurpose, readonly string[]> = {
   [FilePurpose.SELLER_DOCUMENT]: ['application/pdf', 'image/jpeg', 'image/png'],
   [FilePurpose.STORE_LOGO]: ['image/png', 'image/jpeg', 'image/webp'],
   [FilePurpose.STORE_BANNER]: ['image/png', 'image/jpeg', 'image/webp'],
+  // Always our own re-encoded WebP output (see image-processor.ts).
+  [FilePurpose.PRODUCT_IMAGE]: ['image/webp'],
+  [FilePurpose.PRODUCT_IMAGE_THUMBNAIL]: ['image/webp'],
+  [FilePurpose.CATEGORY_IMAGE]: ['image/webp'],
 };
 
 export interface UploadFileInput {
