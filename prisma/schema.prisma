@@ -45,6 +45,8 @@ model Currency {
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   products Product[]
+  orders   Order[]
+  coupons  Coupon[]
 
   @@map("currencies")
 }
@@ -80,6 +82,8 @@ enum FilePurpose {
   PRODUCT_IMAGE_THUMBNAIL
   /// Category images. Public.
   CATEGORY_IMAGE
+  /// Storefront banners (home page hero and promotions). Public.
+  HOME_BANNER
 
   @@map("file_purpose")
 }
@@ -108,6 +112,7 @@ model StoredFile {
   categoryImage  Category?       @relation("CategoryImage")
   productImage   ProductImage?   @relation("ProductImageFile")
   productThumb   ProductImage?   @relation("ProductImageThumbnail")
+  homeBanner     HomeBanner?     @relation("HomeBannerImage")
 
   @@unique([bucket, objectKey])
   @@index([purpose, status, createdAt])
@@ -173,6 +178,19 @@ model User {
   customerPrices       CustomerPrice[]        @relation("CustomerPrices")
   inventoryMovements   InventoryMovement[]    @relation("InventoryMovementActor")
   stockTransfers       StockTransfer[]        @relation("StockTransferCreator")
+  addresses            CustomerAddress[]
+  cartItems            CartItem[]
+  wishlistItems        WishlistItem[]
+  reviews              ProductReview[]        @relation("ReviewAuthor")
+  moderatedReviews     ProductReview[]        @relation("ReviewModerator")
+  orders               Order[]                @relation("OrderCustomer")
+  cancelledOrders      Order[]                @relation("OrderCanceller")
+  orderEvents          OrderEvent[]           @relation("OrderEventActor")
+  couponRedemptions    CouponRedemption[]
+  createdCoupons       Coupon[]               @relation("CouponCreator")
+  createdBanners       HomeBanner[]           @relation("HomeBannerCreator")
+  createdFlashSales    FlashSale[]            @relation("FlashSaleCreator")
+  platformSettings     PlatformSetting[]
 
   @@index([status, createdAt])
   @@map("users")
@@ -529,6 +547,10 @@ model Seller {
   inventoryMovements InventoryMovement[]
   stockTransfers     StockTransfer[]
   stockReservations  StockReservation[]
+  sellerOrders       SellerOrder[]
+  coupons            Coupon[]
+  flashSaleItems     FlashSaleItem[]
+  reviews            ProductReview[]
 
   @@index([status, submittedAt])
   @@index([reviewedById])
@@ -710,6 +732,8 @@ model Store {
   bannerFile StoredFile?    @relation("StoreBanner", fields: [bannerFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   settings   StoreSettings?
   products   Product[]
+  featured   FeaturedStore?
+  orders     SellerOrder[]
 
   @@index([sellerId, createdAt])
   @@index([status])
@@ -764,11 +788,12 @@ model Category {
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  parent     Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  children   Category[]          @relation("CategoryTree")
-  imageFile  StoredFile?         @relation("CategoryImage", fields: [imageFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  attributes CategoryAttribute[]
-  products   Product[]
+  parent          Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children        Category[]          @relation("CategoryTree")
+  imageFile       StoredFile?         @relation("CategoryImage", fields: [imageFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  attributes      CategoryAttribute[]
+  products        Product[]
+  commissionRules CommissionRule[]
 
   @@index([parentId, sortOrder])
   @@index([status])
@@ -898,6 +923,11 @@ model Product {
   /// Set while the marketplace has taken the product down; the seller must edit and resubmit.
   moderatedAt               DateTime?     @map("moderated_at") @db.Timestamptz(3)
   archivedAt                DateTime?     @map("archived_at") @db.Timestamptz(3)
+  /// Average of published review ratings (0 when there are none), kept with the reviews.
+  ratingAverage             Decimal       @default(0) @map("rating_average") @db.Decimal(3, 2)
+  ratingCount               Int           @default(0) @map("rating_count")
+  /// Units sold in placed orders (cancelled orders are subtracted); for "best sellers".
+  soldCount                 Int           @default(0) @map("sold_count")
   createdById               String        @map("created_by_id") @db.Uuid
   createdAt                 DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                 DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -915,6 +945,11 @@ model Product {
   events         ProductEvent[]
   priceTiers     PriceTier[]
   customerPrices CustomerPrice[]
+  wishlistItems  WishlistItem[]
+  reviews        ProductReview[]
+  featured       FeaturedProduct?
+  flashSaleItems FlashSaleItem[]
+  orderItems     OrderItem[]
 
   @@unique([storeId, slug])
   @@index([sellerId, status, updatedAt])
@@ -923,6 +958,8 @@ model Product {
   @@index([brandId])
   @@index([currency])
   @@index([reviewedById])
+  @@index([status, soldCount])
+  @@index([status, ratingAverage])
   @@index([createdById])
   @@map("products")
 }
@@ -1043,6 +1080,9 @@ model ProductVariant {
   movements      InventoryMovement[]
   transferItems  StockTransferItem[]
   reservations   StockReservation[]
+  cartItems      CartItem[]
+  flashSaleItems FlashSaleItem[]
+  orderItems     OrderItem[]
 
   @@unique([sellerId, sku])
   @@unique([productId, optionKey])
@@ -1163,6 +1203,11 @@ model Warehouse {
   city         String          @db.VarChar(100)
   province     String          @db.VarChar(100)
   postalCode   String?         @map("postal_code") @db.VarChar(4)
+  /// PSGC codes of the address (shipping origin); the text fields above are kept for display.
+  regionCode   String?         @map("region_code") @db.Char(10)
+  provinceCode String?         @map("province_code") @db.Char(10)
+  cityCode     String?         @map("city_code") @db.Char(10)
+  barangayCode String?         @map("barangay_code") @db.Char(10)
   contactName  String?         @map("contact_name") @db.VarChar(120)
   /// E.164.
   phone        String?         @db.VarChar(16)
@@ -1172,15 +1217,24 @@ model Warehouse {
   createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  seller        Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  stockLevels   StockLevel[]
-  movements     InventoryMovement[]
-  transfersFrom StockTransfer[]     @relation("TransferFrom")
-  transfersTo   StockTransfer[]     @relation("TransferTo")
-  reservations  StockReservation[]
+  seller           Seller               @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  stockLevels      StockLevel[]
+  movements        InventoryMovement[]
+  transfersFrom    StockTransfer[]      @relation("TransferFrom")
+  transfersTo      StockTransfer[]      @relation("TransferTo")
+  reservations     StockReservation[]
+  regionLocation   PhLocation?          @relation("WarehouseRegion", fields: [regionCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  provinceLocation PhLocation?          @relation("WarehouseProvince", fields: [provinceCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  cityLocation     PhLocation?          @relation("WarehouseCity", fields: [cityCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  barangayLocation PhLocation?          @relation("WarehouseBarangay", fields: [barangayCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  shippingGroups   OrderShippingGroup[]
 
   @@unique([sellerId, code])
   @@index([sellerId, status])
+  @@index([regionCode])
+  @@index([provinceCode])
+  @@index([cityCode])
+  @@index([barangayCode])
   @@map("warehouses")
 }
 
@@ -1318,7 +1372,7 @@ model StockTransferItem {
 }
 
 enum StockReservationStatus {
-  /// Holding stock until expires_at.
+  /// Holding stock until expires_at (or, for a placed order, until fulfilment or cancellation).
   ACTIVE
   /// Turned into a stock deduction (SALE movement) when the order was fulfilled.
   CONVERTED
@@ -1342,9 +1396,10 @@ model StockReservation {
   status            StockReservationStatus @default(ACTIVE)
   /// The checkout session (or other process) that holds the stock.
   checkoutReference String                 @map("checkout_reference") @db.VarChar(100)
-  /// The order item, once the order exists (orders arrive in the next phase).
+  /// The order item, once the order exists.
   orderItemId       String?                @map("order_item_id") @db.Uuid
-  expiresAt         DateTime               @map("expires_at") @db.Timestamptz(3)
+  /// Null only for holds of placed orders, which last until fulfilment or cancellation.
+  expiresAt         DateTime?              @map("expires_at") @db.Timestamptz(3)
   releasedAt        DateTime?              @map("released_at") @db.Timestamptz(3)
   convertedAt       DateTime?              @map("converted_at") @db.Timestamptz(3)
   createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1354,6 +1409,7 @@ model StockReservation {
   variant    ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   warehouse  Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   stockLevel StockLevel          @relation(fields: [stockLevelId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  orderItem  OrderItem?          @relation(fields: [orderItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   movements  InventoryMovement[]
 
   @@index([status, expiresAt])
@@ -1364,4 +1420,704 @@ model StockReservation {
   @@index([variantId])
   @@index([warehouseId])
   @@map("stock_reservations")
+}
+
+// -----------------------------------------------------------------------------
+// Storefront, cart and checkout (Phase 4)
+// -----------------------------------------------------------------------------
+
+/// Levels of the Philippine Standard Geographic Code (PSGC).
+enum LocationLevel {
+  REGION
+  PROVINCE
+  CITY
+  MUNICIPALITY
+  /// Sub-municipality (the districts of the City of Manila).
+  SUB_MUNICIPALITY
+  BARANGAY
+
+  @@map("location_level")
+}
+
+/// Philippine regions, provinces, cities/municipalities and barangays, imported from the PSA's
+/// PSGC publication (`pnpm db:import-locations`). Configurable data, not code: a newer
+/// publication is imported the same way, and locations can be switched off.
+model PhLocation {
+  /// 10-digit PSGC code.
+  code         String        @id @db.Char(10)
+  name         String        @db.VarChar(150)
+  level        LocationLevel
+  parentCode   String?       @map("parent_code") @db.Char(10)
+  regionCode   String        @map("region_code") @db.Char(10)
+  /// Null in the National Capital Region, which has no provinces.
+  provinceCode String?       @map("province_code") @db.Char(10)
+  /// The city or municipality a barangay (or Manila district) belongs to.
+  cityCode     String?       @map("city_code") @db.Char(10)
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  parent             PhLocation?       @relation("LocationTree", fields: [parentCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  children           PhLocation[]      @relation("LocationTree")
+  addressRegions     CustomerAddress[] @relation("AddressRegion")
+  addressProvinces   CustomerAddress[] @relation("AddressProvince")
+  addressCities      CustomerAddress[] @relation("AddressCity")
+  addressBarangays   CustomerAddress[] @relation("AddressBarangay")
+  warehouseRegions   Warehouse[]       @relation("WarehouseRegion")
+  warehouseProvinces Warehouse[]       @relation("WarehouseProvince")
+  warehouseCities    Warehouse[]       @relation("WarehouseCity")
+  warehouseBarangays Warehouse[]       @relation("WarehouseBarangay")
+
+  @@index([parentCode, name])
+  @@index([level, name])
+  @@index([cityCode, level])
+  @@map("ph_locations")
+}
+
+/// A customer's saved delivery address. Orders copy the address, so editing or deleting one
+/// never changes an order.
+model CustomerAddress {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  /// e.g. "Home", "Office".
+  label         String?  @db.VarChar(40)
+  recipientName String   @map("recipient_name") @db.VarChar(120)
+  /// E.164.
+  mobile        String   @db.VarChar(16)
+  regionCode    String   @map("region_code") @db.Char(10)
+  provinceCode  String?  @map("province_code") @db.Char(10)
+  cityCode      String   @map("city_code") @db.Char(10)
+  barangayCode  String   @map("barangay_code") @db.Char(10)
+  postalCode    String   @map("postal_code") @db.VarChar(4)
+  /// House or unit number and street.
+  streetAddress String   @map("street_address") @db.VarChar(200)
+  /// Building, floor, subdivision or landmark (optional).
+  addressLine2  String?  @map("address_line2") @db.VarChar(200)
+  /// One default per customer (partial unique index).
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  region   PhLocation  @relation("AddressRegion", fields: [regionCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  province PhLocation? @relation("AddressProvince", fields: [provinceCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  city     PhLocation  @relation("AddressCity", fields: [cityCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  barangay PhLocation  @relation("AddressBarangay", fields: [barangayCode], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  orders   Order[]
+
+  @@index([userId, createdAt])
+  @@index([regionCode])
+  @@index([provinceCode])
+  @@index([cityCode])
+  @@index([barangayCode])
+  @@map("customer_addresses")
+}
+
+/// A line in a signed-in customer's cart (or saved for later). Prices are never stored as
+/// the truth: the cart is re-priced by the server every time it is read.
+model CartItem {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  variantId     String   @map("variant_id") @db.Uuid
+  quantity      Int
+  savedForLater Boolean  @default(false) @map("saved_for_later")
+  /// The unit price the customer last saw, to point out price changes.
+  lastSeenPrice Decimal? @map("last_seen_price") @db.Decimal(19, 4)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([userId, variantId])
+  @@index([variantId])
+  @@map("cart_items")
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@map("wishlist_items")
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  /// Hidden by the marketplace (moderation); not counted in the rating.
+  HIDDEN
+
+  @@map("review_status")
+}
+
+/// A rating and review for a product the customer bought: one per order item.
+model ProductReview {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  productId      String       @map("product_id") @db.Uuid
+  sellerId       String       @map("seller_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  orderItemId    String       @unique @map("order_item_id") @db.Uuid
+  rating         Int          @db.SmallInt
+  title          String?      @db.VarChar(120)
+  body           String?      @db.VarChar(4000)
+  status         ReviewStatus @default(PUBLISHED)
+  moderationNote String?      @map("moderation_note") @db.VarChar(500)
+  moderatedById  String?      @map("moderated_by_id") @db.Uuid
+  moderatedAt    DateTime?    @map("moderated_at") @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  seller      Seller    @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user        User      @relation("ReviewAuthor", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  moderatedBy User?     @relation("ReviewModerator", fields: [moderatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([productId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([status, createdAt])
+  @@index([moderatedById])
+  @@map("product_reviews")
+}
+
+// ---- Storefront content -------------------------------------------------------------
+
+enum PromotionStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("promotion_status")
+}
+
+enum BannerPlacement {
+  /// The large rotating banner at the top of the home page.
+  HERO
+  /// Smaller promotional banners further down.
+  PROMO
+
+  @@map("banner_placement")
+}
+
+model HomeBanner {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  title       String          @db.VarChar(120)
+  subtitle    String?         @db.VarChar(200)
+  imageFileId String          @unique @map("image_file_id") @db.Uuid
+  /// A path inside the storefront, e.g. "/c/rice-and-grains" or "/search?q=rice".
+  linkUrl     String?         @map("link_url") @db.VarChar(300)
+  placement   BannerPlacement @default(HERO)
+  position    Int             @default(0)
+  status      PromotionStatus @default(ACTIVE)
+  startsAt    DateTime?       @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime?       @map("ends_at") @db.Timestamptz(3)
+  createdById String          @map("created_by_id") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  imageFile StoredFile @relation("HomeBannerImage", fields: [imageFileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy User       @relation("HomeBannerCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([placement, status, position])
+  @@index([createdById])
+  @@map("home_banners")
+}
+
+/// Products picked by the marketplace for the home page.
+model FeaturedProduct {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  productId String    @unique @map("product_id") @db.Uuid
+  position  Int       @default(0)
+  startsAt  DateTime? @map("starts_at") @db.Timestamptz(3)
+  endsAt    DateTime? @map("ends_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([position])
+  @@map("featured_products")
+}
+
+/// Stores picked by the marketplace for the home page.
+model FeaturedStore {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  storeId   String   @unique @map("store_id") @db.Uuid
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([position])
+  @@map("featured_stores")
+}
+
+/// A time-limited marketplace campaign; sellers add their own variants at a flash price.
+model FlashSale {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  title       String          @db.VarChar(120)
+  startsAt    DateTime        @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime        @map("ends_at") @db.Timestamptz(3)
+  status      PromotionStatus @default(ACTIVE)
+  createdById String          @map("created_by_id") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User            @relation("FlashSaleCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items     FlashSaleItem[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([createdById])
+  @@map("flash_sales")
+}
+
+/// A variant offered in a flash sale. sold_quantity is raised by checkout with a guarded
+/// update, so the flash price never sells more than quantity_limit units.
+model FlashSaleItem {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  flashSaleId   String          @map("flash_sale_id") @db.Uuid
+  sellerId      String          @map("seller_id") @db.Uuid
+  productId     String          @map("product_id") @db.Uuid
+  variantId     String          @map("variant_id") @db.Uuid
+  flashPrice    Decimal         @map("flash_price") @db.Decimal(19, 4)
+  quantityLimit Int             @map("quantity_limit")
+  soldQuantity  Int             @default(0) @map("sold_quantity")
+  /// Most units one order may buy at the flash price.
+  perOrderLimit Int?            @map("per_order_limit")
+  status        PromotionStatus @default(ACTIVE)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  flashSale  FlashSale      @relation(fields: [flashSaleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  seller     Seller         @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product    Product        @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderItems OrderItem[]
+
+  @@unique([flashSaleId, variantId])
+  @@index([sellerId, createdAt])
+  @@index([productId])
+  @@index([variantId, status])
+  @@map("flash_sale_items")
+}
+
+// ---- Coupons --------------------------------------------------------------------------
+
+enum CouponScope {
+  /// Created by the marketplace, applies to the whole order, paid by the marketplace.
+  PLATFORM
+  /// Created by a seller, applies to that seller's items, paid by the seller.
+  SELLER
+
+  @@map("coupon_scope")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+
+  @@map("coupon_type")
+}
+
+model Coupon {
+  id               String          @id @default(uuid(7)) @db.Uuid
+  /// Upper-case letters and digits; unique across the marketplace.
+  code             String          @unique @db.VarChar(30)
+  scope            CouponScope
+  /// Set for seller coupons.
+  sellerId         String?         @map("seller_id") @db.Uuid
+  name             String          @db.VarChar(120)
+  description      String?         @db.VarChar(500)
+  type             CouponType
+  /// Percent (1–100) for PERCENTAGE; pesos for FIXED_AMOUNT; unused (0) for FREE_SHIPPING.
+  value            Decimal         @db.Decimal(19, 4)
+  /// Cap on the discount (percentages and free shipping).
+  maxDiscount      Decimal?        @map("max_discount") @db.Decimal(19, 4)
+  /// Merchandise subtotal needed (the order for platform coupons, the seller's items otherwise).
+  minSpend         Decimal         @default(0) @map("min_spend") @db.Decimal(19, 4)
+  currency         String          @default("PHP") @db.Char(3)
+  startsAt         DateTime        @map("starts_at") @db.Timestamptz(3)
+  endsAt           DateTime        @map("ends_at") @db.Timestamptz(3)
+  /// Total redemptions allowed (null: unlimited).
+  usageLimit       Int?            @map("usage_limit")
+  perCustomerLimit Int             @default(1) @map("per_customer_limit")
+  /// Redemptions by orders that are not cancelled; raised with a guarded update at checkout.
+  usedCount        Int             @default(0) @map("used_count")
+  status           PromotionStatus @default(ACTIVE)
+  createdById      String          @map("created_by_id") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller       Seller?            @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  currencyRef  Currency           @relation(fields: [currency], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  createdBy    User               @relation("CouponCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  redemptions  CouponRedemption[]
+  orderCoupons OrderCoupon[]
+
+  @@index([scope, status, endsAt])
+  @@index([sellerId, createdAt])
+  @@index([currency])
+  @@index([createdById])
+  @@map("coupons")
+}
+
+/// One use of a coupon by an order. Released (and used_count lowered) when the order is cancelled.
+model CouponRedemption {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  couponId   String    @map("coupon_id") @db.Uuid
+  orderId    String    @map("order_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  amount     Decimal   @db.Decimal(19, 4)
+  releasedAt DateTime? @map("released_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([couponId, orderId])
+  @@index([couponId, userId])
+  @@index([orderId])
+  @@index([userId])
+  @@map("coupon_redemptions")
+}
+
+// ---- Configuration ----------------------------------------------------------------------
+
+/// Typed settings edited by administrators (checkout charges and VAT, shipping rates).
+/// Each key's value is validated by the API before it is stored.
+model PlatformSetting {
+  key         String   @id @db.VarChar(60)
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([updatedById])
+  @@map("platform_settings")
+}
+
+/// Marketplace commission rate: the default (no category) or for a category and its
+/// subcategories. Order items keep the rule and rate used (the finance phase settles them).
+model CommissionRule {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  /// Null: the default rate (exactly one, partial unique index).
+  categoryId  String?  @unique @map("category_id") @db.Uuid
+  ratePercent Decimal  @map("rate_percent") @db.Decimal(5, 2)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderItems OrderItem[]
+
+  @@map("commission_rules")
+}
+
+// ---- Orders ------------------------------------------------------------------------------
+
+enum OrderStatus {
+  /// Paid online methods: stock is held until the payment deadline.
+  AWAITING_PAYMENT
+  /// Placed (cash on delivery, or paid); the sellers prepare their suborders.
+  PLACED
+  CANCELLED
+
+  @@map("order_status")
+}
+
+enum SellerOrderStatus {
+  AWAITING_PAYMENT
+  /// Waiting for the seller to process it (fulfilment arrives in a later phase).
+  PENDING
+  CANCELLED
+
+  @@map("seller_order_status")
+}
+
+enum PaymentMethod {
+  COD
+  GCASH
+  MAYA
+  CARD
+  QR_PH
+  BANK_TRANSFER
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  /// Waiting for an online payment.
+  PENDING
+  /// Cash on delivery: collected when the parcel arrives.
+  PAY_ON_DELIVERY
+  PAID
+  /// Cancelled before anything was paid.
+  VOIDED
+
+  @@map("payment_status")
+}
+
+enum BuyerType {
+  RETAIL
+  WHOLESALE
+
+  @@map("buyer_type")
+}
+
+enum ShippingMethod {
+  STANDARD
+  EXPRESS
+  SAME_DAY
+
+  @@map("shipping_method")
+}
+
+enum OrderEventType {
+  PLACED
+  AWAITING_PAYMENT
+  CANCELLED_BY_CUSTOMER
+  PAYMENT_EXPIRED
+
+  @@map("order_event_type")
+}
+
+/// The customer's order: one checkout, paid once, split into one suborder per seller.
+/// Every amount is calculated by the server's checkout pricing service.
+model Order {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  /// e.g. "MP2611250001AB"; shown to customers.
+  orderNumber      String        @unique @map("order_number") @db.VarChar(20)
+  customerId       String        @map("customer_id") @db.Uuid
+  status           OrderStatus
+  paymentMethod    PaymentMethod @map("payment_method")
+  paymentStatus    PaymentStatus @map("payment_status")
+  buyerType        BuyerType     @map("buyer_type")
+  currency         String        @default("PHP") @db.Char(3)
+  /// Sent by the client once per checkout attempt, so a retried request never places two orders.
+  idempotencyKey   String        @map("idempotency_key") @db.VarChar(100)
+  addressId        String?       @map("address_id") @db.Uuid
+  /// Copy of the delivery address and recipient at the time of the order.
+  shippingAddress  Json          @map("shipping_address")
+  contactEmail     String        @map("contact_email") @db.VarChar(254)
+  /// Sum of item lines at the applied prices (after wholesale and flash prices).
+  itemsSubtotal    Decimal       @map("items_subtotal") @db.Decimal(19, 4)
+  /// What wholesale prices saved compared with retail (already in items_subtotal).
+  wholesaleSavings Decimal       @map("wholesale_savings") @db.Decimal(19, 4)
+  /// Coupon discounts on items (marketplace and seller coupons).
+  couponDiscount   Decimal       @map("coupon_discount") @db.Decimal(19, 4)
+  shippingFee      Decimal       @map("shipping_fee") @db.Decimal(19, 4)
+  shippingDiscount Decimal       @map("shipping_discount") @db.Decimal(19, 4)
+  /// Other configured charges (e.g. a cash-on-delivery fee).
+  chargesTotal     Decimal       @map("charges_total") @db.Decimal(19, 4)
+  /// VAT included in the total (prices include VAT).
+  vatAmount        Decimal       @map("vat_amount") @db.Decimal(19, 4)
+  grandTotal       Decimal       @map("grand_total") @db.Decimal(19, 4)
+  /// The full breakdown returned by the checkout quote, including the settings used.
+  pricingSnapshot  Json          @map("pricing_snapshot")
+  /// Pay by this time (awaiting payment only); the order is cancelled afterwards.
+  paymentDueAt     DateTime?     @map("payment_due_at") @db.Timestamptz(3)
+  placedAt         DateTime      @default(now()) @map("placed_at") @db.Timestamptz(3)
+  cancelledAt      DateTime?     @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason     String?       @map("cancel_reason") @db.VarChar(500)
+  cancelledById    String?       @map("cancelled_by_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer     User               @relation("OrderCustomer", fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  cancelledBy  User?              @relation("OrderCanceller", fields: [cancelledById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  address      CustomerAddress?   @relation(fields: [addressId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  currencyRef  Currency           @relation(fields: [currency], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  sellerOrders SellerOrder[]
+  items        OrderItem[]
+  coupons      OrderCoupon[]
+  redemptions  CouponRedemption[]
+  events       OrderEvent[]
+
+  @@unique([customerId, idempotencyKey])
+  @@index([customerId, placedAt])
+  @@index([status, placedAt])
+  @@index([status, paymentDueAt])
+  @@index([addressId])
+  @@index([cancelledById])
+  @@index([currency])
+  @@map("orders")
+}
+
+/// One seller's part of an order, with its own items, discounts, shipping, VAT and
+/// commission reference. Sellers see and fulfil only their suborders.
+model SellerOrder {
+  id                       String            @id @default(uuid(7)) @db.Uuid
+  orderId                  String            @map("order_id") @db.Uuid
+  sellerId                 String            @map("seller_id") @db.Uuid
+  storeId                  String            @map("store_id") @db.Uuid
+  /// The order number with a suffix, e.g. "MP2611250001AB-1".
+  number                   String            @unique @db.VarChar(24)
+  status                   SellerOrderStatus
+  itemsSubtotal            Decimal           @map("items_subtotal") @db.Decimal(19, 4)
+  wholesaleSavings         Decimal           @map("wholesale_savings") @db.Decimal(19, 4)
+  /// This seller's coupon (paid by the seller).
+  sellerDiscount           Decimal           @map("seller_discount") @db.Decimal(19, 4)
+  /// This suborder's share of the marketplace coupon (paid by the marketplace).
+  platformDiscount         Decimal           @map("platform_discount") @db.Decimal(19, 4)
+  shippingFee              Decimal           @map("shipping_fee") @db.Decimal(19, 4)
+  sellerShippingDiscount   Decimal           @map("seller_shipping_discount") @db.Decimal(19, 4)
+  platformShippingDiscount Decimal           @map("platform_shipping_discount") @db.Decimal(19, 4)
+  chargesTotal             Decimal           @map("charges_total") @db.Decimal(19, 4)
+  vatAmount                Decimal           @map("vat_amount") @db.Decimal(19, 4)
+  total                    Decimal           @db.Decimal(19, 4)
+  /// Sum of the items' commission amounts (calculated, settled in the finance phase).
+  commissionAmount         Decimal           @map("commission_amount") @db.Decimal(19, 4)
+  /// Applied charges: [{ code, label, amount }].
+  charges                  Json              @default("[]")
+  customerNote             String?           @map("customer_note") @db.VarChar(500)
+  cancelledAt              DateTime?         @map("cancelled_at") @db.Timestamptz(3)
+  createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order         Order               @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  seller        Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store         Store               @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items         OrderItem[]
+  shippingGroup OrderShippingGroup?
+  coupons       OrderCoupon[]
+  events        OrderEvent[]
+
+  @@unique([orderId, sellerId])
+  @@index([sellerId, status, createdAt])
+  @@index([storeId])
+  @@map("seller_orders")
+}
+
+/// How one seller's parcel travels: origin warehouse, destination, weight and dimensions,
+/// method and the fee quoted by the shipping provider.
+model OrderShippingGroup {
+  id                    String         @id @default(uuid(7)) @db.Uuid
+  sellerOrderId         String         @unique @map("seller_order_id") @db.Uuid
+  warehouseId           String?        @map("warehouse_id") @db.Uuid
+  method                ShippingMethod
+  provider              String         @db.VarChar(40)
+  serviceName           String         @map("service_name") @db.VarChar(80)
+  origin                Json
+  destination           Json
+  /// Actual weight of the items.
+  weightGrams           Int            @map("weight_grams")
+  /// The weight the fee is based on: the larger of actual and volumetric weight.
+  chargeableWeightGrams Int            @map("chargeable_weight_grams")
+  /// Estimated parcel size: [{ lengthCm, widthCm, heightCm, weightGrams }].
+  parcels               Json
+  fee                   Decimal        @db.Decimal(19, 4)
+  discount              Decimal        @db.Decimal(19, 4)
+  etaMinDays            Int            @map("eta_min_days")
+  etaMaxDays            Int            @map("eta_max_days")
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sellerOrder SellerOrder @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  warehouse   Warehouse?  @relation(fields: [warehouseId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([warehouseId])
+  @@map("order_shipping_groups")
+}
+
+/// A product line with everything copied at the time of the order: names, options, prices,
+/// the pricing rule, discount shares, VAT and the commission reference.
+model OrderItem {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  orderId          String   @map("order_id") @db.Uuid
+  sellerOrderId    String   @map("seller_order_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  variantId        String   @map("variant_id") @db.Uuid
+  flashSaleItemId  String?  @map("flash_sale_item_id") @db.Uuid
+  sku              String   @db.VarChar(64)
+  productName      String   @map("product_name") @db.VarChar(200)
+  variantTitle     String   @map("variant_title") @db.VarChar(200)
+  /// { "Size": "Large", ... }
+  options          Json     @default("{}")
+  /// Thumbnail at the time of the order (path of the public image URL).
+  imageUrl         String?  @map("image_url") @db.VarChar(300)
+  quantity         Int
+  unitPrice        Decimal  @map("unit_price") @db.Decimal(19, 4)
+  /// Retail list price per unit, for showing savings.
+  regularUnitPrice Decimal  @map("regular_unit_price") @db.Decimal(19, 4)
+  lineSubtotal     Decimal  @map("line_subtotal") @db.Decimal(19, 4)
+  sellerDiscount   Decimal  @map("seller_discount") @db.Decimal(19, 4)
+  platformDiscount Decimal  @map("platform_discount") @db.Decimal(19, 4)
+  /// line_subtotal minus discounts.
+  lineTotal        Decimal  @map("line_total") @db.Decimal(19, 4)
+  vatAmount        Decimal  @map("vat_amount") @db.Decimal(19, 4)
+  /// The price engine's line: source, rule, tiers.
+  pricingSnapshot  Json     @map("pricing_snapshot")
+  commissionRuleId String?  @map("commission_rule_id") @db.Uuid
+  commissionRate   Decimal  @map("commission_rate") @db.Decimal(5, 2)
+  /// What the commission is calculated on: line subtotal minus the seller-paid discount.
+  commissionBase   Decimal  @map("commission_base") @db.Decimal(19, 4)
+  commissionAmount Decimal  @map("commission_amount") @db.Decimal(19, 4)
+  weightGrams      Int?     @map("weight_grams")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order          Order              @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sellerOrder    SellerOrder        @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  product        Product            @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  variant        ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  flashSaleItem  FlashSaleItem?     @relation(fields: [flashSaleItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  commissionRule CommissionRule?    @relation(fields: [commissionRuleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reservations   StockReservation[]
+  review         ProductReview?
+
+  @@index([orderId])
+  @@index([sellerOrderId])
+  @@index([productId, createdAt])
+  @@index([variantId])
+  @@index([flashSaleItemId])
+  @@index([commissionRuleId])
+  @@map("order_items")
+}
+
+/// A coupon applied to an order (seller coupons also point at their suborder).
+model OrderCoupon {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  orderId       String      @map("order_id") @db.Uuid
+  sellerOrderId String?     @map("seller_order_id") @db.Uuid
+  couponId      String      @map("coupon_id") @db.Uuid
+  code          String      @db.VarChar(30)
+  scope         CouponScope
+  type          CouponType
+  /// Item discount plus shipping discount given by this coupon.
+  amount        Decimal     @db.Decimal(19, 4)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sellerOrder SellerOrder? @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  coupon      Coupon       @relation(fields: [couponId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId])
+  @@index([sellerOrderId])
+  @@index([couponId])
+  @@map("order_coupons")
+}
+
+model OrderEvent {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  orderId       String         @map("order_id") @db.Uuid
+  sellerOrderId String?        @map("seller_order_id") @db.Uuid
+  type          OrderEventType
+  note          String?        @db.VarChar(1000)
+  actorId       String?        @map("actor_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sellerOrder SellerOrder? @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  actor       User?        @relation("OrderEventActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([orderId, createdAt])
+  @@index([sellerOrderId])
+  @@index([actorId])
+  @@map("order_events")
 }

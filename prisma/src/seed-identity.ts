@@ -144,6 +144,25 @@ export const DEMO_USERS: SeedUser[] = [
     roles: ['SELLER_ENCODER'],
   },
   {
+    email: 'seller2.owner@marketplace.local',
+    firstName: 'Isabel',
+    lastName: 'Ilustre',
+    roles: ['SELLER_OWNER'],
+  },
+  {
+    email: 'seller3.owner@marketplace.local',
+    firstName: 'Carlo',
+    lastName: 'Cruz',
+    roles: ['SELLER_OWNER'],
+  },
+  {
+    email: 'wholesale@marketplace.local',
+    firstName: 'Wilma',
+    lastName: 'Wholesale',
+    roles: ['CUSTOMER', 'WHOLESALE_CUSTOMER'],
+    mobile: '+639170000003',
+  },
+  {
     email: 'customer@marketplace.local',
     firstName: 'Juan',
     lastName: 'Dela Cruz',

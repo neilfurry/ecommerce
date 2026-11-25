@@ -7,3 +7,11 @@ export { createPgAdapter } from './pg-adapter';
 export { dummyPasswordHash, hashPassword, passwordNeedsRehash, verifyPassword } from './password';
 export { syncRolesAndPermissions } from './seed-identity';
 export { releaseExpiredReservations } from './reservations';
+export {
+  bundledPsgcFile,
+  flattenPsgc,
+  importLocations,
+  readPsgcFile,
+  type LocationLevelName,
+  type LocationRow,
+} from './locations';

@@ -5,7 +5,12 @@
  * Always: reference data (currencies) and the role/permission catalog.
  * Development only (SEED_DEMO_USERS=true and NODE_ENV is not production): one demo
  * account per frontend, all with the password in SEED_DEMO_PASSWORD; a demo seller with a
- * store; demo categories, brands, warehouses and an approved product with stock.
+ * store; demo categories, brands, warehouses and an approved product with stock; two more
+ * sellers with products, a wholesale customer, addresses, coupons, a flash sale and
+ * featured products and stores.
+ *
+ * Always: currencies, roles and permissions, Philippine locations (PSGC) and the default
+ * commission rate.
  */
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
@@ -17,6 +22,8 @@ import {
   syncRolesAndPermissions,
 } from './src/seed-identity';
 import { ensureCatalogReference, ensureDemoCatalog } from './src/seed-catalog';
+import { importLocations, readPsgcFile } from './src/locations';
+import { ensureDefaultCommission, ensureDemoStorefront } from './src/seed-storefront';
 
 loadDotenv({ path: path.resolve(__dirname, '../.env'), quiet: true });
 
@@ -42,6 +49,14 @@ async function main(): Promise<void> {
     await syncRolesAndPermissions(prisma);
     console.log('Synchronised roles and permissions.');
 
+    // Philippine locations: imported once; re-import a newer PSGC publication with
+    // "pnpm db:import-locations".
+    if ((await prisma.phLocation.count()) === 0) {
+      const result = await importLocations(prisma, readPsgcFile());
+      console.log(`Imported ${result.total} Philippine locations (PSGC).`);
+    }
+    if (await ensureDefaultCommission(prisma)) console.log('Default commission rate set (5%).');
+
     const demoEnabled =
       process.env.NODE_ENV !== 'production' && (process.env.SEED_DEMO_USERS ?? 'false') === 'true';
     if (demoEnabled) {
@@ -62,6 +77,8 @@ async function main(): Promise<void> {
       await ensureCatalogReference(prisma);
       console.log('Demo categories and brands synchronised.');
       if (await ensureDemoCatalog(prisma)) console.log('Demo warehouses and product created.');
+      const shops = await ensureDemoStorefront(prisma);
+      console.log(`Storefront demo data synchronised (${shops} new demo seller(s)).`);
     }
   } finally {
     await prisma.$disconnect();
