@@ -100,3 +100,4 @@ export {
 export { PasswordInput } from './components/password-input';
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './components/tabs';
 export { AuthShell, type AuthShellProps } from './patterns/auth-shell';
+export { formatMoney } from './lib/money';

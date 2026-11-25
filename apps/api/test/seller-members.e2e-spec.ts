@@ -134,8 +134,10 @@ describe('Seller employees (e2e)', () => {
       emailVerified: true,
       seller: { id: user.sellerId, isOwner: false },
     });
-    // Role (members.read) plus the extra permission, nothing else.
-    expect(session.user.permissions).toEqual(['seller.members.read', 'seller.store.manage']);
+    // The role's permissions plus the extra one, nothing else.
+    expect([...session.user.permissions].sort()).toEqual(
+      ['seller.members.read', 'seller.products.manage', 'seller.store.manage'].sort(),
+    );
     await staff
       .post('/api/v1/seller/members/invitations')
       .send({ email: uniqueEmail('x'), roles: ['SELLER_ENCODER'] })
@@ -281,12 +283,17 @@ describe('Seller employees (e2e)', () => {
       roles: ['SELLER_MANAGER'],
       extraPermissions: ['seller.profile.manage'],
     });
-    expect(updated.effectivePermissions).toEqual([
-      'seller.profile.manage',
-      'seller.store.manage',
-      'seller.members.read',
-      'seller.members.manage',
-    ]);
+    expect([...updated.effectivePermissions].sort()).toEqual(
+      [
+        'seller.profile.manage',
+        'seller.store.manage',
+        'seller.members.read',
+        'seller.members.manage',
+        'seller.products.manage',
+        'seller.pricing.manage',
+        'seller.inventory.manage',
+      ].sort(),
+    );
     await staff
       .post('/api/v1/stores')
       .send({ name: 'Now', slug: `now-${Date.now()}` })

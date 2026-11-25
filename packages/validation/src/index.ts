@@ -6,3 +6,5 @@ export * from './dev-tools';
 export * from './identity';
 export * from './notifications';
 export * from './sellers';
+export * from './catalog';
+export * from './inventory';

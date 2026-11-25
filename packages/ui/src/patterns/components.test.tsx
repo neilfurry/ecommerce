@@ -236,3 +236,12 @@ describe('Form (React Hook Form + Zod)', () => {
     expect(onSubmit.mock.calls[0]?.[0]).toEqual({ email: 'buyer@example.ph' });
   });
 });
+
+describe('formatMoney', () => {
+  it('formats API decimal strings as pesos', async () => {
+    const { formatMoney } = await import('../lib/money');
+    expect(formatMoney('1499.5')).toBe('₱1,499.50');
+    expect(formatMoney('390.00')).toBe('₱390.00');
+    expect(formatMoney(null)).toBe('—');
+  });
+});

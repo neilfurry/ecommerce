@@ -6,6 +6,7 @@ import {
   formatEnvIssues,
   logLevelSchema,
   nodeEnvSchema,
+  postgresUrlSchema,
   redisUrlSchema,
 } from '@marketplace/validation';
 import { config as loadDotenv } from 'dotenv';
@@ -17,6 +18,8 @@ export const workerEnvSchema = z
     APP_VERSION: z.string().optional(),
     LOG_LEVEL: logLevelSchema,
     REDIS_URL: redisUrlSchema,
+    /** Needed by jobs that work on the database (reservation expiry). Required in production. */
+    DATABASE_URL: postgresUrlSchema.optional(),
     /** Optional override of every queue's concurrency; unset = per-queue defaults. */
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).optional(),
     WORKER_HEARTBEAT_INTERVAL_SECONDS: envInteger(15, 1, 300),
@@ -46,6 +49,13 @@ export const workerEnvSchema = z
         message: 'The mock provider sends nothing; use a real provider in production',
       });
     }
+    if (env.NODE_ENV === 'production' && !env.DATABASE_URL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DATABASE_URL'],
+        message: 'Required in production (stock reservations expire through the worker)',
+      });
+    }
     if (env.SMS_PROVIDER === 'semaphore' && !env.SEMAPHORE_API_KEY) {
       ctx.addIssue({
         code: 'custom',
@@ -62,6 +72,7 @@ export class WorkerConfig {
   readonly version: string;
   readonly logLevel: WorkerEnv['LOG_LEVEL'];
   readonly redisUrl: string;
+  readonly databaseUrl: string | undefined;
   readonly concurrencyOverride: number | undefined;
   readonly heartbeatIntervalSeconds: number;
   readonly devToolsEnabled: boolean;
@@ -84,6 +95,7 @@ export class WorkerConfig {
     this.version = env.APP_VERSION ?? readPackageVersion();
     this.logLevel = env.LOG_LEVEL;
     this.redisUrl = env.REDIS_URL;
+    this.databaseUrl = env.DATABASE_URL;
     this.concurrencyOverride = env.WORKER_CONCURRENCY;
     this.heartbeatIntervalSeconds = env.WORKER_HEARTBEAT_INTERVAL_SECONDS;
     this.devToolsEnabled = env.DEV_TOOLS_ENABLED;

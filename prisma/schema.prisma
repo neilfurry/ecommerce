@@ -44,6 +44,8 @@ model Currency {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  products Product[]
+
   @@map("currencies")
 }
 
@@ -73,6 +75,11 @@ enum FilePurpose {
   /// Store logo and banner images. Public.
   STORE_LOGO
   STORE_BANNER
+  /// Product photos (optimised WebP) and their thumbnails. Public.
+  PRODUCT_IMAGE
+  PRODUCT_IMAGE_THUMBNAIL
+  /// Category images. Public.
+  CATEGORY_IMAGE
 
   @@map("file_purpose")
 }
@@ -98,6 +105,9 @@ model StoredFile {
   sellerDocument SellerDocument?
   storeLogo      Store?          @relation("StoreLogo")
   storeBanner    Store?          @relation("StoreBanner")
+  categoryImage  Category?       @relation("CategoryImage")
+  productImage   ProductImage?   @relation("ProductImageFile")
+  productThumb   ProductImage?   @relation("ProductImageThumbnail")
 
   @@unique([bucket, objectKey])
   @@index([purpose, status, createdAt])
@@ -156,6 +166,13 @@ model User {
   sellerEvents         SellerEvent[]
   mfa                  UserMfa?
   mfaRecoveryCodes     MfaRecoveryCode[]
+  reviewedBrands       Brand[]                @relation("BrandReviewer")
+  reviewedProducts     Product[]              @relation("ProductReviewer")
+  createdProducts      Product[]              @relation("ProductCreator")
+  productEvents        ProductEvent[]         @relation("ProductEventActor")
+  customerPrices       CustomerPrice[]        @relation("CustomerPrices")
+  inventoryMovements   InventoryMovement[]    @relation("InventoryMovementActor")
+  stockTransfers       StockTransfer[]        @relation("StockTransferCreator")
 
   @@index([status, createdAt])
   @@map("users")
@@ -504,6 +521,15 @@ model Seller {
   invitations SellerInvitation[]
   stores      Store[]
 
+  requestedBrands    Brand[]
+  products           Product[]
+  productVariants    ProductVariant[]
+  warehouses         Warehouse[]
+  stockLevels        StockLevel[]
+  inventoryMovements InventoryMovement[]
+  stockTransfers     StockTransfer[]
+  stockReservations  StockReservation[]
+
   @@index([status, submittedAt])
   @@index([reviewedById])
   @@map("sellers")
@@ -683,6 +709,7 @@ model Store {
   logoFile   StoredFile?    @relation("StoreLogo", fields: [logoFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   bannerFile StoredFile?    @relation("StoreBanner", fields: [bannerFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   settings   StoreSettings?
+  products   Product[]
 
   @@index([sellerId, createdAt])
   @@index([status])
@@ -707,4 +734,634 @@ model StoreSettings {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@map("store_settings")
+}
+
+// -----------------------------------------------------------------------------
+// Catalog (Phase 3): categories, brands, products, variants, images
+// -----------------------------------------------------------------------------
+
+enum CategoryStatus {
+  ACTIVE
+  /// Hidden from shoppers and not selectable for new products.
+  INACTIVE
+
+  @@map("category_status")
+}
+
+/// Global category tree (at most three levels), managed by marketplace staff only.
+model Category {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  parentId    String?        @map("parent_id") @db.Uuid
+  name        String         @db.VarChar(100)
+  /// Unique across the marketplace: lowercase letters, digits and hyphens.
+  slug        String         @unique @db.VarChar(100)
+  description String?        @db.VarChar(2000)
+  imageFileId String?        @unique @map("image_file_id") @db.Uuid
+  status      CategoryStatus @default(ACTIVE)
+  sortOrder   Int            @default(0) @map("sort_order")
+  /// 0 for top-level categories; a child is one deeper than its parent (max 2).
+  depth       Int            @default(0) @db.SmallInt
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  parent     Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children   Category[]          @relation("CategoryTree")
+  imageFile  StoredFile?         @relation("CategoryImage", fields: [imageFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  attributes CategoryAttribute[]
+  products   Product[]
+
+  @@index([parentId, sortOrder])
+  @@index([status])
+  @@map("categories")
+}
+
+enum CategoryAttributeType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  /// One of the attribute's options.
+  SELECT
+
+  @@map("category_attribute_type")
+}
+
+/// A product specification a category asks for (e.g. "Screen size" for Phones).
+/// Products in a category, or in any of its subcategories, fill these in.
+model CategoryAttribute {
+  id         String                @id @default(uuid(7)) @db.Uuid
+  categoryId String                @map("category_id") @db.Uuid
+  /// Stable key used in product data, e.g. "screen_size".
+  code       String                @db.VarChar(40)
+  name       String                @db.VarChar(80)
+  type       CategoryAttributeType
+  /// Allowed values for SELECT attributes (array of strings).
+  options    Json                  @default("[]")
+  unit       String?               @db.VarChar(20)
+  isRequired Boolean               @default(false) @map("is_required")
+  sortOrder  Int                   @default(0) @map("sort_order")
+  createdAt  DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([categoryId, code])
+  @@map("category_attributes")
+}
+
+enum BrandStatus {
+  /// Requested by a seller, waiting for a marketplace decision.
+  PENDING
+  ACTIVE
+  REJECTED
+  /// Retired; existing products keep it, new products cannot choose it.
+  INACTIVE
+
+  @@map("brand_status")
+}
+
+/// Global brand list kept by marketplace staff. Sellers may request new brands.
+model Brand {
+  id                  String      @id @default(uuid(7)) @db.Uuid
+  name                String      @db.VarChar(100)
+  /// Unique; also prevents near-duplicate names ("Acme" and "ACME").
+  slug                String      @unique @db.VarChar(100)
+  description         String?     @db.VarChar(1000)
+  status              BrandStatus @default(ACTIVE)
+  requestedBySellerId String?     @map("requested_by_seller_id") @db.Uuid
+  reviewNote          String?     @map("review_note") @db.VarChar(1000)
+  reviewedById        String?     @map("reviewed_by_id") @db.Uuid
+  reviewedAt          DateTime?   @map("reviewed_at") @db.Timestamptz(3)
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requestedBySeller Seller?   @relation(fields: [requestedBySellerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reviewedBy        User?     @relation("BrandReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  products          Product[]
+
+  @@index([status, name])
+  @@index([requestedBySellerId])
+  @@index([reviewedById])
+  @@map("brands")
+}
+
+enum ProductStatus {
+  /// Being prepared by the seller; never shown to shoppers.
+  DRAFT
+  /// Submitted (or changed after approval) and waiting for a marketplace decision.
+  PENDING_APPROVAL
+  /// Approved and visible to shoppers (when the seller is verified and the store open).
+  ACTIVE
+  /// Not approved; the seller can fix it and submit again.
+  REJECTED
+  /// Hidden by the seller, or taken down by the marketplace (moderated_at set).
+  INACTIVE
+  /// Retired by the seller; kept for order history.
+  ARCHIVED
+
+  @@map("product_status")
+}
+
+/// A seller's product. Prices, stock and options live on its variants (at least one).
+model Product {
+  id                        String        @id @default(uuid(7)) @db.Uuid
+  sellerId                  String        @map("seller_id") @db.Uuid
+  storeId                   String        @map("store_id") @db.Uuid
+  categoryId                String        @map("category_id") @db.Uuid
+  brandId                   String?       @map("brand_id") @db.Uuid
+  name                      String        @db.VarChar(200)
+  /// Unique within the store; used in the product's public link.
+  slug                      String        @db.VarChar(220)
+  description               String?       @db.VarChar(20000)
+  /// Free-form specifications: [{ name, value }].
+  specifications            Json          @default("[]")
+  /// Values of the category's attributes: { [attributeCode]: string | number | boolean }.
+  attributeValues           Json          @default("{}") @map("attribute_values")
+  status                    ProductStatus @default(DRAFT)
+  currency                  String        @default("PHP") @db.Char(3)
+  /// Smallest quantity per order for every buyer.
+  minOrderQuantity          Int           @default(1) @map("min_order_quantity")
+  maxOrderQuantity          Int?          @map("max_order_quantity")
+  /// Whether approved wholesale customers get the wholesale price tiers.
+  wholesaleEnabled          Boolean       @default(false) @map("wholesale_enabled")
+  /// Smallest quantity for wholesale tiers to apply.
+  wholesaleMinOrderQuantity Int           @default(1) @map("wholesale_min_order_quantity")
+  seoTitle                  String?       @map("seo_title") @db.VarChar(70)
+  seoDescription            String?       @map("seo_description") @db.VarChar(160)
+  seoKeywords               String?       @map("seo_keywords") @db.VarChar(255)
+  submittedAt               DateTime?     @map("submitted_at") @db.Timestamptz(3)
+  reviewedAt                DateTime?     @map("reviewed_at") @db.Timestamptz(3)
+  reviewedById              String?       @map("reviewed_by_id") @db.Uuid
+  /// The latest decision note: rejection reason or take-down reason.
+  reviewNote                String?       @map("review_note") @db.VarChar(1000)
+  /// When the product was last approved.
+  approvedAt                DateTime?     @map("approved_at") @db.Timestamptz(3)
+  /// Set while the marketplace has taken the product down; the seller must edit and resubmit.
+  moderatedAt               DateTime?     @map("moderated_at") @db.Timestamptz(3)
+  archivedAt                DateTime?     @map("archived_at") @db.Timestamptz(3)
+  createdById               String        @map("created_by_id") @db.Uuid
+  createdAt                 DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller         Seller           @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store          Store            @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  category       Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  brand          Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  currencyRef    Currency         @relation(fields: [currency], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  reviewedBy     User?            @relation("ProductReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdBy      User             @relation("ProductCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  options        ProductOption[]
+  variants       ProductVariant[]
+  images         ProductImage[]
+  events         ProductEvent[]
+  priceTiers     PriceTier[]
+  customerPrices CustomerPrice[]
+
+  @@unique([storeId, slug])
+  @@index([sellerId, status, updatedAt])
+  @@index([status, submittedAt])
+  @@index([categoryId, status])
+  @@index([brandId])
+  @@index([currency])
+  @@index([reviewedById])
+  @@index([createdById])
+  @@map("products")
+}
+
+enum ProductEventType {
+  CREATED
+  SUBMITTED
+  /// An approved product's content changed and it went back to review.
+  CHANGED_AFTER_APPROVAL
+  APPROVED
+  REJECTED
+  /// Hidden by the seller.
+  DEACTIVATED
+  /// Shown again by the seller.
+  ACTIVATED
+  /// Taken down by the marketplace.
+  TAKEN_DOWN
+  ARCHIVED
+  RESTORED
+
+  @@map("product_event_type")
+}
+
+/// Product review history, shown to the seller and to reviewers.
+model ProductEvent {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  productId  String           @map("product_id") @db.Uuid
+  type       ProductEventType
+  fromStatus ProductStatus?   @map("from_status")
+  toStatus   ProductStatus?   @map("to_status")
+  note       String?          @db.VarChar(1000)
+  actorId    String?          @map("actor_id") @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  actor   User?   @relation("ProductEventActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([productId, createdAt])
+  @@index([actorId])
+  @@map("product_events")
+}
+
+/// A variation axis of a product, e.g. Size or Color (at most 3 per product).
+model ProductOption {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  name      String   @db.VarChar(40)
+  position  Int      @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product Product              @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  values  ProductOptionValue[]
+
+  @@unique([productId, name])
+  @@map("product_options")
+}
+
+model ProductOptionValue {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  optionId  String   @map("option_id") @db.Uuid
+  value     String   @db.VarChar(60)
+  position  Int      @db.SmallInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  option   ProductOption        @relation(fields: [optionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variants VariantOptionValue[]
+
+  @@unique([optionId, value])
+  @@map("product_option_values")
+}
+
+enum VariantStatus {
+  ACTIVE
+  /// Not sold (e.g. discontinued colour); kept for history.
+  INACTIVE
+
+  @@map("variant_status")
+}
+
+/// A sellable unit (SKU) of a product. A product without options has one variant.
+model ProductVariant {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  productId      String        @map("product_id") @db.Uuid
+  /// Denormalised from the product so SKUs can be unique per seller.
+  sellerId       String        @map("seller_id") @db.Uuid
+  sku            String        @db.VarChar(64)
+  barcode        String?       @db.VarChar(64)
+  /// e.g. "Red / Large"; "Default" for a product without options.
+  title          String        @db.VarChar(200)
+  /// Sorted option value ids joined by ":" (empty for the default variant); one variant per combination.
+  optionKey      String        @default("") @map("option_key") @db.VarChar(200)
+  /// Retail price in the product's currency.
+  regularPrice   Decimal       @map("regular_price") @db.Decimal(19, 4)
+  /// Discounted retail price, applied between sale_starts_at and sale_ends_at (open-ended when null).
+  salePrice      Decimal?      @map("sale_price") @db.Decimal(19, 4)
+  saleStartsAt   DateTime?     @map("sale_starts_at") @db.Timestamptz(3)
+  saleEndsAt     DateTime?     @map("sale_ends_at") @db.Timestamptz(3)
+  /// When false the variant is always available (services, made to order).
+  trackInventory Boolean       @default(true) @map("track_inventory")
+  weightGrams    Int?          @map("weight_grams")
+  lengthCm       Decimal?      @map("length_cm") @db.Decimal(8, 2)
+  widthCm        Decimal?      @map("width_cm") @db.Decimal(8, 2)
+  heightCm       Decimal?      @map("height_cm") @db.Decimal(8, 2)
+  status         VariantStatus @default(ACTIVE)
+  position       Int           @default(0)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product        Product              @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  seller         Seller               @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  optionValues   VariantOptionValue[]
+  images         ProductImage[]
+  priceTiers     PriceTier[]
+  customerPrices CustomerPrice[]
+  stockLevels    StockLevel[]
+  movements      InventoryMovement[]
+  transferItems  StockTransferItem[]
+  reservations   StockReservation[]
+
+  @@unique([sellerId, sku])
+  @@unique([productId, optionKey])
+  @@index([productId, position])
+  @@index([barcode])
+  @@map("product_variants")
+}
+
+model VariantOptionValue {
+  variantId     String @map("variant_id") @db.Uuid
+  optionValueId String @map("option_value_id") @db.Uuid
+
+  variant     ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  optionValue ProductOptionValue @relation(fields: [optionValueId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([variantId, optionValueId])
+  @@index([optionValueId])
+  @@map("variant_option_values")
+}
+
+/// A product photo: an optimised large WebP and a thumbnail, generated on upload.
+model ProductImage {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  productId       String   @map("product_id") @db.Uuid
+  /// Optional: the variant this photo shows (e.g. the red one).
+  variantId       String?  @map("variant_id") @db.Uuid
+  fileId          String   @unique @map("file_id") @db.Uuid
+  thumbnailFileId String   @unique @map("thumbnail_file_id") @db.Uuid
+  altText         String?  @map("alt_text") @db.VarChar(200)
+  position        Int      @default(0)
+  width           Int
+  height          Int
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product       Product         @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  file          StoredFile      @relation("ProductImageFile", fields: [fileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  thumbnailFile StoredFile      @relation("ProductImageThumbnail", fields: [thumbnailFileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([productId, position])
+  @@index([variantId])
+  @@map("product_images")
+}
+
+// -----------------------------------------------------------------------------
+// Pricing (Phase 3). Prices are always calculated by the server from these rules.
+// -----------------------------------------------------------------------------
+
+/// Wholesale price tier: the unit price from min_quantity units up, for approved wholesale
+/// customers. variant_id null applies to every variant of the product; a variant's own
+/// tiers take precedence. Effective between starts_at and ends_at (open-ended when null).
+model PriceTier {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  productId   String    @map("product_id") @db.Uuid
+  variantId   String?   @map("variant_id") @db.Uuid
+  minQuantity Int       @map("min_quantity")
+  unitPrice   Decimal   @map("unit_price") @db.Decimal(19, 4)
+  startsAt    DateTime? @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime? @map("ends_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([productId, variantId, minQuantity])
+  @@index([variantId])
+  @@map("price_tiers")
+}
+
+/// A price the seller agreed with one customer. Takes precedence over every other price.
+model CustomerPrice {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  productId   String    @map("product_id") @db.Uuid
+  variantId   String?   @map("variant_id") @db.Uuid
+  customerId  String    @map("customer_id") @db.Uuid
+  minQuantity Int       @default(1) @map("min_quantity")
+  unitPrice   Decimal   @map("unit_price") @db.Decimal(19, 4)
+  startsAt    DateTime? @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime? @map("ends_at") @db.Timestamptz(3)
+  note        String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant  ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  customer User            @relation("CustomerPrices", fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([customerId, productId])
+  @@index([productId, variantId])
+  @@index([variantId])
+  @@map("customer_prices")
+}
+
+// -----------------------------------------------------------------------------
+// Inventory (Phase 3): warehouses, stock levels, the movement ledger, transfers and
+// reservations. Stock changes only through InventoryService, in transactions.
+// -----------------------------------------------------------------------------
+
+enum WarehouseStatus {
+  ACTIVE
+  /// No new stock movements; existing stock stays visible.
+  INACTIVE
+
+  @@map("warehouse_status")
+}
+
+model Warehouse {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  sellerId     String          @map("seller_id") @db.Uuid
+  name         String          @db.VarChar(100)
+  /// Short code unique within the seller, e.g. "QC-1".
+  code         String          @db.VarChar(20)
+  addressLine1 String          @map("address_line1") @db.VarChar(160)
+  addressLine2 String?         @map("address_line2") @db.VarChar(160)
+  barangay     String?         @db.VarChar(100)
+  city         String          @db.VarChar(100)
+  province     String          @db.VarChar(100)
+  postalCode   String?         @map("postal_code") @db.VarChar(4)
+  contactName  String?         @map("contact_name") @db.VarChar(120)
+  /// E.164.
+  phone        String?         @db.VarChar(16)
+  status       WarehouseStatus @default(ACTIVE)
+  /// Where stock is reserved first. Exactly one per seller (kept by the service).
+  isDefault    Boolean         @default(false) @map("is_default")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller        Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  stockLevels   StockLevel[]
+  movements     InventoryMovement[]
+  transfersFrom StockTransfer[]     @relation("TransferFrom")
+  transfersTo   StockTransfer[]     @relation("TransferTo")
+  reservations  StockReservation[]
+
+  @@unique([sellerId, code])
+  @@index([sellerId, status])
+  @@map("warehouses")
+}
+
+/// Stock of one variant in one warehouse. available = quantity_on_hand - reserved_quantity;
+/// CHECK constraints keep every quantity non-negative and reserved <= on hand.
+model StockLevel {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  sellerId           String    @map("seller_id") @db.Uuid
+  warehouseId        String    @map("warehouse_id") @db.Uuid
+  variantId          String    @map("variant_id") @db.Uuid
+  /// Sellable units physically in the warehouse.
+  quantityOnHand     Int       @default(0) @map("quantity_on_hand")
+  /// Units held for checkouts and unfulfilled orders.
+  reservedQuantity   Int       @default(0) @map("reserved_quantity")
+  /// Damaged units kept apart (not sellable, not in on hand).
+  damagedQuantity    Int       @default(0) @map("damaged_quantity")
+  /// Notify the seller when available stock falls to this level (null: never).
+  lowStockThreshold  Int?      @map("low_stock_threshold")
+  /// Set when a low-stock notice is sent; cleared when stock rises above the threshold.
+  lowStockNotifiedAt DateTime? @map("low_stock_notified_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller       Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  warehouse    Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  variant      ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  movements    InventoryMovement[]
+  reservations StockReservation[]
+
+  @@unique([warehouseId, variantId])
+  @@index([variantId])
+  @@index([sellerId, updatedAt])
+  @@map("stock_levels")
+}
+
+enum InventoryMovementType {
+  /// Goods received (purchase, production).
+  STOCK_IN
+  /// Goods removed for reasons other than a sale (sample, internal use).
+  STOCK_OUT
+  /// Correction after a count; either direction.
+  ADJUSTMENT
+  TRANSFER_OUT
+  TRANSFER_IN
+  /// Sellable units found damaged: on hand down, damaged up.
+  DAMAGED
+  /// Damaged units disposed of.
+  DAMAGED_WRITE_OFF
+  /// Customer return put back into sellable stock.
+  RETURN_RESTOCK
+  /// Customer return that cannot be sold again.
+  RETURN_DAMAGED
+  /// Reserved units shipped for an order.
+  SALE
+
+  @@map("inventory_movement_type")
+}
+
+/// Append-only inventory ledger: one row per change to a stock level, with the result.
+/// A trigger rejects UPDATE and DELETE.
+model InventoryMovement {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  sellerId       String                @map("seller_id") @db.Uuid
+  warehouseId    String                @map("warehouse_id") @db.Uuid
+  variantId      String                @map("variant_id") @db.Uuid
+  stockLevelId   String                @map("stock_level_id") @db.Uuid
+  type           InventoryMovementType
+  /// Change to quantity_on_hand (negative when stock leaves).
+  quantityChange Int                   @map("quantity_change")
+  /// Change to damaged_quantity.
+  damagedChange  Int                   @default(0) @map("damaged_change")
+  onHandAfter    Int                   @map("on_hand_after")
+  reservedAfter  Int                   @map("reserved_after")
+  damagedAfter   Int                   @map("damaged_after")
+  reason         String?               @db.VarChar(500)
+  transferId     String?               @map("transfer_id") @db.Uuid
+  reservationId  String?               @map("reservation_id") @db.Uuid
+  actorId        String?               @map("actor_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller      Seller            @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  warehouse   Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  variant     ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  stockLevel  StockLevel        @relation(fields: [stockLevelId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  transfer    StockTransfer?    @relation(fields: [transferId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reservation StockReservation? @relation(fields: [reservationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actor       User?             @relation("InventoryMovementActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([sellerId, createdAt])
+  @@index([stockLevelId, createdAt])
+  @@index([variantId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([transferId])
+  @@index([reservationId])
+  @@index([actorId])
+  @@map("inventory_movements")
+}
+
+/// Stock moved between two of a seller's warehouses (completed in one transaction).
+model StockTransfer {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  sellerId        String   @map("seller_id") @db.Uuid
+  fromWarehouseId String   @map("from_warehouse_id") @db.Uuid
+  toWarehouseId   String   @map("to_warehouse_id") @db.Uuid
+  note            String?  @db.VarChar(500)
+  createdById     String   @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller        Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  fromWarehouse Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  toWarehouse   Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy     User                @relation("StockTransferCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items         StockTransferItem[]
+  movements     InventoryMovement[]
+
+  @@index([sellerId, createdAt])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([createdById])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id         String @id @default(uuid(7)) @db.Uuid
+  transferId String @map("transfer_id") @db.Uuid
+  variantId  String @map("variant_id") @db.Uuid
+  quantity   Int
+
+  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([transferId, variantId])
+  @@index([variantId])
+  @@map("stock_transfer_items")
+}
+
+enum StockReservationStatus {
+  /// Holding stock until expires_at.
+  ACTIVE
+  /// Turned into a stock deduction (SALE movement) when the order was fulfilled.
+  CONVERTED
+  /// Given back before expiry (checkout cancelled, order cancelled).
+  RELEASED
+  /// Given back automatically after expires_at.
+  EXPIRED
+
+  @@map("stock_reservation_status")
+}
+
+/// Stock held for a checkout or order item. Raising reserved_quantity and creating the
+/// reservation happen in one transaction, guarded so available stock never goes below zero.
+model StockReservation {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  sellerId          String                 @map("seller_id") @db.Uuid
+  variantId         String                 @map("variant_id") @db.Uuid
+  warehouseId       String                 @map("warehouse_id") @db.Uuid
+  stockLevelId      String                 @map("stock_level_id") @db.Uuid
+  quantity          Int
+  status            StockReservationStatus @default(ACTIVE)
+  /// The checkout session (or other process) that holds the stock.
+  checkoutReference String                 @map("checkout_reference") @db.VarChar(100)
+  /// The order item, once the order exists (orders arrive in the next phase).
+  orderItemId       String?                @map("order_item_id") @db.Uuid
+  expiresAt         DateTime               @map("expires_at") @db.Timestamptz(3)
+  releasedAt        DateTime?              @map("released_at") @db.Timestamptz(3)
+  convertedAt       DateTime?              @map("converted_at") @db.Timestamptz(3)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller     Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  variant    ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  warehouse  Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  stockLevel StockLevel          @relation(fields: [stockLevelId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  movements  InventoryMovement[]
+
+  @@index([status, expiresAt])
+  @@index([checkoutReference])
+  @@index([orderItemId])
+  @@index([stockLevelId, status])
+  @@index([sellerId, createdAt])
+  @@index([variantId])
+  @@index([warehouseId])
+  @@map("stock_reservations")
 }

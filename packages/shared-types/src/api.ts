@@ -21,6 +21,14 @@ export const API_ERROR_CODES = [
   'CONFLICT',
   'PAYLOAD_TOO_LARGE',
   'UNSUPPORTED_MEDIA_TYPE',
+  /** A stock change or reservation would make available stock negative. */
+  'INSUFFICIENT_STOCK',
+  /** The action needs a verified (and not suspended) seller. */
+  'SELLER_NOT_VERIFIED',
+  /** Something must be completed first; field errors list what. */
+  'NOT_READY',
+  /** A stock reservation expired or was released. */
+  'RESERVATION_NOT_ACTIVE',
   'RATE_LIMITED',
   'SERVICE_UNAVAILABLE',
   'INTERNAL_ERROR',

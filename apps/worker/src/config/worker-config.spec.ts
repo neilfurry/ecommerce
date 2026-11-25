@@ -70,4 +70,18 @@ describe('WorkerConfig.load', () => {
       semaphoreSenderName: 'MARKETPLACE',
     });
   });
+
+  it('requires the database in production (reservations expire through the worker)', () => {
+    expect(() =>
+      WorkerConfig.load({ REDIS_URL: 'redis://localhost:6379', NODE_ENV: 'production' }, false),
+    ).toThrow(/DATABASE_URL/);
+    const config = WorkerConfig.load(
+      {
+        REDIS_URL: 'redis://localhost:6379',
+        DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+      },
+      false,
+    );
+    expect(config.databaseUrl).toBe('postgresql://u:p@localhost:5432/db');
+  });
 });

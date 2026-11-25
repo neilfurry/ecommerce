@@ -2,6 +2,10 @@ import type { Permission } from '@marketplace/shared-types';
 import type { SidebarNavItem, SidebarNavSection } from '@marketplace/ui';
 import {
   ActivityIcon,
+  BoxesIcon,
+  FolderTreeIcon,
+  PackageSearchIcon,
+  TagIcon,
   BriefcaseBusinessIcon,
   BuildingIcon,
   HardDriveIcon,
@@ -41,6 +45,30 @@ export function buildNavSections(
           permission: 'sellers.read',
         },
         { to: '/stores', label: 'Stores', icon: StoreIcon, permission: 'stores.read' },
+      ],
+    },
+    {
+      title: 'Catalog',
+      items: [
+        {
+          to: '/catalog/products',
+          label: 'Products',
+          icon: PackageSearchIcon,
+          permission: 'catalog.products.read',
+        },
+        {
+          to: '/catalog/categories',
+          label: 'Categories',
+          icon: FolderTreeIcon,
+          permission: 'catalog.categories.manage',
+        },
+        {
+          to: '/catalog/brands',
+          label: 'Brands',
+          icon: TagIcon,
+          permission: 'catalog.brands.manage',
+        },
+        { to: '/inventory', label: 'Inventory', icon: BoxesIcon, permission: 'inventory.read' },
       ],
     },
     {

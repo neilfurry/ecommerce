@@ -16,6 +16,13 @@ import { JoinPage } from '../pages/auth/join-page';
 import { RegisterPage } from '../pages/auth/register-page';
 import { DashboardPage } from '../pages/dashboard/dashboard-page';
 import { EmployeesPage } from '../pages/employees/employees-page';
+import { AdjustmentsPage } from '../pages/inventory/adjustments-page';
+import { HistoryPage } from '../pages/inventory/history-page';
+import { InventoryPage } from '../pages/inventory/inventory-page';
+import { WarehousesPage } from '../pages/inventory/warehouses-page';
+import { NewProductPage } from '../pages/products/new-product-page';
+import { ProductPage } from '../pages/products/product-page';
+import { ProductsPage } from '../pages/products/products-page';
 import { ProfilePage } from '../pages/profile/profile-page';
 import { StatusPage } from '../pages/status-page';
 import { StoreDetailPage } from '../pages/stores/store-detail-page';
@@ -89,6 +96,27 @@ export const routes: RouteObject[] = [
                   </RequirePermission>
                 ),
               },
+              { path: 'products', element: <ProductsPage /> },
+              {
+                path: 'products/new',
+                element: (
+                  <RequirePermission permission="seller.products.manage">
+                    <NewProductPage />
+                  </RequirePermission>
+                ),
+              },
+              { path: 'products/:productId', element: <ProductPage /> },
+              { path: 'inventory', element: <InventoryPage /> },
+              { path: 'inventory/warehouses', element: <WarehousesPage /> },
+              {
+                path: 'inventory/adjustments',
+                element: (
+                  <RequirePermission permission="seller.inventory.manage">
+                    <AdjustmentsPage />
+                  </RequirePermission>
+                ),
+              },
+              { path: 'inventory/history', element: <HistoryPage /> },
               { path: 'account', element: <AccountPage /> },
               { path: 'system-status', element: <StatusPage /> },
               { path: '*', element: <NotFound /> },

@@ -18,6 +18,11 @@ import { AuditLogPage } from '../pages/audit/audit-log-page';
 import { FilesPage } from '../pages/dev-tools/files-page';
 import { JobsPage } from '../pages/dev-tools/jobs-page';
 import { SmsOutboxPage } from '../pages/dev-tools/sms-outbox-page';
+import { BrandsPage } from '../pages/catalog/brands-page';
+import { CategoriesPage } from '../pages/catalog/categories-page';
+import { ProductReviewPage } from '../pages/catalog/product-review-page';
+import { AdminProductsPage } from '../pages/catalog/products-page';
+import { InventoryOverviewPage } from '../pages/inventory/inventory-overview-page';
 import { PermissionsPage } from '../pages/permissions/permissions-page';
 import { RolesPage } from '../pages/roles/roles-page';
 import { SellerDetailPage } from '../pages/sellers/seller-detail-page';
@@ -74,6 +79,26 @@ export function buildRoutes(devToolsEnabled: boolean): RouteObject[] {
                   element: guarded('sellers.read', <SellerDetailPage />),
                 },
                 { path: 'stores', element: guarded('stores.read', <StoresPage />) },
+                {
+                  path: 'catalog/products',
+                  element: guarded('catalog.products.read', <AdminProductsPage />),
+                },
+                {
+                  path: 'catalog/products/:productId',
+                  element: guarded('catalog.products.read', <ProductReviewPage />),
+                },
+                {
+                  path: 'catalog/categories',
+                  element: guarded('catalog.categories.manage', <CategoriesPage />),
+                },
+                {
+                  path: 'catalog/brands',
+                  element: guarded('catalog.brands.manage', <BrandsPage />),
+                },
+                {
+                  path: 'inventory',
+                  element: guarded('inventory.read', <InventoryOverviewPage />),
+                },
                 { path: 'roles', element: guarded('roles.read', <RolesPage />) },
                 { path: 'permissions', element: guarded('roles.read', <PermissionsPage />) },
                 { path: 'audit-log', element: guarded('audit.read', <AuditLogPage />) },

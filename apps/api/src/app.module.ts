@@ -8,6 +8,9 @@ import { StorageModule } from './infrastructure/storage/storage.module';
 import { ThrottlingModule } from './infrastructure/throttling/throttling.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { ProductsModule } from './modules/products/products.module';
 import { DevToolsModule } from './modules/dev-tools/dev-tools.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
@@ -45,6 +48,9 @@ import { WholesaleModule } from './modules/wholesale/wholesale.module';
     WholesaleModule,
     SellersModule,
     StoresModule,
+    CatalogModule,
+    ProductsModule,
+    InventoryModule,
     SellerMembersModule,
     // Development only: every route answers 404 unless DEV_TOOLS_ENABLED=true.
     DevToolsModule,

@@ -6,3 +6,4 @@ export * from './generated/prisma/client';
 export { createPgAdapter } from './pg-adapter';
 export { dummyPasswordHash, hashPassword, passwordNeedsRehash, verifyPassword } from './password';
 export { syncRolesAndPermissions } from './seed-identity';
+export { releaseExpiredReservations } from './reservations';
