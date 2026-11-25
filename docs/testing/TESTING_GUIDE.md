@@ -86,6 +86,22 @@ this for you.
 | Permission scopes                                    | `mfa.e2e-spec.ts` (permission catalog, scope validation), admin `marketplace.test.tsx` (roles page)                                                            |
 | Two-step verification                                | `totp.spec.ts` (RFC 6238 vectors), `mfa.e2e-spec.ts` (sign-in, recovery codes, attempt limit, disable, admin reset), auth-ui `auth-ui.test.tsx`                |
 
+### Phase 3 (catalog, pricing and inventory)
+
+| Requirement                       | Proven by                                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Seller isolation                  | `products.e2e-spec.ts` (another seller's product, variant, photo and pricing answer 404), `inventory.e2e-spec.ts` (warehouses, stock, movements)       |
+| Categories and brands             | `catalog.e2e-spec.ts` (staff only, depth limit, inherited attributes, brand requests and review), admin `catalog-admin.test.tsx`                       |
+| Product creation and approval     | `products.e2e-spec.ts` (create, submit readiness, approve/reject, content change back to review, take-down, archive), Playwright `catalog.spec.ts`     |
+| Variant generation                | `products.e2e-spec.ts` (combinations, re-generation keeps existing variants, SKU unique per seller, limits)                                            |
+| Wholesale and customer prices     | `price-engine.spec.ts` (20 rule cases), `pricing.e2e-spec.ts` (wholesale only for approved buyers, MOQ, effective dates, customer price, strict quote) |
+| Inventory adjustments and history | `inventory.e2e-spec.ts` (every movement type, reasons, ledger cannot be edited, low-stock email once)                                                  |
+| Concurrent stock updates          | `inventory.e2e-spec.ts` (25 parallel stock-outs of 10 against 100 units: exactly 10 succeed)                                                           |
+| Warehouse transfers               | `inventory.e2e-spec.ts` (all-or-nothing, insufficient stock leaves both warehouses unchanged)                                                          |
+| Image upload validation           | `products.e2e-spec.ts` (wrong extension, disguised content, too large, too small, limit of 10, replace, reorder, delete)                               |
+| Reservations and expiry           | `inventory.e2e-spec.ts` (30 parallel reservations of 3 against 20 units: exactly 6 succeed; expiry, release, convert), worker `catalog-jobs.spec.ts`   |
+| Seller and admin screens          | seller `catalog.test.tsx`, admin `catalog-admin.test.tsx`                                                                                              |
+
 API e2e tests create their own users directly in the database and give each test client its
 own address (`X-Forwarded-For` with `TRUST_PROXY=1`), so per-address limits never leak between
 tests. They read SMS codes and email links from the queued jobs; Playwright reads them from the

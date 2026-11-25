@@ -72,26 +72,38 @@ Rules:
 
 ## Current tables
 
-| Table                                      | Purpose                                                                                      | Since   |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------- | ------- |
-| `currencies`                               | ISO 4217 currencies the platform transacts in (seeded: `PHP`)                                | Phase 1 |
-| `stored_files`                             | Metadata for every object in file storage (key, verified type, size, SHA-256, status)        | Phase 1 |
-| `users`                                    | Every account: unique lowercase email, unique E.164 mobile, Argon2id hash, status, lock-out  | Phase 2 |
-| `roles`, `permissions`, `role_permissions` | The 14 roles, the permission catalog and which role holds what (synchronised by the seed)    | Phase 2 |
-| `user_roles`                               | Roles held by each user                                                                      | Phase 2 |
-| `sessions`                                 | Signed-in devices: hashed refresh token, app, expiry, revocation, rotation chain             | Phase 2 |
-| `otp_challenges`                           | SMS codes (HMAC only), attempts, sends, pending sign-up details until confirmed              | Phase 2 |
-| `verification_tokens`                      | Hashed single-use email-confirmation, password-reset and invitation links                    | Phase 2 |
-| `wholesale_applications`                   | Business name, TIN, address and review decision per customer                                 | Phase 2 |
-| `audit_logs`                               | Append-only record of sign-ins and administrative actions (a trigger rejects changes)        | Phase 2 |
-| `user_mfa`, `mfa_recovery_codes`           | Two-step verification: encrypted authenticator secret, last used step, hashed recovery codes | Phase 2 |
-| `sellers`                                  | Seller businesses: status, business type, contact, address, registration number, TIN         | Phase 2 |
-| `seller_documents`                         | Verification documents (private `stored_files`), type and uploader                           | Phase 2 |
-| `seller_events`                            | Verification history: every status change with its note and who made it                      | Phase 2 |
-| `seller_members`                           | Who works for which seller (one seller per person), owner flag and status                    | Phase 2 |
-| `seller_member_permissions`                | Extra seller permissions granted to an employee on top of their roles                        | Phase 2 |
-| `seller_invitations`                       | Hashed employee invitation links with roles, permissions and expiry                          | Phase 2 |
-| `stores`, `store_settings`                 | Stores (unique permanent slug, contact, images, status) and their branding and policies      | Phase 2 |
+| Table                                       | Purpose                                                                                      | Since   |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------- | ------- |
+| `currencies`                                | ISO 4217 currencies the platform transacts in (seeded: `PHP`)                                | Phase 1 |
+| `stored_files`                              | Metadata for every object in file storage (key, verified type, size, SHA-256, status)        | Phase 1 |
+| `users`                                     | Every account: unique lowercase email, unique E.164 mobile, Argon2id hash, status, lock-out  | Phase 2 |
+| `roles`, `permissions`, `role_permissions`  | The 14 roles, the permission catalog and which role holds what (synchronised by the seed)    | Phase 2 |
+| `user_roles`                                | Roles held by each user                                                                      | Phase 2 |
+| `sessions`                                  | Signed-in devices: hashed refresh token, app, expiry, revocation, rotation chain             | Phase 2 |
+| `otp_challenges`                            | SMS codes (HMAC only), attempts, sends, pending sign-up details until confirmed              | Phase 2 |
+| `verification_tokens`                       | Hashed single-use email-confirmation, password-reset and invitation links                    | Phase 2 |
+| `wholesale_applications`                    | Business name, TIN, address and review decision per customer                                 | Phase 2 |
+| `audit_logs`                                | Append-only record of sign-ins and administrative actions (a trigger rejects changes)        | Phase 2 |
+| `user_mfa`, `mfa_recovery_codes`            | Two-step verification: encrypted authenticator secret, last used step, hashed recovery codes | Phase 2 |
+| `sellers`                                   | Seller businesses: status, business type, contact, address, registration number, TIN         | Phase 2 |
+| `seller_documents`                          | Verification documents (private `stored_files`), type and uploader                           | Phase 2 |
+| `seller_events`                             | Verification history: every status change with its note and who made it                      | Phase 2 |
+| `seller_members`                            | Who works for which seller (one seller per person), owner flag and status                    | Phase 2 |
+| `seller_member_permissions`                 | Extra seller permissions granted to an employee on top of their roles                        | Phase 2 |
+| `seller_invitations`                        | Hashed employee invitation links with roles, permissions and expiry                          | Phase 2 |
+| `stores`, `store_settings`                  | Stores (unique permanent slug, contact, images, status) and their branding and policies      | Phase 2 |
+| `categories`, `category_attributes`         | Category tree (three levels), images, sort order and the attributes products fill in         | Phase 3 |
+| `brands`                                    | Brands, including seller requests waiting for review                                         | Phase 3 |
+| `products`, `product_events`                | Seller products (status, content, SEO, pricing settings) and their approval history          | Phase 3 |
+| `product_options`, `product_option_values`  | Up to three options per product (e.g. Size, Color) and their values                          | Phase 3 |
+| `product_variants`, `variant_option_values` | Sellable variants: SKU (unique per seller), barcode, prices, sale window, measures, status   | Phase 3 |
+| `product_images`                            | Product photos in order (large and thumbnail `stored_files`), alt text, optional variant     | Phase 3 |
+| `price_tiers`, `customer_prices`            | Wholesale quantity breaks and prices agreed with individual customers, with effective dates  | Phase 3 |
+| `warehouses`                                | Seller warehouses with addresses; one default per seller (partial unique index)              | Phase 3 |
+| `stock_levels`                              | On hand, reserved and damaged quantity per variant and warehouse; low-stock threshold        | Phase 3 |
+| `inventory_movements`                       | Append-only stock ledger with balances after each change (a trigger rejects changes)         | Phase 3 |
+| `stock_transfers`, `stock_transfer_items`   | Moves of stock between a seller's warehouses                                                 | Phase 3 |
+| `stock_reservations`                        | Stock held for checkouts with expiry; active, released, expired or converted                 | Phase 3 |
 
 ### The first super admin in a new environment
 

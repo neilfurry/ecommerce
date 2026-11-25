@@ -63,6 +63,10 @@ Every non-2xx response has the same shape. Clients branch on `code`, never on `m
 | `CONFLICT`               | 409  | State conflict (e.g. duplicate)                         |
 | `PAYLOAD_TOO_LARGE`      | 413  | Body or upload over the limit                           |
 | `UNSUPPORTED_MEDIA_TYPE` | 415  | File content type not allowed                           |
+| `INSUFFICIENT_STOCK`     | 409  | The change or reservation would make stock negative     |
+| `SELLER_NOT_VERIFIED`    | 403  | Needs a verified (and not suspended) seller             |
+| `NOT_READY`              | 422  | Something must be completed first (see `fieldErrors`)   |
+| `RESERVATION_NOT_ACTIVE` | 409  | The stock reservation expired or was released           |
 | `RATE_LIMITED`           | 429  | Too many requests                                       |
 | `SERVICE_UNAVAILABLE`    | 503  | A dependency is down                                    |
 | `INTERNAL_ERROR`         | 500  | Unexpected error (details only in logs, by `requestId`) |
@@ -118,22 +122,26 @@ Available only when `DEV_TOOLS_ENABLED=true`. The API refuses that setting when
 `NODE_ENV=production`, and when disabled every route below answers 404. Every route requires
 the `dev-tools.use` permission (super admin by default).
 
-| Method | Path                                  | Description                                                                                                                      |
-| ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/api/v1/dev/jobs/sample`             | Queue the sample job `{ message, simulateFailures (0–5), durationMs (0–10000) }` → 202 `{ queue, jobId }`                        |
-| POST   | `/api/v1/dev/jobs/test-email`         | Queue a test email `{ to }` → 202 `{ queue, jobId }`                                                                             |
-| GET    | `/api/v1/dev/jobs/{queue}/{jobId}`    | Job state, attempts, progress, result or last error                                                                              |
-| GET    | `/api/v1/dev/queues`                  | Every queue with retry policy and job counts                                                                                     |
-| GET    | `/api/v1/dev/dead-letters`            | Permanently failed jobs, newest first (paginated)                                                                                |
-| POST   | `/api/v1/dev/dead-letters/{id}/retry` | Re-queue on the original queue and remove the dead letter → 202                                                                  |
-| DELETE | `/api/v1/dev/dead-letters/{id}`       | Discard permanently → 204                                                                                                        |
-| POST   | `/api/v1/dev/files`                   | Upload (multipart field `file`; PNG, JPEG, GIF, WebP, PDF or text, checked by content; ≤ `UPLOAD_MAX_BYTES`) → 201 file metadata |
-| GET    | `/api/v1/dev/files`                   | Uploaded files, newest first (paginated)                                                                                         |
-| GET    | `/api/v1/dev/files/{id}`              | File metadata: name, type, size, SHA-256, status, timestamps                                                                     |
-| GET    | `/api/v1/dev/files/{id}/download-url` | Short-lived signed URL `{ url, expiresAt }` for direct download                                                                  |
-| GET    | `/api/v1/dev/files/{id}/content`      | Download through the API (streamed, `Content-Disposition: attachment`)                                                           |
-| DELETE | `/api/v1/dev/files/{id}`              | Delete from storage; metadata kept as `DELETED` → 204                                                                            |
-| GET    | `/api/v1/dev/sms-outbox`              | Texts captured by the mock SMS provider, newest first (at most 50) `{ messages: [{ to, body, sentAt }] }`                        |
+| Method | Path                                              | Description                                                                                                                      |
+| ------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/dev/jobs/sample`                         | Queue the sample job `{ message, simulateFailures (0–5), durationMs (0–10000) }` → 202 `{ queue, jobId }`                        |
+| POST   | `/api/v1/dev/jobs/test-email`                     | Queue a test email `{ to }` → 202 `{ queue, jobId }`                                                                             |
+| GET    | `/api/v1/dev/jobs/{queue}/{jobId}`                | Job state, attempts, progress, result or last error                                                                              |
+| GET    | `/api/v1/dev/queues`                              | Every queue with retry policy and job counts                                                                                     |
+| GET    | `/api/v1/dev/dead-letters`                        | Permanently failed jobs, newest first (paginated)                                                                                |
+| POST   | `/api/v1/dev/dead-letters/{id}/retry`             | Re-queue on the original queue and remove the dead letter → 202                                                                  |
+| DELETE | `/api/v1/dev/dead-letters/{id}`                   | Discard permanently → 204                                                                                                        |
+| POST   | `/api/v1/dev/files`                               | Upload (multipart field `file`; PNG, JPEG, GIF, WebP, PDF or text, checked by content; ≤ `UPLOAD_MAX_BYTES`) → 201 file metadata |
+| GET    | `/api/v1/dev/files`                               | Uploaded files, newest first (paginated)                                                                                         |
+| GET    | `/api/v1/dev/files/{id}`                          | File metadata: name, type, size, SHA-256, status, timestamps                                                                     |
+| GET    | `/api/v1/dev/files/{id}/download-url`             | Short-lived signed URL `{ url, expiresAt }` for direct download                                                                  |
+| GET    | `/api/v1/dev/files/{id}/content`                  | Download through the API (streamed, `Content-Disposition: attachment`)                                                           |
+| DELETE | `/api/v1/dev/files/{id}`                          | Delete from storage; metadata kept as `DELETED` → 204                                                                            |
+| GET    | `/api/v1/dev/sms-outbox`                          | Texts captured by the mock SMS provider, newest first (at most 50) `{ messages: [{ to, body, sentAt }] }`                        |
+| POST   | `/api/v1/dev/inventory/reservations`              | Reserve stock for a pretend checkout `{ checkoutReference, items: [{ variantId, quantity }], ttlMinutes }` → 201                 |
+| POST   | `/api/v1/dev/inventory/reservations/{id}/release` | Give the stock back                                                                                                              |
+| POST   | `/api/v1/dev/inventory/reservations/{id}/convert` | Turn the reservation into a stock deduction (`SALE` ledger row)                                                                  |
+| POST   | `/api/v1/dev/inventory/reservations/expire`       | Run the expiry sweep now (the worker runs it every minute) → `{ expired }`                                                       |
 
 ### Authentication (`/api/v1/auth`)
 
@@ -283,6 +291,126 @@ hold, manage the owner, or manage themselves.
 | PATCH  | `/seller/members/{memberId}`                        | `seller.members.manage` | `{ roles, permissions? }`; effective on the person's next request  |
 | POST   | `/seller/members/{memberId}/suspend`, `/reactivate` | `seller.members.manage` | Suspending ends their Seller Center sessions                       |
 | DELETE | `/seller/members/{memberId}`                        | `seller.members.manage` | Removes them from the seller (their account stays) → 204           |
+
+### Categories
+
+The global category tree (three levels at most), kept by marketplace staff. A category's
+attributes (e.g. "Net weight", "Storage") are filled in by products in it and in its
+subcategories.
+
+| Method | Path                                 | Access                      | Description                                                                                                                                                      |
+| ------ | ------------------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/categories`                 | public                      | Active categories under active parents, parents first, with their own attributes                                                                                 |
+| GET    | `/api/v1/categories/all`             | `catalog.categories.manage` | Every category, including inactive ones                                                                                                                          |
+| GET    | `/api/v1/categories/{id}`            | public                      | One category                                                                                                                                                     |
+| GET    | `/api/v1/categories/{id}/attributes` | public                      | Attributes products fill in: inherited ones first, then the category's own                                                                                       |
+| GET    | `/api/v1/categories/{id}/image`      | public                      | The category image (WebP, cache-busted by `?v=`)                                                                                                                 |
+| POST   | `/api/v1/categories`                 | `catalog.categories.manage` | `{ name, slug?, parentId?, description?, status?, sortOrder? }` → 201; 422 below the third level                                                                 |
+| PATCH  | `/api/v1/categories/{id}`            | `catalog.categories.manage` | Name, link, description, status, sort order                                                                                                                      |
+| DELETE | `/api/v1/categories/{id}`            | `catalog.categories.manage` | Only without subcategories or products (409 otherwise; make it inactive instead) → 204                                                                           |
+| PUT    | `/api/v1/categories/{id}/attributes` | `catalog.categories.manage` | `{ attributes: [{ code, name, type: TEXT\|NUMBER\|BOOLEAN\|SELECT, options, unit, isRequired }] }` replaces the category's own; a code may not repeat a parent's |
+| PUT    | `/api/v1/categories/{id}/image`      | `catalog.categories.manage` | Multipart `file` (JPEG, PNG, WebP); stored as WebP                                                                                                               |
+| DELETE | `/api/v1/categories/{id}/image`      | `catalog.categories.manage` | Removes the image                                                                                                                                                |
+
+### Brands
+
+| Method | Path                         | Access                   | Description                                                                                         |
+| ------ | ---------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/brands`             | staff and seller roles   | `?status&search`; staff see all, sellers see active brands and their own requests; paginated        |
+| POST   | `/api/v1/brands`             | `catalog.brands.manage`  | `{ name, description? }` → 201 active brand; 409 if the name (ignoring case and punctuation) exists |
+| POST   | `/api/v1/brands/requests`    | `seller.products.manage` | A seller asks for a missing brand → 201 `PENDING`; usable on the seller's products at once          |
+| PATCH  | `/api/v1/brands/{id}`        | `catalog.brands.manage`  | Rename, describe, retire (`INACTIVE`) or reactivate                                                 |
+| POST   | `/api/v1/brands/{id}/review` | `catalog.brands.manage`  | `{ decision: APPROVE\|REJECT, note? }` (note required to reject); 409 if already decided            |
+
+### Products
+
+Products belong to a seller and one of its stores. Every seller-side query is limited to the
+caller's seller (another seller's products answer 404). Writing needs a verified seller.
+
+Statuses: `DRAFT` → (submit) `PENDING_APPROVAL` → `ACTIVE` or `REJECTED` (fix and resubmit).
+`ACTIVE` ⇄ `INACTIVE` (hidden by the seller). Staff can take a product down (`INACTIVE` with
+`takenDown: true`); the seller must change it, which sends it back to review. Any status →
+`ARCHIVED` → (restore) `DRAFT`. **Content changes** (name, description, category, brand,
+specifications, attributes, options, added or replaced photos) to an approved product send it
+back to `PENDING_APPROVAL`; price, stock and SKU changes do not.
+
+| Method | Path                                            | Access                                 | Description                                                                                                                                                                                                                    |
+| ------ | ----------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/api/v1/products/mine`                         | seller roles                           | My products; `?status&search&categoryId&storeId&brandId`; paginated                                                                                                                                                            |
+| GET    | `/api/v1/products`                              | `catalog.products.read`                | Every seller's products, same filters plus `sellerId`; `PENDING_APPROVAL` oldest submission first                                                                                                                              |
+| GET    | `/api/v1/products/{id}`                         | own seller, or `catalog.products.read` | Full detail: variants with stock, photos, tiers, history, `missingForSubmission`                                                                                                                                               |
+| POST   | `/api/v1/products`                              | `seller.products.manage`               | `{ storeId, categoryId, brandId?, name, slug?, description?, specifications?, attributeValues?, seo…, sku, regularPrice }` → 201 `DRAFT` with one default variant                                                              |
+| PATCH  | `/api/v1/products/{id}`                         | `seller.products.manage`               | Edit details; attribute values are checked against the category                                                                                                                                                                |
+| PUT    | `/api/v1/products/{id}/options`                 | `seller.products.manage`               | `{ options: [{ name, values }], generate: { skuPrefix, regularPrice } }` sets up to 3 options and creates a variant per new combination (at most 100); removed combinations are deleted, or 409 when they have stock records   |
+| PATCH  | `/api/v1/products/{id}/variants/{variantId}`    | see description                        | SKU, barcode, measures, stock tracking, status (`seller.products.manage`); regular and sale price with dates (`seller.pricing.manage`)                                                                                         |
+| POST   | `/api/v1/products/{id}/submit`                  | `seller.products.manage`               | Draft or rejected → `PENDING_APPROVAL`; 422 `NOT_READY` listing what is missing                                                                                                                                                |
+| POST   | `/api/v1/products/{id}/deactivate`, `/activate` | `seller.products.manage`               | Hide / show an approved product (not one that was taken down)                                                                                                                                                                  |
+| POST   | `/api/v1/products/{id}/archive`, `/restore`     | `seller.products.manage`               | Archive; restore as a draft                                                                                                                                                                                                    |
+| POST   | `/api/v1/products/{id}/review`                  | `catalog.products.review`              | `{ decision: APPROVE\|REJECT, note? }` (note required to reject); 409 if the brand is not active yet; emails the seller                                                                                                        |
+| POST   | `/api/v1/products/{id}/take-down`               | `catalog.products.review`              | `{ reason }`; hides the product; emails the seller                                                                                                                                                                             |
+| POST   | `/api/v1/products/{id}/images`                  | `seller.products.manage`               | Multipart `file` (+ `altText?`, `variantId?`). JPEG, PNG or WebP by extension **and** content, ≤ 5 MB, ≥ 200 × 200 px, at most 10 per product. Stored as WebP (longest side 1600 px) plus a 400 px thumbnail, metadata removed |
+| PUT    | `/api/v1/products/{id}/images/order`            | `seller.products.manage`               | `{ imageIds }` listing every photo once; the first is the main photo                                                                                                                                                           |
+| PATCH  | `/api/v1/products/{id}/images/{imageId}`        | `seller.products.manage`               | `{ altText?, variantId? }`                                                                                                                                                                                                     |
+| PUT    | `/api/v1/products/{id}/images/{imageId}/file`   | `seller.products.manage`               | Replace the photo, keeping its place                                                                                                                                                                                           |
+| DELETE | `/api/v1/products/{id}/images/{imageId}`        | `seller.products.manage`               | Delete the photo and its files                                                                                                                                                                                                 |
+| GET    | `/api/v1/products/images/{imageId}/{size}`      | public                                 | `large` or `thumbnail` WebP; `Cache-Control: public, immutable` (URLs carry `?v=`)                                                                                                                                             |
+
+### Pricing
+
+The server calculates every price; clients send only variant ids and quantities. Order: a
+price agreed with the customer wins; otherwise the retail price (sale price while the sale
+runs); approved wholesale customers, on products with wholesale on and at or above the
+wholesale minimum, get the tier for the highest quantity break reached when it is lower.
+Each quote line carries the rule that produced it (`source`, `rule`), which orders store as a
+snapshot.
+
+| Method | Path                                              | Access                  | Description                                                                                                                                                                                                    |
+| ------ | ------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/pricing/quote`                           | public (no CSRF)        | `{ items: [{ variantId, quantity }] }` (extra top-level fields are refused) → `{ lines, evaluatedAt }` for the signed-in customer or a guest; 422 for unavailable items or quantities outside the order limits |
+| PUT    | `/api/v1/products/{id}/pricing`                   | `seller.pricing.manage` | `{ currency, minOrderQuantity, maxOrderQuantity?, wholesaleEnabled, wholesaleMinOrderQuantity }`                                                                                                               |
+| PUT    | `/api/v1/products/{id}/price-tiers`               | `seller.pricing.manage` | `{ tiers: [{ variantId?, minQuantity, unitPrice, startsAt?, endsAt? }] }` replaces the tiers. Tiers in force at the same time need different quantities, and more units may not cost more each                 |
+| GET    | `/api/v1/products/{id}/customer-prices`           | seller roles            | Prices agreed with individual customers                                                                                                                                                                        |
+| POST   | `/api/v1/products/{id}/customer-prices`           | `seller.pricing.manage` | `{ customerEmail, variantId?, minQuantity, unitPrice, startsAt?, endsAt?, note? }`; only customer accounts; 409 for an overlapping duplicate                                                                   |
+| DELETE | `/api/v1/products/{id}/customer-prices/{priceId}` | `seller.pricing.manage` | Remove                                                                                                                                                                                                         |
+| POST   | `/api/v1/products/{id}/price-preview`             | seller roles            | `{ variantId, quantity, buyer: RETAIL\|WHOLESALE, customerEmail? }` → one quote line                                                                                                                           |
+
+### Catalog for shoppers (public)
+
+Only approved products of verified sellers, in open stores and active categories.
+
+| Method | Path                            | Description                                                                                    |
+| ------ | ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/catalog/products`      | `?categoryId` (includes subcategories) `&storeId&search`; cards with the current lowest price  |
+| GET    | `/api/v1/catalog/products/{id}` | Product page data with prices for the person asking (retail, wholesale tiers or agreed prices) |
+
+### Inventory (Seller Center)
+
+Stock lives per variant and warehouse: `quantityOnHand`, `reservedQuantity` (held for
+checkouts) and `damagedQuantity` (kept apart). Available = on hand − reserved, never below
+zero: every change is one guarded UPDATE plus one row in the append-only ledger, in a
+transaction, so concurrent requests cannot oversell.
+
+| Method | Path                                        | Access                    | Description                                                                                                                                                                                                                                                                                           |
+| ------ | ------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/inventory/summary`                 | seller roles              | Totals for the dashboard                                                                                                                                                                                                                                                                              |
+| GET    | `/api/v1/inventory/warehouses`              | seller roles              | Warehouses with stock totals                                                                                                                                                                                                                                                                          |
+| POST   | `/api/v1/inventory/warehouses`              | `seller.inventory.manage` | `{ name, code, address…, contactName?, phone?, isDefault? }` (at most 20; the first is the default)                                                                                                                                                                                                   |
+| PATCH  | `/api/v1/inventory/warehouses/{id}`         | `seller.inventory.manage` | Edit, or `status: INACTIVE` (not the default)                                                                                                                                                                                                                                                         |
+| POST   | `/api/v1/inventory/warehouses/{id}/default` | `seller.inventory.manage` | Make it the default (reservations take stock from it first)                                                                                                                                                                                                                                           |
+| GET    | `/api/v1/inventory/stock`                   | seller roles              | Stock levels; `?warehouseId&productId&search&lowStock=true`; paginated                                                                                                                                                                                                                                |
+| PUT    | `/api/v1/inventory/stock/{id}/threshold`    | `seller.inventory.manage` | `{ lowStockThreshold }` (null: no alert). One email when available stock falls to it; re-armed after restocking                                                                                                                                                                                       |
+| POST   | `/api/v1/inventory/movements`               | `seller.inventory.manage` | `{ warehouseId, variantId, type, quantity, reason? }`; types `STOCK_IN`, `STOCK_OUT`, `ADJUSTMENT` (signed), `DAMAGED`, `DAMAGED_WRITE_OFF`, `RETURN_RESTOCK`, `RETURN_DAMAGED`; reason required except for stock in and restocked returns → 201 `{ movement, stockLevel }`; 409 `INSUFFICIENT_STOCK` |
+| GET    | `/api/v1/inventory/movements`               | seller roles              | The ledger, newest first; `?warehouseId&variantId&productId&type&from&to`                                                                                                                                                                                                                             |
+| POST   | `/api/v1/inventory/transfers`               | `seller.inventory.manage` | `{ fromWarehouseId, toWarehouseId, items: [{ variantId, quantity }], note? }`; all items or none                                                                                                                                                                                                      |
+| GET    | `/api/v1/inventory/transfers`               | seller roles              | Transfers, newest first                                                                                                                                                                                                                                                                               |
+| GET    | `/api/v1/inventory/reservations`            | seller roles              | Stock held for checkouts; `?status&variantId`                                                                                                                                                                                                                                                         |
+| GET    | `/api/v1/inventory/overview`                | `inventory.read` (staff)  | Totals and stock per seller; `?search`                                                                                                                                                                                                                                                                |
+
+Reservations are created by checkout (next phase) through `ReservationsService`: all items or
+none, default warehouse first, `expiresAt` (15 minutes by default, 60 at most). The worker
+releases expired holds every minute, and the API releases a variant's expired holds before
+reserving it, so a late sweep never blocks a sale. A reservation becomes a `SALE` ledger row
+when the order is fulfilled; converting an expired one is refused (`RESERVATION_NOT_ACTIVE`).
 
 ### Documentation
 

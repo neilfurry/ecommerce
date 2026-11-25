@@ -122,8 +122,13 @@ password in `SEED_DEMO_PASSWORD` (`Marketplace-dev-2026!` by default):
    Mailpit, complete **Business profile**, upload the three required documents on
    **Verification** and submit. In the Admin Console, **Sellers → Under review** shows it;
    approve it, then create a store in the Seller Center.
-7. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
-8. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
+7. In the Seller Center (as `seller.owner@marketplace.local`) open **Products**: the demo
+   product "Sinandomeng Rice 25 kg" is active with wholesale tiers (₱500 / 450 / 420 / 390) and
+   120 units in warehouse QC-1. Add a product, upload a photo and submit it; approve it in the
+   Admin Console under **Catalog → Product approval**. Record stock on **Inventory → Stock
+   adjustments** and check **Movement history**.
+8. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
+9. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
 
 ## 5. Environment configuration
 
@@ -144,7 +149,7 @@ printed.
 | SMS             | `SMS_PROVIDER` (`mock` or `semaphore`; `mock` is rejected in production), `SEMAPHORE_API_KEY`, `SEMAPHORE_SENDER_NAME`                                                                                                                                                                                                                                                                                                                                                                 |
 | Demo data       | `SEED_DEMO_USERS`, `SEED_DEMO_PASSWORD` (development only; never seeded when `NODE_ENV=production`)                                                                                                                                                                                                                                                                                                                                                                                    |
 | Developer tools | `DEV_TOOLS_ENABLED` (rejected when `NODE_ENV=production`)                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Worker          | `WORKER_CONCURRENCY` (optional override), `WORKER_HEARTBEAT_INTERVAL_SECONDS`                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Worker          | `WORKER_CONCURRENCY` (optional override), `WORKER_HEARTBEAT_INTERVAL_SECONDS`, `DATABASE_URL` (shared with the API; required in production for the reservation sweep)                                                                                                                                                                                                                                                                                                                  |
 | Frontends       | `VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET`, `VITE_MAILPIT_URL`                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 `NODE_ENV` is intentionally not set in `.env`: the API and worker default to `development`, and

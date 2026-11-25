@@ -1,8 +1,8 @@
-import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { ADMIN, ADMIN_STATE, API, SELLER, SELLER_STATE } from './support/env';
 
-const PHOTO = path.join(__dirname, 'fixtures', 'product.jpg');
+const PHOTO = fileURLToPath(new URL('./fixtures/product.jpg', import.meta.url));
 
 test.describe('Catalog, approval and inventory', () => {
   test('a seller lists a product, the marketplace approves it, and stock is recorded', async ({

@@ -68,8 +68,24 @@ apps/api/src
 │   └── openapi/             zodToOpenApi: Swagger schemas from the same Zod schemas
 ├── infrastructure/          Global technical modules: prisma, redis, storage, queue, throttling, logging
 └── modules/                 Domain modules: health, auth (incl. MFA), users, roles, wholesale, sellers, stores,
-                             seller-members, audit, notifications, files, dev-tools
+                             seller-members, audit, notifications, files, dev-tools,
+                             catalog (categories, brands), products (incl. photos, public catalog),
+                             pricing (price engine, quotes), inventory (warehouses, ledger, reservations)
 ```
+
+### Catalog, pricing and inventory (Phase 3)
+
+- **Products** belong to a seller's store; seller endpoints are limited by `sellerScope(user)`
+  and staff endpoints need `catalog.products.*`. Content changes to approved products go back
+  to review ([ADR 0015](adr/0015-catalog-approval-and-product-images.md)).
+- **Prices** are always computed by the pure `price-engine.ts`; the quote returns a snapshot
+  that orders will store ([ADR 0016](adr/0016-server-side-pricing-engine.md)).
+- **Stock** changes are single guarded SQL updates plus an append-only ledger row in one
+  transaction; reservations lock the variant's stock rows
+  ([ADR 0017](adr/0017-inventory-ledger-and-reservations.md)).
+- **Product photos** are validated (extension, content, size, pixel limits) and re-encoded to
+  WebP with sharp inside the API request (large 1600 px + 400 px thumbnail, metadata removed).
+  The `image-processing` queue is kept for heavier work later.
 
 ### Request lifecycle
 
@@ -144,6 +160,12 @@ ADR 0013 (sellers and isolation), ADR 0014 (two-step verification).
 - **Heartbeat.** A BullMQ job scheduler runs `system.heartbeat` every 15 s. The handler writes a
   Redis key that `GET /api/v1/health` reads, which proves the whole Redis → BullMQ → worker
   pipeline.
+- **Database access.** The worker connects to PostgreSQL (`DATABASE_URL`, required in
+  production) for jobs that change data. A job scheduler on `order-processing` runs
+  `order.release-expired-reservations` every 60 s, using the same `releaseExpiredReservations`
+  function as the API (from `@marketplace/database`).
+- **Catalog emails.** `email.product-decision` (approved, rejected, taken down) and
+  `email.low-stock` are sent through the email queue.
 - **Development samples.** `system.dev-sample` can simulate failures to demonstrate retries and
   dead-lettering, and `email.dev-test` sends a test email (to Mailpit locally). Both refuse to run
   unless `DEV_TOOLS_ENABLED=true`.
@@ -167,6 +189,9 @@ ADR 0013 (sellers and isolation), ADR 0014 (two-step verification).
 - Seller verification documents (`SELLER_DOCUMENT`) are only ever streamed through the API after
   the seller-scope or `sellers.read` check (`Cache-Control: private, no-store`), never by URL.
   Staff views are audited. Store logos and banners are the only public seller files.
+- Product photos (`PRODUCT_IMAGE`, `PRODUCT_IMAGE_THUMBNAIL`) and category images
+  (`CATEGORY_IMAGE`) are public: the API streams them with `?v=<fileId>` URLs and
+  `Cache-Control: public, max-age=31536000, immutable`. Only re-encoded WebP files are stored.
 
 ## Frontend architecture
 
