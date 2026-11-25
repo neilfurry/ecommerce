@@ -54,6 +54,8 @@ export const apiEnvSchema = z
     UPLOAD_MAX_BYTES: envInteger(5 * 1024 * 1024, 1024, 100 * 1024 * 1024),
 
     DEV_TOOLS_ENABLED: envBoolean(false),
+    /** Shipping rate provider. "mock" uses the admin-editable rate table (development). */
+    SHIPPING_PROVIDER: z.enum(['mock']).default('mock'),
 
     /** Signs access tokens (HS256). At least 32 random characters; rotate by redeploying. */
     AUTH_JWT_SECRET: z.string().min(32, 'Use at least 32 random characters'),
@@ -104,6 +106,13 @@ export const apiEnvSchema = z
         code: 'custom',
         path: ['AUTH_OTP_SECRET'],
         message: 'Must differ from AUTH_JWT_SECRET',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.SHIPPING_PROVIDER === 'mock') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SHIPPING_PROVIDER'],
+        message: 'Mock shipping rates are for development; configure a carrier in production',
       });
     }
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {

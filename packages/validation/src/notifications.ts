@@ -78,6 +78,44 @@ export const lowStockJobSchema = z.object({
     .min(1),
   link: z.url(),
 });
+const orderLine = z.object({
+  productName: z.string(),
+  variantTitle: z.string(),
+  quantity: z.number().int(),
+  lineTotal: z.string(),
+});
+
+/** Sent to the customer when an order is placed (or created waiting for payment). */
+export const orderPlacedJobSchema = z.object({
+  ...recipient,
+  orderNumber: z.string(),
+  status: z.enum(['PLACED', 'AWAITING_PAYMENT']),
+  paymentMethod: z.string(),
+  paymentDueAt: z.iso.datetime().nullable(),
+  grandTotal: z.string(),
+  sellers: z.array(z.object({ storeName: z.string(), lines: z.array(orderLine) })).min(1),
+  address: z.string(),
+  link: z.url(),
+});
+/** Sent to each seller with their suborder. */
+export const sellerNewOrderJobSchema = z.object({
+  to: z.email(),
+  businessName: z.string(),
+  number: z.string(),
+  paymentMethod: z.string(),
+  awaitingPayment: z.boolean(),
+  total: z.string(),
+  lines: z.array(orderLine).min(1),
+  link: z.url(),
+});
+/** Sent to the customer when an order is cancelled (by them or for non-payment). */
+export const orderCancelledJobSchema = z.object({
+  ...recipient,
+  orderNumber: z.string(),
+  reason: z.string(),
+  link: z.url(),
+});
+
 export const smsOtpJobSchema = z.object({
   /** E.164 */
   to: z.string().regex(/^\+[1-9]\d{7,14}$/),
@@ -94,3 +132,6 @@ export type SellerStatusJob = z.infer<typeof sellerStatusJobSchema>;
 export type SellerInvitationJob = z.infer<typeof sellerInvitationJobSchema>;
 export type ProductDecisionJob = z.infer<typeof productDecisionJobSchema>;
 export type LowStockJob = z.infer<typeof lowStockJobSchema>;
+export type OrderPlacedJob = z.infer<typeof orderPlacedJobSchema>;
+export type SellerNewOrderJob = z.infer<typeof sellerNewOrderJobSchema>;
+export type OrderCancelledJob = z.infer<typeof orderCancelledJobSchema>;

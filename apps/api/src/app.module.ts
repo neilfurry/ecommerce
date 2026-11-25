@@ -21,6 +21,16 @@ import { SellersModule } from './modules/sellers/sellers.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { UsersModule } from './modules/users/users.module';
 import { WholesaleModule } from './modules/wholesale/wholesale.module';
+import { AddressesModule } from './modules/addresses/addresses.module';
+import { CartModule } from './modules/cart/cart.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
+import { LocationsModule } from './modules/locations/locations.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { StorefrontModule } from './modules/storefront/storefront.module';
+import { WishlistModule } from './modules/wishlist/wishlist.module';
 
 /**
  * Root module. Infrastructure modules are global; business-domain modules live in
@@ -52,6 +62,17 @@ import { WholesaleModule } from './modules/wholesale/wholesale.module';
     ProductsModule,
     InventoryModule,
     SellerMembersModule,
+    // Storefront, cart and checkout (Phase 4)
+    SettingsModule,
+    LocationsModule,
+    AddressesModule,
+    StorefrontModule,
+    WishlistModule,
+    ReviewsModule,
+    CartModule,
+    PromotionsModule,
+    OrdersModule,
+    CheckoutModule,
     // Development only: every route answers 404 unless DEV_TOOLS_ENABLED=true.
     DevToolsModule,
   ],

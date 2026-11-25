@@ -165,4 +165,72 @@ describe('calculatePrice', () => {
     const line = calculatePrice(rice({ regularPrice: d('0.10'), tiers: [] }), 3, retail, NOW);
     expect(line.lineTotal).toBe('0.30');
   });
+
+  describe('flash sales', () => {
+    const flash = (extra: Partial<NonNullable<VariantPricing['flash']>> = {}) => ({
+      itemId: 'flash-1',
+      flashPrice: d('399.00'),
+      startsAt: new Date('2026-11-25T00:00:00Z'),
+      endsAt: new Date('2026-11-26T00:00:00Z'),
+      remaining: 10,
+      perOrderLimit: 2,
+      ...extra,
+    });
+
+    it('applies the flash price while it runs, within the per-order limit and units left', () => {
+      const line = calculatePrice(rice({ flash: flash() }), 2, retail, NOW);
+      expect(line).toMatchObject({
+        unitPrice: '399.00',
+        source: 'FLASH_SALE',
+        lineTotal: '798.00',
+      });
+      expect(line.rule).toMatchObject({ type: 'FLASH_SALE', id: 'flash-1' });
+      expect(line.flashSale).toEqual({
+        itemId: 'flash-1',
+        endsAt: '2026-11-26T00:00:00.000Z',
+        remaining: 10,
+        perOrderLimit: 2,
+      });
+    });
+
+    it('charges retail for the whole line above the per-order limit or the units left', () => {
+      expect(calculatePrice(rice({ flash: flash() }), 3, retail, NOW).source).toBe('REGULAR');
+      const few = flash({ remaining: 1, perOrderLimit: null });
+      expect(calculatePrice(rice({ flash: few }), 2, retail, NOW).unitPrice).toBe('500.00');
+      expect(calculatePrice(rice({ flash: few }), 1, retail, NOW).unitPrice).toBe('399.00');
+    });
+
+    it('ignores a flash sale that has not started or has ended', () => {
+      const later = flash({ startsAt: new Date('2026-11-25T09:00:00Z') });
+      expect(calculatePrice(rice({ flash: later }), 1, retail, NOW).source).toBe('REGULAR');
+      const over = flash({ endsAt: new Date('2026-11-25T08:00:00Z') });
+      expect(calculatePrice(rice({ flash: over }), 1, retail, NOW).source).toBe('REGULAR');
+    });
+
+    it('keeps the cheaper of a sale price and the flash price', () => {
+      const onSale = rice({ salePrice: d('350.00'), flash: flash() });
+      expect(calculatePrice(onSale, 1, retail, NOW)).toMatchObject({
+        unitPrice: '350.00',
+        source: 'SALE',
+        flashSale: null,
+      });
+    });
+
+    it('gives wholesale buyers the tier when it beats the flash price, and agreed prices win', () => {
+      const cheapTiers = rice({
+        flash: flash({ perOrderLimit: null, remaining: 500 }),
+        tiers: [tier(100, '380.00')],
+      });
+      expect(calculatePrice(cheapTiers, 100, wholesale, NOW).source).toBe('WHOLESALE_TIER');
+      expect(calculatePrice(cheapTiers, 10, wholesale, NOW).source).toBe('FLASH_SALE');
+      const agreed = rice({
+        flash: flash(),
+        customerPrices: [tier(1, '450.00', { id: 'agreed' })],
+      });
+      expect(calculatePrice(agreed, 1, retail, NOW)).toMatchObject({
+        source: 'CUSTOMER_PRICE',
+        flashSale: null,
+      });
+    });
+  });
 });

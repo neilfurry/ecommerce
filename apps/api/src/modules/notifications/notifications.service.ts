@@ -6,6 +6,9 @@ import type {
   SellerInvitationJob,
   ProductDecisionJob,
   LowStockJob,
+  OrderCancelledJob,
+  OrderPlacedJob,
+  SellerNewOrderJob,
   SellerStatusJob,
   SmsOtpJob,
   StaffInvitationJob,
@@ -57,6 +60,18 @@ export class NotificationsService {
 
   sendLowStock(job: LowStockJob) {
     return this.emailQueue.add(EMAIL_JOBS.LOW_STOCK, job);
+  }
+
+  sendOrderPlaced(job: OrderPlacedJob) {
+    return this.emailQueue.add(EMAIL_JOBS.ORDER_PLACED, job);
+  }
+
+  sendSellerNewOrder(job: SellerNewOrderJob) {
+    return this.emailQueue.add(EMAIL_JOBS.SELLER_NEW_ORDER, job);
+  }
+
+  sendOrderCancelled(job: OrderCancelledJob) {
+    return this.emailQueue.add(EMAIL_JOBS.ORDER_CANCELLED, job);
   }
 
   /**

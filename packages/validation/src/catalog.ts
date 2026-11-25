@@ -599,7 +599,7 @@ export const priceQuoteLineSchema = z.object({
   source: priceSourceSchema,
   rule: z
     .object({
-      type: z.enum(['SALE', 'PRICE_TIER', 'CUSTOMER_PRICE']),
+      type: z.enum(['SALE', 'FLASH_SALE', 'PRICE_TIER', 'CUSTOMER_PRICE']),
       id: z.string(),
       minQuantity: z.number().int().nullable(),
       startsAt: z.iso.datetime().nullable(),
@@ -611,6 +611,15 @@ export const priceQuoteLineSchema = z.object({
   minOrderQuantity: z.number().int(),
   maxOrderQuantity: z.number().int().nullable(),
   wholesaleEligible: z.boolean(),
+  /** The flash sale this line's price comes from, with what is left of it. */
+  flashSale: z
+    .object({
+      itemId: z.uuid(),
+      endsAt: z.iso.datetime(),
+      remaining: z.number().int(),
+      perOrderLimit: z.number().int().nullable(),
+    })
+    .nullable(),
 });
 export type PriceQuoteLine = z.infer<typeof priceQuoteLineSchema>;
 

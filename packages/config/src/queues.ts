@@ -137,6 +137,9 @@ export const EMAIL_JOBS = {
   SELLER_INVITATION: 'email.seller-invitation',
   PRODUCT_DECISION: 'email.product-decision',
   LOW_STOCK: 'email.low-stock',
+  ORDER_PLACED: 'email.order-placed',
+  SELLER_NEW_ORDER: 'email.seller-new-order',
+  ORDER_CANCELLED: 'email.order-cancelled',
 } as const;
 
 export const NOTIFICATION_JOBS = {
@@ -147,6 +150,8 @@ export const NOTIFICATION_JOBS = {
 export const ORDER_JOBS = {
   /** Periodic: gives back stock held by checkout reservations that expired. */
   RELEASE_EXPIRED_RESERVATIONS: 'order-processing.release-expired-reservations',
+  /** Periodic: cancels orders waiting for an online payment past their deadline. */
+  EXPIRE_UNPAID_ORDERS: 'order-processing.expire-unpaid-orders',
 } as const;
 
 export const DEAD_LETTER_JOBS = {

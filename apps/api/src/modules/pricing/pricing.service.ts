@@ -39,25 +39,36 @@ const overlaps = (
 
 const date = (value: string | null | undefined) => (value ? new Date(value) : null);
 
-const variantPricingInclude = (customerId: string | null) =>
+const NO_CUSTOMER = '00000000-0000-0000-0000-000000000000';
+
+const variantPricingInclude = (customerId: string | null, now: Date = new Date()) =>
   ({
     product: {
       include: {
         seller: { select: { status: true } },
         store: { select: { status: true } },
         priceTiers: true,
-        customerPrices: {
-          where: { customerId: customerId ?? '00000000-0000-0000-0000-000000000000' },
-        },
+        customerPrices: { where: { customerId: customerId ?? NO_CUSTOMER } },
       },
     },
+    // The running flash sale offer, if any (one per variant at a time).
+    flashSaleItems: {
+      where: {
+        status: 'ACTIVE',
+        flashSale: { status: 'ACTIVE', startsAt: { lte: now }, endsAt: { gt: now } },
+      },
+      include: { flashSale: { select: { startsAt: true, endsAt: true } } },
+      orderBy: { createdAt: 'asc' },
+      take: 1,
+    },
   }) satisfies Prisma.ProductVariantInclude;
-type VariantPricingRow = Prisma.ProductVariantGetPayload<{
+export type VariantPricingRow = Prisma.ProductVariantGetPayload<{
   include: ReturnType<typeof variantPricingInclude>;
 }>;
 
-function toPricing(row: VariantPricingRow): VariantPricing {
+export function toPricing(row: VariantPricingRow): VariantPricing {
   const p = row.product;
+  const flash = row.flashSaleItems[0];
   return {
     variantId: row.id,
     productId: p.id,
@@ -74,7 +85,42 @@ function toPricing(row: VariantPricingRow): VariantPricing {
     wholesaleMinOrderQuantity: p.wholesaleMinOrderQuantity,
     tiers: p.priceTiers,
     customerPrices: p.customerPrices,
+    flash: flash
+      ? {
+          itemId: flash.id,
+          flashPrice: flash.flashPrice,
+          startsAt: flash.flashSale.startsAt,
+          endsAt: flash.flashSale.endsAt,
+          remaining: flash.quantityLimit - flash.soldQuantity,
+          perOrderLimit: flash.perOrderLimit,
+        }
+      : null,
   };
+}
+
+/** Whether shoppers can buy the variant now (approved product of a verified, open seller). */
+export const isSellable = (row: VariantPricingRow) =>
+  row.status === 'ACTIVE' &&
+  row.product.status === 'ACTIVE' &&
+  row.product.seller.status === 'VERIFIED' &&
+  row.product.store.status === 'ACTIVE';
+
+/** The pricing buyer for a request: wholesale only for approved wholesale customers. */
+export function shopperOf(user: AuthenticatedUser | undefined) {
+  const shopper = user?.app === 'storefront' ? user : undefined;
+  return {
+    customerId: shopper?.id ?? null,
+    buyer: { wholesale: !!shopper?.roles.includes('WHOLESALE_CUSTOMER') } satisfies Buyer,
+  };
+}
+
+export interface EvaluatedLine {
+  variantId: string;
+  quantity: number;
+  row: VariantPricingRow | null;
+  line: PriceQuoteLine | null;
+  /** Why the line cannot be priced (not sellable, quantity outside the limits). */
+  problem: string | null;
 }
 
 /**
@@ -96,33 +142,62 @@ export class PricingService {
    * Only products shoppers can see are quoted.
    */
   async quote(user: AuthenticatedUser | undefined, input: PriceQuoteRequest): Promise<PriceQuote> {
-    const shopper = user?.app === 'storefront' ? user : undefined;
-    const buyer: Buyer = { wholesale: !!shopper?.roles.includes('WHOLESALE_CUSTOMER') };
-    const ids = [...new Set(input.items.map((i) => i.variantId))];
-    const rows = await this.prisma.productVariant.findMany({
-      where: { id: { in: ids } },
-      include: variantPricingInclude(shopper?.id ?? null),
-    });
-    const byId = new Map(rows.map((r) => [r.id, r]));
+    const { customerId, buyer } = shopperOf(user);
     const now = new Date();
-    const lines = input.items.map((item, index) => {
-      const row = byId.get(item.variantId);
-      const sellable =
-        row &&
-        row.status === 'ACTIVE' &&
-        row.product.status === 'ACTIVE' &&
-        row.product.seller.status === 'VERIFIED' &&
-        row.product.store.status === 'ACTIVE';
-      if (!sellable) throw invalid('This item is not available.', `items.${index}.variantId`);
-      return this.calculate(
-        toPricing(row),
-        Number(item.quantity),
-        buyer,
-        now,
-        `items.${index}.quantity`,
-      );
+    const evaluated = await this.evaluate(
+      input.items.map((i) => ({ variantId: i.variantId, quantity: Number(i.quantity) })),
+      buyer,
+      customerId,
+      now,
+    );
+    const lines = evaluated.map((e, index) => {
+      if (!e.row || !isSellable(e.row))
+        throw invalid('This item is not available.', `items.${index}.variantId`);
+      if (!e.line) throw invalid(e.problem ?? 'Not available', `items.${index}.quantity`);
+      return e.line;
     });
     return { lines, evaluatedAt: now.toISOString() };
+  }
+
+  /**
+   * Prices several lines at once for one buyer, reporting a problem per line instead of
+   * failing: the cart and checkout show every problem together. `db` lets checkout price
+   * inside its transaction.
+   */
+  async evaluate(
+    items: { variantId: string; quantity: number }[],
+    buyer: Buyer,
+    customerId: string | null,
+    now: Date,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<EvaluatedLine[]> {
+    const ids = [...new Set(items.map((i) => i.variantId))];
+    const rows = ids.length
+      ? await db.productVariant.findMany({
+          where: { id: { in: ids } },
+          include: variantPricingInclude(customerId, now),
+        })
+      : [];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return items.map((item) => {
+      const row = byId.get(item.variantId) ?? null;
+      if (!row || !isSellable(row)) {
+        return { ...item, row, line: null, problem: 'This item is no longer available.' };
+      }
+      try {
+        return {
+          ...item,
+          row,
+          line: calculatePrice(toPricing(row), item.quantity, buyer, now),
+          problem: null,
+        };
+      } catch (error) {
+        if (error instanceof QuantityOutOfRangeError) {
+          return { ...item, row, line: null, problem: error.message };
+        }
+        throw error;
+      }
+    });
   }
 
   /** Prices for one product at quantity 1 for a shopper (public product page). */

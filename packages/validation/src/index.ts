@@ -8,3 +8,5 @@ export * from './notifications';
 export * from './sellers';
 export * from './catalog';
 export * from './inventory';
+export * from './storefront';
+export * from './checkout';

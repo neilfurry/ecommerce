@@ -24,6 +24,7 @@ export class AppConfig {
   readonly database: { url: string };
   readonly redis: { url: string };
   readonly devToolsEnabled: boolean;
+  readonly shippingProvider: ApiEnv['SHIPPING_PROVIDER'];
   readonly auth: {
     jwtSecret: string;
     otpSecret: string;
@@ -68,6 +69,7 @@ export class AppConfig {
     this.database = { url: env.DATABASE_URL };
     this.redis = { url: env.REDIS_URL };
     this.devToolsEnabled = env.DEV_TOOLS_ENABLED;
+    this.shippingProvider = env.SHIPPING_PROVIDER;
     this.auth = {
       jwtSecret: env.AUTH_JWT_SECRET,
       otpSecret: env.AUTH_OTP_SECRET,

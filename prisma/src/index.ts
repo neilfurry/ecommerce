@@ -15,3 +15,4 @@ export {
   type LocationLevelName,
   type LocationRow,
 } from './locations';
+export { cancelOrderInTx, expireUnpaidOrders, type CancelledOrder } from './orders';

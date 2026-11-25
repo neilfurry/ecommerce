@@ -88,11 +88,18 @@ export const PRODUCT_IMAGE_TYPES = {
 // ---- Pricing ----------------------------------------------------------------------
 
 /** Where a calculated unit price came from (stored with order items as part of the snapshot). */
-export const PRICE_SOURCES = ['REGULAR', 'SALE', 'WHOLESALE_TIER', 'CUSTOMER_PRICE'] as const;
+export const PRICE_SOURCES = [
+  'REGULAR',
+  'SALE',
+  'FLASH_SALE',
+  'WHOLESALE_TIER',
+  'CUSTOMER_PRICE',
+] as const;
 export type PriceSource = (typeof PRICE_SOURCES)[number];
 export const PRICE_SOURCE_LABELS: Record<PriceSource, string> = {
   REGULAR: 'Regular price',
   SALE: 'Sale price',
+  FLASH_SALE: 'Flash sale price',
   WHOLESALE_TIER: 'Wholesale price',
   CUSTOMER_PRICE: 'Your agreed price',
 };

@@ -28,6 +28,7 @@ import { ApiException } from '../../common/errors/api.exception';
 import { AppConfig } from '../../config/app-config';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { areaName, LocationsService } from '../locations/locations.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   applyStockChange,
@@ -117,6 +118,7 @@ export class InventoryService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     private readonly config: AppConfig,
+    private readonly locations: LocationsService,
   ) {}
 
   // ---- Warehouses ---------------------------------------------------------------------------
@@ -151,6 +153,16 @@ export class InventoryService {
           postalCode: w.postalCode,
           contactName: w.contactName,
           phone: w.phone,
+          location:
+            w.regionCode && w.cityCode
+              ? {
+                  regionCode: w.regionCode,
+                  provinceCode: w.provinceCode,
+                  cityCode: w.cityCode,
+                  barangayCode: w.barangayCode,
+                }
+              : null,
+          canShip: !!(w.regionCode && w.cityCode),
           status: w.status,
           isDefault: w.isDefault,
           totals: {
@@ -191,7 +203,7 @@ export class InventoryService {
         const created = await tx.warehouse.create({
           data: {
             sellerId,
-            ...this.warehouseData(input),
+            ...(await this.warehouseData(input)),
             isDefault,
           } as Prisma.WarehouseUncheckedCreateInput,
         });
@@ -238,7 +250,7 @@ export class InventoryService {
     }
     try {
       await this.prisma.$transaction(async (tx) => {
-        await tx.warehouse.update({ where: { id }, data: this.warehouseData(input) });
+        await tx.warehouse.update({ where: { id }, data: await this.warehouseData(input) });
         await this.audit.record(
           {
             action: 'warehouse.updated',
@@ -811,8 +823,25 @@ export class InventoryService {
     return variant;
   }
 
-  private warehouseData(input: UpdateWarehouseRequest): Prisma.WarehouseUpdateInput {
-    return Object.fromEntries(
+  private async warehouseData(
+    input: UpdateWarehouseRequest,
+  ): Promise<Prisma.WarehouseUncheckedUpdateInput> {
+    let place: Prisma.WarehouseUncheckedUpdateInput = {};
+    if (input.location === null) {
+      place = { regionCode: null, provinceCode: null, cityCode: null, barangayCode: null };
+    } else if (input.location) {
+      const resolved = await this.locations.resolve(input.location, 'location.');
+      place = {
+        regionCode: resolved.region.code,
+        provinceCode: resolved.province?.code ?? null,
+        cityCode: resolved.city.code,
+        barangayCode: resolved.barangay.code,
+        barangay: resolved.barangay.name,
+        city: resolved.city.name,
+        province: areaName(resolved),
+      };
+    }
+    const text = Object.fromEntries(
       Object.entries({
         name: input.name?.trim(),
         code: input.code,
@@ -827,6 +856,7 @@ export class InventoryService {
         status: input.status,
       }).filter(([, v]) => v !== undefined),
     );
+    return { ...text, ...place };
   }
 }
 
