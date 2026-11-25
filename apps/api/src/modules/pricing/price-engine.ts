@@ -20,6 +20,17 @@ export interface TierRule extends Windowed {
 
 export type CustomerPriceRule = TierRule;
 
+/** A flash sale offer for the variant (a running flash sale only). */
+export interface FlashRule {
+  itemId: string;
+  flashPrice: Decimal;
+  startsAt: Date;
+  endsAt: Date;
+  /** Units still available at the flash price. */
+  remaining: number;
+  perOrderLimit: number | null;
+}
+
 /** Everything the engine needs about one variant, loaded by the server, never from a client. */
 export interface VariantPricing {
   variantId: string;
@@ -39,6 +50,8 @@ export interface VariantPricing {
   tiers: TierRule[];
   /** The buyer's own agreed prices for this product (empty for anonymous buyers). */
   customerPrices: CustomerPriceRule[];
+  /** The running flash sale offer for this variant, if any. */
+  flash?: FlashRule | null;
 }
 
 export interface Buyer {
@@ -81,7 +94,9 @@ export function applicableTiers(data: VariantPricing, now: Date): TierRule[] {
  *
  *  1. A price the seller agreed with this customer wins (variant-specific before
  *     product-wide, then the highest quantity break reached).
- *  2. Otherwise the retail price: the sale price while a sale runs, else the regular price.
+ *  2. Otherwise the retail price: the sale price while a sale runs, else the regular price;
+ *     a running flash sale price when it is lower, as long as the line stays within the
+ *     units left at that price and the flash sale's per-order limit.
  *  3. Approved wholesale customers, on products with wholesale enabled and at or above the
  *     wholesale minimum, get the tier for the highest quantity break reached, when it is
  *     lower than the retail price (a wholesale buyer never pays more than a retail one).
@@ -123,11 +138,38 @@ export function calculatePrice(
     };
   }
 
+  let flashApplied: PriceQuoteLine['flashSale'] = null;
+  const flash = data.flash;
+  if (
+    flash &&
+    isActive({ startsAt: flash.startsAt, endsAt: flash.endsAt }, now) &&
+    quantity <= flash.remaining &&
+    (flash.perOrderLimit === null || quantity <= flash.perOrderLimit) &&
+    flash.flashPrice.lessThan(unitPrice)
+  ) {
+    unitPrice = flash.flashPrice;
+    source = 'FLASH_SALE';
+    rule = {
+      type: 'FLASH_SALE',
+      id: flash.itemId,
+      minQuantity: null,
+      startsAt: flash.startsAt.toISOString(),
+      endsAt: flash.endsAt.toISOString(),
+    };
+    flashApplied = {
+      itemId: flash.itemId,
+      endsAt: flash.endsAt.toISOString(),
+      remaining: flash.remaining,
+      perOrderLimit: flash.perOrderLimit,
+    };
+  }
+
   if (wholesaleEligible && quantity >= data.wholesaleMinOrderQuantity) {
     const tier = [...tiers].reverse().find((t) => t.minQuantity <= quantity);
     if (tier && tier.unitPrice.lessThan(unitPrice)) {
       unitPrice = tier.unitPrice;
       source = 'WHOLESALE_TIER';
+      flashApplied = null;
       rule = {
         type: 'PRICE_TIER',
         id: tier.id,
@@ -153,6 +195,7 @@ export function calculatePrice(
   if (agreed) {
     unitPrice = agreed.unitPrice;
     source = 'CUSTOMER_PRICE';
+    flashApplied = null;
     rule = {
       type: 'CUSTOMER_PRICE',
       id: agreed.id,
@@ -178,6 +221,7 @@ export function calculatePrice(
     minOrderQuantity: data.minOrderQuantity,
     maxOrderQuantity: data.maxOrderQuantity,
     wholesaleEligible,
+    flashSale: flashApplied,
   };
 }
 

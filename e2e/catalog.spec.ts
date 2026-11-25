@@ -51,8 +51,11 @@ test.describe('Catalog, approval and inventory', () => {
     // 4. A marketplace admin approves it.
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const admin = await adminContext.newPage();
+    // The review queue lists it (search, as a reused database may hold more than a page).
     await admin.goto(`${ADMIN}/catalog/products`);
+    await admin.getByRole('searchbox').first().fill(name);
     await admin.getByRole('link', { name }).click();
+    await expect(admin).toHaveURL(new RegExp(`/catalog/products/${productId}$`));
     await expect(admin.getByText('5 kg', { exact: true })).toBeVisible();
     await admin.getByRole('button', { name: /Approve/ }).click();
     await admin.getByRole('alertdialog').getByRole('button', { name: 'Approve' }).click();

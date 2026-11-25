@@ -20,6 +20,7 @@ import {
   createCatalogClient,
   createSellerCatalogClient,
 } from './catalog';
+import { createAdminShopClient, createSellerShopClient, createShopClient } from './shop';
 import { createAuthClient } from './auth';
 import { createDevToolsClient } from './dev-tools';
 import { ApiError } from './errors';
@@ -52,6 +53,8 @@ export interface RequestOptions<TSchema extends z.ZodType> {
   skipRefresh?: boolean;
   /** 'blob' returns the body as a Blob (file downloads); the schema then validates the Blob. */
   responseType?: 'json' | 'blob';
+  /** Extra request headers (e.g. Idempotency-Key). */
+  headers?: Record<string, string>;
 }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -125,6 +128,7 @@ export function createApiClient({ baseUrl, app, fetchImpl, onSessionEnded }: Api
           ...(options.body !== undefined && !(options.body instanceof FormData)
             ? { 'Content-Type': 'application/json' }
             : {}),
+          ...options.headers,
         },
         body:
           options.body === undefined
@@ -205,9 +209,15 @@ export function createApiClient({ baseUrl, app, fetchImpl, onSessionEnded }: Api
       ...createAdminClient(request),
       ...createMarketplaceAdminClient(request),
       catalog: createAdminCatalogClient(request),
+      shop: createAdminShopClient(request),
     },
-    seller: { ...createSellerClient(request), ...createSellerCatalogClient(request) },
+    seller: {
+      ...createSellerClient(request),
+      ...createSellerCatalogClient(request),
+      shop: createSellerShopClient(request),
+    },
     catalog: createCatalogClient(request),
+    shop: createShopClient(request),
     stores: createStoresPublicClient(request),
     account: createAccountClient(request),
     devTools: createDevToolsClient(request),

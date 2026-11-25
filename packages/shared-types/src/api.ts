@@ -29,6 +29,8 @@ export const API_ERROR_CODES = [
   'NOT_READY',
   /** A stock reservation expired or was released. */
   'RESERVATION_NOT_ACTIVE',
+  /** Prices, stock or coupons changed since the checkout quote; the body carries the new quote. */
+  'CHECKOUT_CHANGED',
   'RATE_LIMITED',
   'SERVICE_UNAVAILABLE',
   'INTERNAL_ERROR',

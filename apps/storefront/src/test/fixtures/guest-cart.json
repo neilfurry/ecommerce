@@ -1,0 +1,114 @@
+{
+  "groups": [
+    {
+      "sellerId": "01a211bd-197c-7369-bdb2-47dfd66aed5f",
+      "store": {
+        "id": "01a211bd-198c-763c-b06c-5faf987c9f38",
+        "name": "Isla Tech Gadgets",
+        "slug": "isla-tech"
+      },
+      "lines": [
+        {
+          "id": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+          "variantId": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+          "productId": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+          "productName": "Isla Tech Aero 14 Laptop",
+          "productSlug": "isla-tech-aero-14-laptop",
+          "variantTitle": "512 GB",
+          "options": {
+            "Storage": "512 GB"
+          },
+          "imageUrl": "/api/v1/products/images/01a211f7-1893-77ff-b944-85ffd04d348f/thumbnail?v=01a211f7-1891-77ef-93d3-3e3a83f94448",
+          "quantity": 1,
+          "savedForLater": false,
+          "price": {
+            "variantId": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+            "productId": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+            "sellerId": "01a211bd-197c-7369-bdb2-47dfd66aed5f",
+            "sku": "AERO14-512",
+            "quantity": 1,
+            "currency": "PHP",
+            "unitPrice": "32999.00",
+            "lineTotal": "32999.00",
+            "regularPrice": "32999.00",
+            "source": "REGULAR",
+            "rule": null,
+            "tiers": [],
+            "minOrderQuantity": 1,
+            "maxOrderQuantity": null,
+            "wholesaleEligible": false,
+            "flashSale": null
+          },
+          "previousUnitPrice": null,
+          "availableQuantity": 14,
+          "problem": null
+        }
+      ],
+      "subtotal": "32999.00"
+    },
+    {
+      "sellerId": "01a211bd-19e0-7121-be0b-6d099215948d",
+      "store": {
+        "id": "01a211bd-19e4-747d-bb30-8097f2c1d52f",
+        "name": "Click & Type",
+        "slug": "click-and-type"
+      },
+      "lines": [
+        {
+          "id": "01a211bd-19f3-766a-99d1-5c16b287b8d3",
+          "variantId": "01a211bd-19f3-766a-99d1-5c16b287b8d3",
+          "productId": "01a211bd-19ec-723a-96a0-6edda2dcd011",
+          "productName": "Keytap Silent Wireless Mouse",
+          "productSlug": "keytap-silent-wireless-mouse",
+          "variantTitle": "Black",
+          "options": {
+            "Color": "Black"
+          },
+          "imageUrl": "/api/v1/products/images/01a211f7-16c9-737a-9473-946d154b8b4c/thumbnail?v=01a211f7-16c6-75bc-b262-6745f733dc6c",
+          "quantity": 2,
+          "savedForLater": false,
+          "price": {
+            "variantId": "01a211bd-19f3-766a-99d1-5c16b287b8d3",
+            "productId": "01a211bd-19ec-723a-96a0-6edda2dcd011",
+            "sellerId": "01a211bd-19e0-7121-be0b-6d099215948d",
+            "sku": "KT-MOUSE-BLK",
+            "quantity": 2,
+            "currency": "PHP",
+            "unitPrice": "399.00",
+            "lineTotal": "798.00",
+            "regularPrice": "599.00",
+            "source": "FLASH_SALE",
+            "rule": {
+              "type": "FLASH_SALE",
+              "id": "01a211bd-1a65-74ef-b940-d509dadae62a",
+              "minQuantity": null,
+              "startsAt": "2026-11-25T08:05:35.416Z",
+              "endsAt": "2026-12-25T08:05:35.416Z"
+            },
+            "tiers": [],
+            "minOrderQuantity": 1,
+            "maxOrderQuantity": null,
+            "wholesaleEligible": false,
+            "flashSale": {
+              "itemId": "01a211bd-1a65-74ef-b940-d509dadae62a",
+              "endsAt": "2026-12-25T08:05:35.416Z",
+              "remaining": 50,
+              "perOrderLimit": 2
+            }
+          },
+          "previousUnitPrice": null,
+          "availableQuantity": 80,
+          "problem": null
+        }
+      ],
+      "subtotal": "798.00"
+    }
+  ],
+  "saved": [],
+  "itemCount": 3,
+  "subtotal": "33797.00",
+  "wholesaleSavings": "0.00",
+  "currency": "PHP",
+  "buyerIsWholesale": false,
+  "ready": true
+}

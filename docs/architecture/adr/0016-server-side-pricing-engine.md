@@ -25,10 +25,11 @@ sent by the frontend. Orders (Phase 4) must keep the applied price and rule.
 - **Limits:** minimum and maximum order quantity are enforced (422); tiers that overlap in time
   must use different quantities, and a larger quantity may not have a higher unit price.
 - **Snapshot:** every quote line returns `source` (`CUSTOMER_PRICE`, `WHOLESALE_TIER`, `SALE`,
-  `REGULAR`), the `rule` (type, id, minimum quantity, window), the tier table that was in force,
+  `REGULAR`; Phase 4 adds `FLASH_SALE`, see ADR 0019), the `rule` (type, id, minimum quantity, window), the tier table that was in force,
   the unit price and the line total. Checkout will store this object on the order item.
-- **Money** is `Decimal(12,2)` in PHP (ADR 0004); arithmetic uses Prisma `Decimal`, never
-  floating point.
+- **Money** is stored as `Decimal(19,4)` in PHP (ADR 0004) and shown and charged rounded to
+  the centavo; arithmetic uses Prisma `Decimal`, never floating point. (This line previously
+  said `Decimal(12,2)`, which was wrong; corrected in Phase 4.)
 - `POST /pricing/quote` is public and read-only (CSRF skipped), with a strict schema that
   refuses any extra field, so a client cannot even propose a price.
 

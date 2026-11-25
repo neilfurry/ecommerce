@@ -8,7 +8,20 @@ import { NotFound, RouteError } from '@marketplace/ui';
 import type { RouteObject } from 'react-router';
 import { StoreBrand } from '../components/store-brand';
 import { StoreLayout } from '../layouts/store-layout';
-import { AccountPage } from '../pages/account/account-page';
+import { AccountLayout } from '../pages/account/account-layout';
+import { AddressesPage } from '../pages/account/addresses-page';
+import { OrderPage } from '../pages/account/order-page';
+import { OrdersPage } from '../pages/account/orders-page';
+import { AccountOverviewPage } from '../pages/account/overview-page';
+import { ReviewsPage } from '../pages/account/reviews-page';
+import { AccountSettingsPage } from '../pages/account/settings-page';
+import { WishlistPage } from '../pages/account/wishlist-page';
+import { CartPage } from '../pages/shop/cart-page';
+import { CategoryPage } from '../pages/shop/category-page';
+import { CheckoutPage } from '../pages/shop/checkout-page';
+import { ProductPage } from '../pages/shop/product-page';
+import { SearchPage } from '../pages/shop/search-page';
+import { StorePage } from '../pages/shop/store-page';
 import { SignInPage } from '../pages/auth/sign-in-page';
 import { SignUpPage } from '../pages/auth/sign-up-page';
 import { VerifyEmailPage } from '../pages/auth/verify-email-page';
@@ -44,9 +57,29 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <HomePage /> },
           { path: 'status', element: <StatusPage /> },
+          { path: 'search', element: <SearchPage /> },
+          { path: 'c/:slug', element: <CategoryPage /> },
+          { path: 'p/:productId/:slug?', element: <ProductPage /> },
+          { path: 's/:slug', element: <StorePage /> },
+          { path: 'cart', element: <CartPage /> },
           {
             element: <RequireSession />,
-            children: [{ path: 'account', element: <AccountPage /> }],
+            children: [
+              { path: 'checkout', element: <CheckoutPage /> },
+              {
+                path: 'account',
+                element: <AccountLayout />,
+                children: [
+                  { index: true, element: <AccountOverviewPage /> },
+                  { path: 'orders', element: <OrdersPage /> },
+                  { path: 'orders/:orderId', element: <OrderPage /> },
+                  { path: 'addresses', element: <AddressesPage /> },
+                  { path: 'wishlist', element: <WishlistPage /> },
+                  { path: 'reviews', element: <ReviewsPage /> },
+                  { path: 'settings', element: <AccountSettingsPage /> },
+                ],
+              },
+            ],
           },
           { path: '*', element: <NotFound /> },
         ],

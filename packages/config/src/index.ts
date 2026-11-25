@@ -22,6 +22,9 @@ export const WORKER_HEARTBEAT_SCHEDULER_ID = 'system-heartbeat';
 /** Scheduler id for the reservation expiry sweep (one schedule however many workers run). */
 export const RESERVATION_SWEEP_SCHEDULER_ID = 'order-processing-reservation-sweep';
 export const RESERVATION_SWEEP_INTERVAL_SECONDS = 60;
+/** Scheduler id for cancelling unpaid orders after their payment deadline. */
+export const UNPAID_ORDER_SWEEP_SCHEDULER_ID = 'order-processing-unpaid-order-sweep';
+export const UNPAID_ORDER_SWEEP_INTERVAL_SECONDS = 60;
 
 /** Redis key namespace. All application keys start with "marketplace:". */
 export const REDIS_KEYS = {

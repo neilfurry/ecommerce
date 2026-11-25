@@ -41,9 +41,36 @@ function renderAt(path: string, fetchImpl: typeof fetch = vi.fn()) {
 }
 
 describe('storefront routes', () => {
-  it('renders the home page inside the store layout', () => {
-    renderAt('/');
-    expect(screen.getByRole('heading', { level: 1, name: /trusted sellers/i })).toBeInTheDocument();
+  it('renders the home page from the API inside the store layout', async () => {
+    const home = {
+      heroBanners: [],
+      promoBanners: [],
+      categories: [
+        {
+          id: '0192f0a4-7b7c-7cc4-9a51-1f3a2b4c5d01',
+          name: 'Groceries',
+          slug: 'groceries',
+          imageUrl: null,
+          children: [],
+        },
+      ],
+      flashSale: null,
+      featuredProducts: [],
+      bestSellers: [],
+      recommended: [],
+      featuredStores: [],
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/storefront/home')) return json(home);
+      if (url.endsWith('/categories')) return json({ categories: [] });
+      return signedOut();
+    });
+    renderAt('/', fetchImpl as unknown as typeof fetch);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /trusted sellers/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Groceries/ })).toHaveAttribute('href', '/c/groceries');
     expect(screen.getByRole('link', { name: 'System status' })).toHaveAttribute('href', '/status');
   });
 

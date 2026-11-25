@@ -1,0 +1,194 @@
+{
+  "id": "01a2120d-cdf9-748e-9a81-a241bc3ecb0f",
+  "orderNumber": "MP2611254AF38V",
+  "status": "PLACED",
+  "paymentMethod": "COD",
+  "paymentStatus": "PAY_ON_DELIVERY",
+  "grandTotal": "34122.00",
+  "currency": "PHP",
+  "itemCount": 3,
+  "sellerCount": 2,
+  "preview": [
+    {
+      "productName": "Isla Tech Aero 14 Laptop",
+      "imageUrl": "/api/v1/products/images/01a211f7-1893-77ff-b944-85ffd04d348f/thumbnail?v=01a211f7-1891-77ef-93d3-3e3a83f94448"
+    },
+    {
+      "productName": "Keytap Silent Wireless Mouse",
+      "imageUrl": "/api/v1/products/images/01a211f7-16c9-737a-9473-946d154b8b4c/thumbnail?v=01a211f7-16c6-75bc-b262-6745f733dc6c"
+    }
+  ],
+  "paymentDueAt": null,
+  "placedAt": "2026-11-25T09:33:44.300Z",
+  "buyerType": "RETAIL",
+  "address": {
+    "area": "Metro Manila",
+    "city": "Quezon City",
+    "codes": {
+      "city": "1381300000",
+      "region": "1300000000",
+      "barangay": "1381300009",
+      "province": null
+    },
+    "mobile": "+639170000001",
+    "region": "National Capital Region (NCR)",
+    "barangay": "Bagong Pag-asa",
+    "province": null,
+    "formatted": "45 Kalayaan Street, Blue gate near the barangay hall, Bagong Pag-asa, Quezon City, Metro Manila, 1105",
+    "postalCode": "1105",
+    "addressLine2": "Blue gate near the barangay hall",
+    "recipientName": "Juan Dela Cruz",
+    "streetAddress": "45 Kalayaan Street"
+  },
+  "contactEmail": "customer@marketplace.local",
+  "sellerOrders": [
+    {
+      "id": "01a2120d-ce02-74bf-b13f-ef9e1536b68b",
+      "number": "MP2611254AF38V-1",
+      "status": "PENDING",
+      "sellerId": "01a211bd-197c-7369-bdb2-47dfd66aed5f",
+      "store": {
+        "id": "01a211bd-198c-763c-b06c-5faf987c9f38",
+        "name": "Isla Tech Gadgets",
+        "slug": "isla-tech"
+      },
+      "items": [
+        {
+          "id": "01a2120d-ce0d-7318-bfec-b0176f5ef9f5",
+          "productId": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+          "variantId": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+          "productSlug": "isla-tech-aero-14-laptop",
+          "sku": "AERO14-512",
+          "productName": "Isla Tech Aero 14 Laptop",
+          "variantTitle": "512 GB",
+          "options": {
+            "Storage": "512 GB"
+          },
+          "imageUrl": "/api/v1/products/images/01a211f7-1893-77ff-b944-85ffd04d348f/thumbnail?v=01a211f7-1891-77ef-93d3-3e3a83f94448",
+          "quantity": 1,
+          "unitPrice": "32999.00",
+          "regularUnitPrice": "32999.00",
+          "lineSubtotal": "32999.00",
+          "sellerDiscount": "0.00",
+          "platformDiscount": "0.00",
+          "lineTotal": "32999.00",
+          "vatAmount": "3535.61",
+          "priceSource": "REGULAR",
+          "reviewed": false
+        }
+      ],
+      "shipping": {
+        "method": "STANDARD",
+        "carrier": "Mock Express",
+        "serviceName": "Standard delivery",
+        "origin": "Lahug, City of Cebu, Region VII (Central Visayas)",
+        "weightGrams": 1900,
+        "chargeableWeightGrams": 1900,
+        "fee": "255.00",
+        "discount": "80.53",
+        "etaMinDays": 5,
+        "etaMaxDays": 8
+      },
+      "itemsSubtotal": "32999.00",
+      "wholesaleSavings": "0.00",
+      "sellerDiscount": "0.00",
+      "platformDiscount": "0.00",
+      "shippingFee": "255.00",
+      "shippingDiscount": "80.53",
+      "charges": [],
+      "vatAmount": "3554.30",
+      "total": "33173.47",
+      "customerNote": null
+    },
+    {
+      "id": "01a2120d-ce11-740d-8a52-cfda8f28f3ec",
+      "number": "MP2611254AF38V-2",
+      "status": "PENDING",
+      "sellerId": "01a211bd-19e0-7121-be0b-6d099215948d",
+      "store": {
+        "id": "01a211bd-19e4-747d-bb30-8097f2c1d52f",
+        "name": "Click & Type",
+        "slug": "click-and-type"
+      },
+      "items": [
+        {
+          "id": "01a2120d-ce19-748b-a73d-88995019276a",
+          "productId": "01a211bd-19ec-723a-96a0-6edda2dcd011",
+          "variantId": "01a211bd-19f3-766a-99d1-5c16b287b8d3",
+          "productSlug": "keytap-silent-wireless-mouse",
+          "sku": "KT-MOUSE-BLK",
+          "productName": "Keytap Silent Wireless Mouse",
+          "variantTitle": "Black",
+          "options": {
+            "Color": "Black"
+          },
+          "imageUrl": "/api/v1/products/images/01a211f7-16c9-737a-9473-946d154b8b4c/thumbnail?v=01a211f7-16c6-75bc-b262-6745f733dc6c",
+          "quantity": 2,
+          "unitPrice": "399.00",
+          "regularUnitPrice": "599.00",
+          "lineSubtotal": "798.00",
+          "sellerDiscount": "0.00",
+          "platformDiscount": "0.00",
+          "lineTotal": "798.00",
+          "vatAmount": "85.50",
+          "priceSource": "FLASH_SALE",
+          "reviewed": false
+        }
+      ],
+      "shipping": {
+        "method": "STANDARD",
+        "carrier": "Mock Express",
+        "serviceName": "Standard delivery",
+        "origin": "Barangay 1-A, City of Davao, Region XI (Davao Region)",
+        "weightGrams": 240,
+        "chargeableWeightGrams": 275,
+        "fee": "220.00",
+        "discount": "69.47",
+        "etaMinDays": 5,
+        "etaMaxDays": 8
+      },
+      "itemsSubtotal": "798.00",
+      "wholesaleSavings": "0.00",
+      "sellerDiscount": "0.00",
+      "platformDiscount": "0.00",
+      "shippingFee": "220.00",
+      "shippingDiscount": "69.47",
+      "charges": [],
+      "vatAmount": "101.63",
+      "total": "948.53",
+      "customerNote": null
+    }
+  ],
+  "coupons": [
+    {
+      "code": "FREESHIP",
+      "scope": "PLATFORM",
+      "type": "FREE_SHIPPING",
+      "amount": "150.00"
+    }
+  ],
+  "totals": {
+    "itemsSubtotal": "33797.00",
+    "wholesaleSavings": "0.00",
+    "couponDiscount": "0.00",
+    "shippingFee": "475.00",
+    "shippingDiscount": "150.00",
+    "chargesTotal": "0.00",
+    "vatAmount": "3655.93",
+    "grandTotal": "34122.00"
+  },
+  "vat": {
+    "rate": "0.12",
+    "included": true
+  },
+  "events": [
+    {
+      "type": "PLACED",
+      "note": "Cash on delivery.",
+      "createdAt": "2026-11-25T09:33:44.300Z"
+    }
+  ],
+  "cancelledAt": null,
+  "cancelReason": null,
+  "cancellable": true
+}

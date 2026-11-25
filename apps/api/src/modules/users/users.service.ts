@@ -82,12 +82,17 @@ export class UsersService {
     if (query.status) and.push({ status: query.status });
     if (query.search) {
       const term = query.search;
+      // Only a term that looks like a phone number is matched against mobiles; otherwise the
+      // digits of an email address (e.g. "ana.2024@…") would match unrelated numbers.
+      const digits = /^[\d\s+()-]+$/.test(term) ? term.replace(/[^\d+]/g, '') : '';
+      // Mobiles are stored as +63…; "0917 123" is typed the local way.
+      const phone = digits.startsWith('0') ? `+63${digits.slice(1)}` : digits;
       and.push({
         OR: [
           { email: { contains: term.toLowerCase() } },
           { firstName: { contains: term, mode: 'insensitive' } },
           { lastName: { contains: term, mode: 'insensitive' } },
-          { mobile: { contains: term.replace(/[^\d+]/g, '') || term } },
+          ...(phone.replace('+', '').length >= 3 ? [{ mobile: { contains: phone } }] : []),
         ],
       });
     }

@@ -20,6 +20,8 @@ import { AdjustmentsPage } from '../pages/inventory/adjustments-page';
 import { HistoryPage } from '../pages/inventory/history-page';
 import { InventoryPage } from '../pages/inventory/inventory-page';
 import { WarehousesPage } from '../pages/inventory/warehouses-page';
+import { SellerCouponsPage, SellerFlashSalesPage } from '../pages/marketing/marketing-pages';
+import { OrderPage, OrdersPage } from '../pages/orders/orders-page';
 import { NewProductPage } from '../pages/products/new-product-page';
 import { ProductPage } from '../pages/products/product-page';
 import { ProductsPage } from '../pages/products/products-page';
@@ -117,6 +119,24 @@ export const routes: RouteObject[] = [
                 ),
               },
               { path: 'inventory/history', element: <HistoryPage /> },
+              {
+                path: 'orders',
+                element: (
+                  <RequirePermission permission="seller.orders.read">
+                    <OrdersPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'orders/:orderId',
+                element: (
+                  <RequirePermission permission="seller.orders.read">
+                    <OrderPage />
+                  </RequirePermission>
+                ),
+              },
+              { path: 'marketing/coupons', element: <SellerCouponsPage /> },
+              { path: 'marketing/flash-sales', element: <SellerFlashSalesPage /> },
               { path: 'account', element: <AccountPage /> },
               { path: 'system-status', element: <StatusPage /> },
               { path: '*', element: <NotFound /> },

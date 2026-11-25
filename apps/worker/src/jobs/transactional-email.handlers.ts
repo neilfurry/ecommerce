@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { EMAIL_JOBS } from '@marketplace/config';
 import {
   lowStockJobSchema,
+  orderCancelledJobSchema,
+  orderPlacedJobSchema,
+  sellerNewOrderJobSchema,
   passwordResetJobSchema,
   productDecisionJobSchema,
   sellerInvitationJobSchema,
@@ -15,6 +18,9 @@ import type { z } from 'zod';
 import { MailerService, type SentEmail } from '../mail/mailer.service';
 import {
   lowStockTemplate,
+  orderCancelledTemplate,
+  orderPlacedTemplate,
+  sellerNewOrderTemplate,
   passwordResetTemplate,
   productDecisionTemplate,
   type RenderedEmail,
@@ -137,7 +143,44 @@ export class LowStockEmailHandler extends TemplatedEmailHandler<typeof lowStockJ
   }
 }
 
+@Injectable()
+export class OrderPlacedEmailHandler extends TemplatedEmailHandler<typeof orderPlacedJobSchema> {
+  readonly jobName = EMAIL_JOBS.ORDER_PLACED;
+  protected readonly schema = orderPlacedJobSchema;
+  protected render = orderPlacedTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
+@Injectable()
+export class SellerNewOrderEmailHandler extends TemplatedEmailHandler<
+  typeof sellerNewOrderJobSchema
+> {
+  readonly jobName = EMAIL_JOBS.SELLER_NEW_ORDER;
+  protected readonly schema = sellerNewOrderJobSchema;
+  protected render = sellerNewOrderTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
+@Injectable()
+export class OrderCancelledEmailHandler extends TemplatedEmailHandler<
+  typeof orderCancelledJobSchema
+> {
+  readonly jobName = EMAIL_JOBS.ORDER_CANCELLED;
+  protected readonly schema = orderCancelledJobSchema;
+  protected render = orderCancelledTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
 export const TRANSACTIONAL_EMAIL_HANDLERS = [
+  OrderPlacedEmailHandler,
+  SellerNewOrderEmailHandler,
+  OrderCancelledEmailHandler,
   ProductDecisionEmailHandler,
   LowStockEmailHandler,
   SellerStatusEmailHandler,

@@ -7,6 +7,9 @@ import {
   BoxesIcon,
   HistoryIcon,
   PackageIcon,
+  ReceiptIcon,
+  TicketPercentIcon,
+  ZapIcon,
   BuildingIcon,
   LayoutDashboardIcon,
   StoreIcon,
@@ -17,7 +20,7 @@ import {
 
 type NavEntry = SidebarNavItem & { permission?: Permission };
 
-/** Seller Center navigation: only pages the employee may open. Orders come in a later phase. */
+/** Seller Center navigation: only pages the employee may open. */
 export function buildNavSections(permissions: readonly Permission[]): SidebarNavSection[] {
   const allowed = (items: NavEntry[]) =>
     items.filter((i) => !i.permission || permissions.includes(i.permission));
@@ -50,6 +53,19 @@ export function buildNavSections(permissions: readonly Permission[]): SidebarNav
           permission: 'seller.inventory.manage',
         },
         { to: '/inventory/history', label: 'Movement history', icon: HistoryIcon },
+      ]),
+    },
+    {
+      title: 'Sales',
+      items: allowed([
+        {
+          to: '/orders',
+          label: 'Orders',
+          icon: ReceiptIcon,
+          permission: 'seller.orders.read',
+        },
+        { to: '/marketing/coupons', label: 'Coupons', icon: TicketPercentIcon },
+        { to: '/marketing/flash-sales', label: 'Flash sales', icon: ZapIcon },
       ]),
     },
     {

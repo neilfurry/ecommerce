@@ -6,7 +6,6 @@ import {
   productListQuerySchema,
   productPricingSchema,
   productReasonSchema,
-  publicProductListQuerySchema,
   putPriceTiersSchema,
   reorderProductImagesSchema,
   reviewProductSchema,
@@ -31,4 +30,3 @@ export class PutPriceTiersDto extends createZodDto(putPriceTiersSchema) {}
 export class CustomerPriceInputDto extends createZodDto(customerPriceInputSchema) {}
 export class PricePreviewDto extends createZodDto(pricePreviewRequestSchema) {}
 export class PriceQuoteRequestDto extends createZodDto(priceQuoteRequestSchema) {}
-export class PublicProductListQueryDto extends createZodDto(publicProductListQuerySchema) {}

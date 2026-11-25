@@ -165,6 +165,16 @@ export const PERMISSION_CATALOG = {
     description: 'Approve, reject and take down products',
   },
   'inventory.read': { scope: 'platform', description: 'View stock across every seller' },
+  'orders.read': { scope: 'platform', description: 'View every order and seller suborder' },
+  'marketing.manage': {
+    scope: 'platform',
+    description: 'Manage home page banners, featured items, flash sales and marketplace coupons',
+  },
+  'settings.manage': {
+    scope: 'platform',
+    description: 'Change checkout settings: VAT, charges, shipping rates and commission rates',
+  },
+  'reviews.moderate': { scope: 'platform', description: 'Hide and restore product reviews' },
   'seller.profile.manage': {
     scope: 'seller',
     description: 'Edit the business profile, upload documents and submit for verification',
@@ -185,6 +195,11 @@ export const PERMISSION_CATALOG = {
   'seller.pricing.manage': {
     scope: 'seller',
     description: 'Set prices, sale prices, wholesale tiers and customer prices',
+  },
+  'seller.orders.read': { scope: 'seller', description: 'View the seller’s orders' },
+  'seller.marketing.manage': {
+    scope: 'seller',
+    description: 'Create seller coupons and join flash sales',
   },
   'seller.inventory.manage': {
     scope: 'seller',
@@ -237,6 +252,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'catalog.products.read',
     'catalog.products.review',
     'inventory.read',
+    'orders.read',
+    'marketing.manage',
+    'settings.manage',
+    'reviews.moderate',
   ],
   FINANCE_ADMIN: [
     'users.read',
@@ -245,6 +264,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'audit.read',
     'catalog.products.read',
     'inventory.read',
+    'orders.read',
+    'settings.manage',
   ],
   CUSTOMER_SUPPORT: [
     'users.read',
@@ -253,6 +274,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'sellers.read',
     'stores.read',
     'catalog.products.read',
+    'orders.read',
+    'reviews.moderate',
   ],
   WAREHOUSE_STAFF: ['inventory.read'],
   DELIVERY_STAFF: [],
@@ -264,11 +287,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'seller.products.manage',
     'seller.pricing.manage',
     'seller.inventory.manage',
+    'seller.orders.read',
+    'seller.marketing.manage',
   ],
   SELLER_ENCODER: ['seller.members.read', 'seller.products.manage'],
   SELLER_INVENTORY: ['seller.members.read', 'seller.inventory.manage'],
-  SELLER_ORDER_PROCESSOR: ['seller.members.read'],
-  SELLER_ACCOUNTING: ['seller.members.read'],
+  SELLER_ORDER_PROCESSOR: ['seller.members.read', 'seller.orders.read'],
+  SELLER_ACCOUNTING: ['seller.members.read', 'seller.orders.read'],
   CUSTOMER: [],
   WHOLESALE_CUSTOMER: [],
 };

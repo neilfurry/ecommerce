@@ -4,3 +4,4 @@ export * from './money';
 export * from './auth';
 export * from './sellers';
 export * from './catalog';
+export * from './storefront';

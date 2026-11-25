@@ -1,0 +1,18 @@
+{
+  "app": "storefront",
+  "accessTokenExpiresAt": "2026-11-25T09:48:14.000Z",
+  "user": {
+    "id": "01a20fbb-ab1b-763a-8a9d-f49c5e81fa5f",
+    "firstName": "Juan",
+    "lastName": "Dela Cruz",
+    "email": "customer@marketplace.local",
+    "emailVerified": true,
+    "mobile": "+639170000001",
+    "mobileVerified": true,
+    "roles": ["CUSTOMER"],
+    "permissions": [],
+    "wholesaleStatus": null,
+    "mfaEnabled": false,
+    "seller": null
+  }
+}

@@ -41,7 +41,8 @@
     "test:integration:worker": "pnpm --filter @marketplace/worker run test:integration",
     "db:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-db.ps1",
     "db:status": "pnpm --filter @marketplace/database run migrate:status",
-    "infra:ps": "docker compose --env-file .env -f docker/docker-compose.yml ps"
+    "infra:ps": "docker compose --env-file .env -f docker/docker-compose.yml ps",
+    "db:import-locations": "pnpm --filter @marketplace/database run import-locations"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

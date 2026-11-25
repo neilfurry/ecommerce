@@ -27,6 +27,7 @@ export const ALLOWED_CONTENT_TYPES: Record<FilePurpose, readonly string[]> = {
   // Always our own re-encoded WebP output (see image-processor.ts).
   [FilePurpose.PRODUCT_IMAGE]: ['image/webp'],
   [FilePurpose.PRODUCT_IMAGE_THUMBNAIL]: ['image/webp'],
+  [FilePurpose.HOME_BANNER]: ['image/webp'],
   [FilePurpose.CATEGORY_IMAGE]: ['image/webp'],
 };
 

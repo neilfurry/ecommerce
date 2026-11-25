@@ -64,6 +64,25 @@ const CATEGORIES: CategorySeed[] = [
         ],
       },
       { slug: 'phone-accessories', name: 'Phone Accessories' },
+      {
+        slug: 'laptops',
+        name: 'Laptops',
+        attributes: [
+          {
+            code: 'ram',
+            name: 'Memory',
+            type: 'SELECT',
+            options: ['8 GB', '16 GB', '32 GB'],
+            isRequired: true,
+          },
+          { code: 'screen_size', name: 'Screen size', type: 'NUMBER', unit: 'in' },
+        ],
+      },
+      {
+        slug: 'computer-accessories',
+        name: 'Computer Accessories',
+        attributes: [{ code: 'wireless', name: 'Wireless', type: 'BOOLEAN' }],
+      },
     ],
   },
   {
@@ -85,6 +104,7 @@ const BRANDS = [
   { slug: 'bukid-fresh', name: 'Bukid Fresh', description: 'Locally milled rice and grains.' },
   { slug: 'isla-tech', name: 'Isla Tech' },
   { slug: 'habi-wear', name: 'Habi Wear' },
+  { slug: 'keytap', name: 'Keytap', description: 'Keyboards and mice.' },
 ];
 
 export async function ensureCatalogReference(prisma: PrismaClient): Promise<void> {

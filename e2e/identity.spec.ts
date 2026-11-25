@@ -45,7 +45,9 @@ test.describe('Customer accounts', () => {
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(page).toHaveURL(`${STOREFRONT}/account`);
-    await expect(page.getByRole('heading', { name: 'My account' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Hello, Maria' })).toBeVisible();
+    await expect(page.getByText(/email address is not confirmed yet/)).toBeVisible();
+    await page.getByRole('link', { name: 'send a new confirmation link' }).click();
     await expect(page.getByText('Not confirmed')).toBeVisible();
 
     // The worker emails a confirmation link (Mailpit catches it locally).
@@ -53,6 +55,8 @@ test.describe('Customer accounts', () => {
     await page.goto(link);
     await expect(page.getByText('Email address confirmed')).toBeVisible();
     await page.getByRole('link', { name: 'Go to my account' }).click();
+    await expect(page.getByText(/email address is not confirmed yet/)).toBeHidden();
+    await page.getByRole('link', { name: 'Profile and security', exact: true }).first().click();
     await expect(page.getByText('Verified').nth(1)).toBeVisible();
 
     // Sign out, then sign back in with the mobile number and a new code.
@@ -106,6 +110,8 @@ test.describe('Customer accounts', () => {
     await expect(row).toBeHidden();
 
     await shop.reload();
+    await expect(shop.getByTestId('account-type')).toHaveText('Wholesale');
+    await shop.goto(`${STOREFRONT}/account/settings`);
     await expect(shop.getByText('Wholesale account active')).toBeVisible();
     await customer.close();
   });

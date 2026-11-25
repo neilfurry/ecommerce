@@ -296,12 +296,13 @@ function SecurityCard() {
   );
 }
 
-export function AccountPage() {
+/** Profile, retail/wholesale classification and account security. */
+export function AccountSettingsPage() {
   const session = useSession();
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-10 sm:px-6">
+    <div className="space-y-6">
       <PageHeader
-        title="My account"
+        title="Profile and security"
         description={`Signed in as ${session.data?.user.email ?? ''}`}
       />
       <ProfileCard />

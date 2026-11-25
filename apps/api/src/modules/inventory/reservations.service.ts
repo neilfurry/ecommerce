@@ -17,10 +17,16 @@ import { applyStockChange, InsufficientStockError, recordLedger } from './stock-
 type Tx = Prisma.TransactionClient;
 
 export interface ReserveInput {
-  /** The checkout session holding the stock. */
+  /** The checkout session (or order number) holding the stock. */
   checkoutReference: string;
-  items: { variantId: string; quantity: number }[];
+  /** Each variant once; `orderItemId` attaches the hold to an order item straight away. */
+  items: { variantId: string; quantity: number; orderItemId?: string }[];
   ttlMinutes?: number;
+  /**
+   * Explicit expiry: a date, or null for a placed order's hold, which lasts until fulfilment
+   * or cancellation (every item must then have an orderItemId). Overrides ttlMinutes.
+   */
+  expiresAt?: Date | null;
 }
 
 const include = {
@@ -37,7 +43,7 @@ const toDto = (r: ReservationRow): ReservationDto => ({
   status: r.status,
   checkoutReference: r.checkoutReference,
   orderItemId: r.orderItemId,
-  expiresAt: r.expiresAt.toISOString(),
+  expiresAt: r.expiresAt?.toISOString() ?? null,
   releasedAt: r.releasedAt?.toISOString() ?? null,
   convertedAt: r.convertedAt?.toISOString() ?? null,
   createdAt: r.createdAt.toISOString(),
@@ -61,39 +67,7 @@ export class ReservationsService {
   ) {}
 
   async reserve(input: ReserveInput): Promise<ReservationDto[]> {
-    const ttl = Math.min(
-      Math.max(input.ttlMinutes ?? DEFAULT_RESERVATION_TTL_MINUTES, 1),
-      MAX_RESERVATION_TTL_MINUTES,
-    );
-    const expiresAt = new Date(Date.now() + ttl * 60_000);
-    // Same variant twice is one line; a fixed order prevents deadlocks between checkouts.
-    const merged = new Map<string, number>();
-    for (const item of input.items)
-      merged.set(item.variantId, (merged.get(item.variantId) ?? 0) + item.quantity);
-    const items = [...merged].sort(([a], [b]) => a.localeCompare(b));
-
-    const ids = await this.prisma.$transaction(async (tx) => {
-      const created: string[] = [];
-      for (const [variantId, quantity] of items) {
-        const variant = await tx.productVariant.findUnique({
-          where: { id: variantId },
-          include: { product: { select: { status: true } } },
-        });
-        if (!variant || variant.status !== 'ACTIVE' || variant.product.status !== 'ACTIVE') {
-          throw new ApiException(
-            HttpStatus.UNPROCESSABLE_ENTITY,
-            'VALIDATION_FAILED',
-            'An item is not available.',
-            [{ path: 'items', message: `${variant?.sku ?? variantId} is not available` }],
-          );
-        }
-        if (!variant.trackInventory) continue;
-        created.push(
-          ...(await this.reserveVariant(tx, variant, quantity, input.checkoutReference, expiresAt)),
-        );
-      }
-      return created;
-    });
+    const ids = await this.prisma.$transaction((tx) => this.reserveInTx(tx, input));
     const rows = await this.prisma.stockReservation.findMany({
       where: { id: { in: ids } },
       include,
@@ -101,12 +75,67 @@ export class ReservationsService {
     return rows.map(toDto);
   }
 
+  /**
+   * Holds stock for every item or none, inside the caller's transaction (checkout places the
+   * order and reserves its stock atomically). Returns the reservation ids.
+   */
+  async reserveInTx(tx: Tx, input: ReserveInput): Promise<string[]> {
+    const ttl = Math.min(
+      Math.max(input.ttlMinutes ?? DEFAULT_RESERVATION_TTL_MINUTES, 1),
+      MAX_RESERVATION_TTL_MINUTES,
+    );
+    const expiresAt =
+      input.expiresAt !== undefined ? input.expiresAt : new Date(Date.now() + ttl * 60_000);
+    if (expiresAt === null && input.items.some((i) => !i.orderItemId)) {
+      throw new Error('Holds without an expiry must belong to order items.');
+    }
+    // Same variant twice is one line; a fixed order prevents deadlocks between checkouts.
+    const merged = new Map<string, { quantity: number; orderItemId?: string }>();
+    for (const item of input.items) {
+      const current = merged.get(item.variantId);
+      merged.set(item.variantId, {
+        quantity: (current?.quantity ?? 0) + item.quantity,
+        orderItemId: item.orderItemId ?? current?.orderItemId,
+      });
+    }
+    const items = [...merged].sort(([a], [b]) => a.localeCompare(b));
+
+    const created: string[] = [];
+    for (const [variantId, { quantity, orderItemId }] of items) {
+      const variant = await tx.productVariant.findUnique({
+        where: { id: variantId },
+        include: { product: { select: { status: true } } },
+      });
+      if (!variant || variant.status !== 'ACTIVE' || variant.product.status !== 'ACTIVE') {
+        throw new ApiException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'VALIDATION_FAILED',
+          'An item is not available.',
+          [{ path: 'items', message: `${variant?.sku ?? variantId} is not available` }],
+        );
+      }
+      if (!variant.trackInventory) continue;
+      created.push(
+        ...(await this.reserveVariant(
+          tx,
+          variant,
+          quantity,
+          input.checkoutReference,
+          expiresAt,
+          orderItemId,
+        )),
+      );
+    }
+    return created;
+  }
+
   private async reserveVariant(
     tx: Tx,
     variant: { id: string; sku: string; sellerId: string },
     quantity: number,
     checkoutReference: string,
-    expiresAt: Date,
+    expiresAt: Date | null,
+    orderItemId?: string,
   ): Promise<string[]> {
     const levels = await tx.stockLevel.findMany({
       where: { variantId: variant.id, warehouse: { status: 'ACTIVE' } },
@@ -143,6 +172,7 @@ export class ReservationsService {
           quantity: take,
           checkoutReference,
           expiresAt,
+          orderItemId: orderItemId ?? null,
         },
       });
       created.push(reservation.id);
@@ -186,7 +216,12 @@ export class ReservationsService {
       if (!reservation)
         throw new ApiException(HttpStatus.NOT_FOUND, 'NOT_FOUND', 'Reservation not found.');
       const { count } = await tx.stockReservation.updateMany({
-        where: { id, status: 'ACTIVE', expiresAt: { gt: new Date() } },
+        // Order holds have no expiry; checkout holds must not have expired.
+        where: {
+          id,
+          status: 'ACTIVE',
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
         data: { status: 'CONVERTED', convertedAt: new Date() },
       });
       if (count === 0) {

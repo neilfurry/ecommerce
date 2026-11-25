@@ -44,6 +44,23 @@ const warehouseShape = {
   postalCode: postalCodeSchema.nullable().optional(),
   contactName: optionalText(120),
   phone: phMobileSchema.nullable().optional(),
+  /**
+   * The address as PSGC codes (the shipping origin). When given, the barangay, city and
+   * province text is taken from the official names.
+   */
+  location: z
+    .object({
+      regionCode: z.string().regex(/^\d{10}$/),
+      provinceCode: z
+        .string()
+        .regex(/^\d{10}$/)
+        .nullable()
+        .optional(),
+      cityCode: z.string().regex(/^\d{10}$/),
+      barangayCode: z.string().regex(/^\d{10}$/),
+    })
+    .nullable()
+    .optional(),
 };
 
 export const createWarehouseSchema = z.object({
@@ -69,6 +86,16 @@ export const warehouseSchema = z.object({
   postalCode: z.string().nullable(),
   contactName: z.string().nullable(),
   phone: z.string().nullable(),
+  location: z
+    .object({
+      regionCode: z.string(),
+      provinceCode: z.string().nullable(),
+      cityCode: z.string(),
+      barangayCode: z.string().nullable(),
+    })
+    .nullable(),
+  /** Whether checkout can quote shipping from here (the address has a PSGC location). */
+  canShip: z.boolean(),
   status: warehouseStatusSchema,
   isDefault: z.boolean(),
   totals: z.object({
@@ -252,7 +279,8 @@ export const reservationSchema = z.object({
   status: reservationStatusSchema,
   checkoutReference: z.string(),
   orderItemId: z.uuid().nullable(),
-  expiresAt: z.iso.datetime(),
+  /** Null while the stock is held for a placed order (until fulfilment or cancellation). */
+  expiresAt: z.iso.datetime().nullable(),
   releasedAt: z.iso.datetime().nullable(),
   convertedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),

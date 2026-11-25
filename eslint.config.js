@@ -57,7 +57,12 @@ export default tseslint.config(
     rules: { '@typescript-eslint/consistent-type-imports': 'off' },
   },
   {
-    files: ['**/prisma/seed.ts', '**/main.ts'],
+    files: [
+      '**/prisma/seed.ts',
+      '**/prisma/import-locations.ts',
+      '**/main.ts',
+      'apps/api/src/scripts/**/*.ts',
+    ],
     rules: { 'no-console': 'off' },
   },
   // Browser: frontends and shared UI

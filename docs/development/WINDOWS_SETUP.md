@@ -102,14 +102,22 @@ All ports bind to `127.0.0.1`, so other computers on your network cannot reach t
 `setup.ps1` seeds demo accounts for development (`SEED_DEMO_USERS=true`). They all use the
 password in `SEED_DEMO_PASSWORD` (`Marketplace-dev-2026!` by default):
 
-| Account                          | Role             | Sign in at                                                                               |
-| -------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
-| `superadmin@marketplace.local`   | Super admin      | Admin Console (5175)                                                                     |
-| `admin@marketplace.local`        | Admin            | Admin Console (5175)                                                                     |
-| `support@marketplace.local`      | Customer support | Admin Console (5175)                                                                     |
-| `seller.owner@marketplace.local` | Seller owner     | Seller Center (5174), business "Sam Sari-Sari Trading" (verified, store `sam-sari-sari`) |
-| `seller.staff@marketplace.local` | Seller encoder   | Seller Center (5174), employee of the same seller                                        |
-| `customer@marketplace.local`     | Customer         | Storefront (5173), or by SMS to `0917 000 0001`                                          |
+| Account                           | Role               | Sign in at                                                                               |
+| --------------------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
+| `superadmin@marketplace.local`    | Super admin        | Admin Console (5175)                                                                     |
+| `admin@marketplace.local`         | Admin              | Admin Console (5175)                                                                     |
+| `support@marketplace.local`       | Customer support   | Admin Console (5175)                                                                     |
+| `seller.owner@marketplace.local`  | Seller owner       | Seller Center (5174), business "Sam Sari-Sari Trading" (verified, store `sam-sari-sari`) |
+| `seller.staff@marketplace.local`  | Seller encoder     | Seller Center (5174), employee of the same seller                                        |
+| `seller2.owner@marketplace.local` | Seller owner       | Seller Center (5174), "Isla Tech Gadgets" (Cebu City warehouse; laptops)                 |
+| `seller3.owner@marketplace.local` | Seller owner       | Seller Center (5174), "Click & Type Peripherals" (Davao warehouse; mouse, keyboard)      |
+| `customer@marketplace.local`      | Customer           | Storefront (5173), or by SMS to `0917 000 0001`; has a default address in Quezon City    |
+| `wholesale@marketplace.local`     | Wholesale customer | Storefront (5173); approved wholesale application, address in Pasay                      |
+
+The demo data also has coupons `WELCOME100`, `FREESHIP` (marketplace), `ISLA500` and `CLICK10`
+(seller-funded), a running "Payday Flash Sale" (the black mouse at ₱399), featured products and
+stores, and two home-page banners. `setup.ps1` adds demo photos and banners with
+`pnpm --filter @marketplace/api run seed:media` after building the API.
 
 1. Open http://localhost:5175 and sign in as the super admin. **System health** shows Database,
    Redis, File storage and Background worker as **Up**.
@@ -127,8 +135,20 @@ password in `SEED_DEMO_PASSWORD` (`Marketplace-dev-2026!` by default):
    120 units in warehouse QC-1. Add a product, upload a photo and submit it; approve it in the
    Admin Console under **Catalog → Product approval**. Record stock on **Inventory → Stock
    adjustments** and check **Movement history**.
-8. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
-9. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
+8. **Shopping (Phase 4).** In the storefront, without signing in, search for "keytap
+   keyboard" and add it to the cart, then open **Laptops** and add the Isla Tech Aero 14
+   (512 GB). The cart shows two stores. Click **Sign in to check out** and sign in as
+   `customer@marketplace.local`. Checkout shows two packages (from Cebu and from Davao) with
+   their shipping fees. Apply `FREESHIP` and place the order (cash on delivery). The order page
+   shows one order split into two packages; Mailpit has the confirmation and one email per
+   seller.
+9. Sign in to the Seller Center as `seller3.owner@marketplace.local`: **Orders** lists only
+   Click & Type's part of the order, with the commission. In the Admin Console, **Orders**
+   shows the whole order with both seller orders; **Settings** holds VAT, payment methods,
+   shipping rates and commission rates; **Promotions** and **Storefront content** manage
+   coupons, flash sales, banners and featured items.
+10. Open http://localhost:3000/api/docs and try `GET /api/v1/health`.
+11. Run `.\scripts\test.ps1 -Suite unit`. It ends with "All 'unit' tests passed."
 
 ## 5. Environment configuration
 
@@ -146,10 +166,11 @@ printed.
 | Email           | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`                                                                                                                                                                                                                                                                                                                                                             |
 | Authentication  | `AUTH_JWT_SECRET`, `AUTH_OTP_SECRET`, `AUTH_MFA_ENCRYPTION_KEY` (all different, 32+ characters; the last encrypts two-step verification secrets: changing it breaks existing authenticator setups, and people then need a recovery code or an admin reset), `AUTH_ACCESS_TOKEN_TTL_SECONDS`, `AUTH_CUSTOMER_SESSION_DAYS`, `AUTH_STAFF_SESSION_HOURS`, `AUTH_MAX_FAILED_SIGN_INS`, `AUTH_LOCKOUT_MINUTES`, `COOKIE_SECURE` (required `true` in production), `COOKIE_DOMAIN` (optional) |
 | App URLs        | `STOREFRONT_URL`, `SELLER_PORTAL_URL`, `ADMIN_PORTAL_URL` (used in email links)                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Shipping        | `SHIPPING_PROVIDER` (`mock` only for now; rejected in production until a courier is connected). The mock's rate table is edited in Admin Console › Settings                                                                                                                                                                                                                                                                                                                            |
 | SMS             | `SMS_PROVIDER` (`mock` or `semaphore`; `mock` is rejected in production), `SEMAPHORE_API_KEY`, `SEMAPHORE_SENDER_NAME`                                                                                                                                                                                                                                                                                                                                                                 |
 | Demo data       | `SEED_DEMO_USERS`, `SEED_DEMO_PASSWORD` (development only; never seeded when `NODE_ENV=production`)                                                                                                                                                                                                                                                                                                                                                                                    |
 | Developer tools | `DEV_TOOLS_ENABLED` (rejected when `NODE_ENV=production`)                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Worker          | `WORKER_CONCURRENCY` (optional override), `WORKER_HEARTBEAT_INTERVAL_SECONDS`, `DATABASE_URL` (shared with the API; required in production for the reservation sweep)                                                                                                                                                                                                                                                                                                                  |
+| Worker          | `WORKER_CONCURRENCY` (optional override), `WORKER_HEARTBEAT_INTERVAL_SECONDS`, `DATABASE_URL` (shared with the API; required in production for the reservation and unpaid-order sweeps)                                                                                                                                                                                                                                                                                                |
 | Frontends       | `VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET`, `VITE_MAILPIT_URL`                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 `NODE_ENV` is intentionally not set in `.env`: the API and worker default to `development`, and

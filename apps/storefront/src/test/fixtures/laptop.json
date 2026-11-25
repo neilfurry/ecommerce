@@ -1,0 +1,184 @@
+{
+  "id": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+  "name": "Isla Tech Aero 14 Laptop",
+  "slug": "isla-tech-aero-14-laptop",
+  "description": "A light 14-inch laptop for school and work: 1.4 kg, all-day battery, backlit keyboard and a full HD screen.",
+  "store": {
+    "id": "01a211bd-198c-763c-b06c-5faf987c9f38",
+    "name": "Isla Tech Gadgets",
+    "slug": "isla-tech",
+    "logoUrl": null,
+    "city": "City of Cebu",
+    "province": "Cebu"
+  },
+  "category": {
+    "id": "01a211bd-1827-744a-b700-8201b047aaa4",
+    "name": "Laptops",
+    "slug": "laptops",
+    "path": [
+      {
+        "id": "01a21166-d57d-77ab-8cfb-069e3ae84336",
+        "name": "Electronics",
+        "slug": "electronics"
+      },
+      {
+        "id": "01a211bd-1827-744a-b700-8201b047aaa4",
+        "name": "Laptops",
+        "slug": "laptops"
+      }
+    ]
+  },
+  "brand": {
+    "id": "01a21166-d5d1-7232-9fe8-feed243bf10b",
+    "name": "Isla Tech"
+  },
+  "specifications": [
+    {
+      "name": "Processor",
+      "value": "8-core, up to 4.4 GHz"
+    },
+    {
+      "name": "Battery",
+      "value": "Up to 12 hours"
+    },
+    {
+      "name": "Warranty",
+      "value": "1 year"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "Memory",
+      "value": "16 GB"
+    },
+    {
+      "name": "Screen size",
+      "value": "14 in"
+    }
+  ],
+  "images": [
+    {
+      "id": "01a211f7-1893-77ff-b944-85ffd04d348f",
+      "variantId": null,
+      "url": "/api/v1/products/images/01a211f7-1893-77ff-b944-85ffd04d348f/large?v=01a211f7-1889-7038-8968-ec3dce57b1a2",
+      "thumbnailUrl": "/api/v1/products/images/01a211f7-1893-77ff-b944-85ffd04d348f/thumbnail?v=01a211f7-1891-77ef-93d3-3e3a83f94448",
+      "altText": "Isla Tech Aero 14 Laptop",
+      "position": 0,
+      "width": 1200,
+      "height": 1200
+    }
+  ],
+  "options": [
+    {
+      "id": "01a211bd-19b1-745c-bcd1-664f8f92415e",
+      "name": "Storage",
+      "position": 0,
+      "values": [
+        {
+          "id": "01a211bd-19b3-73eb-93d7-8d22a00c55e2",
+          "value": "512 GB",
+          "position": 0
+        },
+        {
+          "id": "01a211bd-19b3-73eb-93d7-90d849075638",
+          "value": "1 TB",
+          "position": 1
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "id": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+      "sku": "AERO14-512",
+      "title": "512 GB",
+      "options": {
+        "Storage": "512 GB"
+      },
+      "availableQuantity": 14,
+      "available": true,
+      "weightGrams": 1900
+    },
+    {
+      "id": "01a211bd-19cd-72db-bb79-e68b64119ed9",
+      "sku": "AERO14-1TB",
+      "title": "1 TB",
+      "options": {
+        "Storage": "1 TB"
+      },
+      "availableQuantity": 6,
+      "available": true,
+      "weightGrams": 1900
+    }
+  ],
+  "prices": [
+    {
+      "variantId": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+      "productId": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+      "sellerId": "01a211bd-197c-7369-bdb2-47dfd66aed5f",
+      "sku": "AERO14-512",
+      "quantity": 1,
+      "currency": "PHP",
+      "unitPrice": "32999.00",
+      "lineTotal": "32999.00",
+      "regularPrice": "32999.00",
+      "source": "REGULAR",
+      "rule": null,
+      "tiers": [],
+      "minOrderQuantity": 1,
+      "maxOrderQuantity": null,
+      "wholesaleEligible": false,
+      "flashSale": null
+    },
+    {
+      "variantId": "01a211bd-19cd-72db-bb79-e68b64119ed9",
+      "productId": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+      "sellerId": "01a211bd-197c-7369-bdb2-47dfd66aed5f",
+      "sku": "AERO14-1TB",
+      "quantity": 1,
+      "currency": "PHP",
+      "unitPrice": "37999.00",
+      "lineTotal": "37999.00",
+      "regularPrice": "37999.00",
+      "source": "REGULAR",
+      "rule": null,
+      "tiers": [],
+      "minOrderQuantity": 1,
+      "maxOrderQuantity": null,
+      "wholesaleEligible": false,
+      "flashSale": null
+    }
+  ],
+  "minOrderQuantity": 1,
+  "maxOrderQuantity": null,
+  "wholesale": null,
+  "buyerIsWholesale": false,
+  "ratingAverage": 0,
+  "ratingCount": 0,
+  "ratingBreakdown": [
+    {
+      "rating": 5,
+      "count": 0
+    },
+    {
+      "rating": 4,
+      "count": 0
+    },
+    {
+      "rating": 3,
+      "count": 0
+    },
+    {
+      "rating": 2,
+      "count": 0
+    },
+    {
+      "rating": 1,
+      "count": 0
+    }
+  ],
+  "soldCount": 1,
+  "wishlisted": false,
+  "seoTitle": null,
+  "seoDescription": null
+}
