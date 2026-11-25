@@ -289,7 +289,7 @@ export class CheckoutPricingService {
         continue;
       }
       if (!destination) continue;
-      group.options = await this.shipping.rates(group.origin.place, destination, pkg);
+      group.options = await this.shipping.rates(group.origin.place, destination, pkg, db);
       const wanted = input.shipping.find((s) => s.sellerId === group.sellerId)?.method;
       group.shipping =
         group.options.find((o) => o.method === wanted) ??

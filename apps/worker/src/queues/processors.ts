@@ -6,9 +6,13 @@ import { DevTestEmailHandler } from '../jobs/dev-test-email.handler';
 import { HeartbeatHandler } from '../jobs/heartbeat.handler';
 import { SmsOtpHandler } from '../jobs/sms-otp.handler';
 import { ReleaseExpiredReservationsHandler } from '../jobs/reservation-sweep';
+import { ExpireUnpaidOrdersHandler } from '../jobs/unpaid-order-sweep';
 import {
   LowStockEmailHandler,
+  OrderCancelledEmailHandler,
+  OrderPlacedEmailHandler,
   PasswordResetEmailHandler,
+  SellerNewOrderEmailHandler,
   ProductDecisionEmailHandler,
   SellerInvitationEmailHandler,
   SellerStatusEmailHandler,
@@ -52,6 +56,9 @@ export class EmailProcessor extends DomainProcessor {
     sellerInvitation: SellerInvitationEmailHandler,
     productDecision: ProductDecisionEmailHandler,
     lowStock: LowStockEmailHandler,
+    orderPlaced: OrderPlacedEmailHandler,
+    sellerNewOrder: SellerNewOrderEmailHandler,
+    orderCancelled: OrderCancelledEmailHandler,
   ) {
     super(
       QUEUE_NAMES.EMAIL,
@@ -65,6 +72,9 @@ export class EmailProcessor extends DomainProcessor {
         sellerInvitation,
         productDecision,
         lowStock,
+        orderPlaced,
+        sellerNewOrder,
+        orderCancelled,
       ],
       config,
       deadLetters,
@@ -106,8 +116,14 @@ export class OrderProcessingProcessor extends DomainProcessor {
     config: WorkerConfig,
     deadLetters: DeadLetterService,
     releaseExpiredReservations: ReleaseExpiredReservationsHandler,
+    expireUnpaidOrders: ExpireUnpaidOrdersHandler,
   ) {
-    super(QUEUE_NAMES.ORDER_PROCESSING, [releaseExpiredReservations], config, deadLetters);
+    super(
+      QUEUE_NAMES.ORDER_PROCESSING,
+      [releaseExpiredReservations, expireUnpaidOrders],
+      config,
+      deadLetters,
+    );
   }
 }
 

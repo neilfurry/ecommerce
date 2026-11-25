@@ -14,6 +14,7 @@ import {
   ReservationSweepScheduler,
 } from './jobs/reservation-sweep';
 import { SmsOtpHandler } from './jobs/sms-otp.handler';
+import { ExpireUnpaidOrdersHandler, UnpaidOrderSweepScheduler } from './jobs/unpaid-order-sweep';
 import { TRANSACTIONAL_EMAIL_HANDLERS } from './jobs/transactional-email.handlers';
 import { MailerService } from './mail/mailer.service';
 import { DeadLetterService } from './queues/dead-letter.service';
@@ -79,6 +80,8 @@ import { smsProvider } from './sms/sms.module';
     WorkerDatabase,
     ReleaseExpiredReservationsHandler,
     ReservationSweepScheduler,
+    ExpireUnpaidOrdersHandler,
+    UnpaidOrderSweepScheduler,
     ...DOMAIN_PROCESSORS,
   ],
 })

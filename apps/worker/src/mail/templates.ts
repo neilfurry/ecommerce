@@ -5,6 +5,9 @@ import type {
   SellerStatusJob,
   ProductDecisionJob,
   LowStockJob,
+  OrderCancelledJob,
+  OrderPlacedJob,
+  SellerNewOrderJob,
   StaffInvitationJob,
   VerifyEmailJob,
   WholesaleDecisionJob,
@@ -233,6 +236,71 @@ export function lowStockTemplate(job: LowStockJob): RenderedEmail {
       'Restock them to avoid missing sales.',
     ],
     action: { label: 'Open inventory', url: job.link },
+  });
+}
+
+const peso = (amount: string) =>
+  `₱${Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const lineText = (l: {
+  productName: string;
+  variantTitle: string;
+  quantity: number;
+  lineTotal: string;
+}) =>
+  `${l.quantity} × ${l.productName}${l.variantTitle === 'Default' ? '' : ` (${l.variantTitle})`}: ${peso(l.lineTotal)}`;
+const manilaTime = (iso: string) =>
+  new Date(iso).toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+export function orderPlacedTemplate(job: OrderPlacedJob): RenderedEmail {
+  const waiting = job.status === 'AWAITING_PAYMENT';
+  return render(
+    waiting ? `Order ${job.orderNumber}: waiting for payment` : `Order ${job.orderNumber} placed`,
+    {
+      greeting: `Hi ${job.firstName},`,
+      paragraphs: [
+        waiting
+          ? `Thank you for your order. Please pay ${peso(job.grandTotal)} by ${job.paymentMethod}${
+              job.paymentDueAt ? ` before ${manilaTime(job.paymentDueAt)}` : ''
+            }; unpaid orders are cancelled after that.`
+          : `Thank you for your order. You will pay ${peso(job.grandTotal)} (${job.paymentMethod}).`,
+        ...job.sellers.flatMap((s) => [`From ${s.storeName}:`, ...s.lines.map(lineText)]),
+        `Delivering to: ${job.address}`,
+        job.sellers.length > 1
+          ? `Each store ships its items separately, so they may arrive on different days.`
+          : 'We will let you know when your order ships.',
+      ],
+      action: { label: 'View your order', url: job.link },
+    },
+  );
+}
+
+export function sellerNewOrderTemplate(job: SellerNewOrderJob): RenderedEmail {
+  return render(`New order ${job.number}`, {
+    greeting: `Hello ${job.businessName},`,
+    paragraphs: [
+      job.awaitingPayment
+        ? `You have a new order waiting for the customer's ${job.paymentMethod} payment. Do not ship it until it is paid.`
+        : `You have a new order (${job.paymentMethod}).`,
+      ...job.lines.map(lineText),
+      `Order total for your store: ${peso(job.total)}.`,
+    ],
+    action: { label: 'Open the order', url: job.link },
+  });
+}
+
+export function orderCancelledTemplate(job: OrderCancelledJob): RenderedEmail {
+  return render(`Order ${job.orderNumber} cancelled`, {
+    greeting: `Hi ${job.firstName},`,
+    paragraphs: [
+      `Your order ${job.orderNumber} was cancelled.`,
+      `Reason: ${job.reason}`,
+      'You have not been charged.',
+    ],
+    action: { label: 'View the order', url: job.link },
   });
 }
 

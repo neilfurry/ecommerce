@@ -5,7 +5,7 @@ import {
   priceQuoteLineSchema,
   priceQuoteSchema,
   productDetailSchema,
-  publicProductSchema,
+  storefrontProductSchema,
   type ProductDetail,
 } from '@marketplace/validation';
 import { createUser, signedInClient, TestClient } from './auth-helpers';
@@ -292,11 +292,11 @@ describe('Pricing (e2e)', () => {
   });
 
   it('shows shoppers prices for who they are on the product page', async () => {
-    const asGuest = publicProductSchema.parse(
+    const asGuest = storefrontProductSchema.parse(
       (await guest.get(`/api/v1/catalog/products/${product.id}`).expect(200)).body,
     );
     expect(asGuest.prices[0]).toMatchObject({ unitPrice: '500.00', tiers: [] });
-    const asWholesale = publicProductSchema.parse(
+    const asWholesale = storefrontProductSchema.parse(
       (await wholesale.get(`/api/v1/catalog/products/${product.id}`).expect(200)).body,
     );
     expect(asWholesale.prices[0]!.tiers.map((t) => t.unitPrice)).toEqual([

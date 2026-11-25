@@ -96,7 +96,9 @@ export class ShippingService {
     origin: ShippingPlace,
     destination: ShippingPlace,
     pkg: { weightGrams: number; volumeCm3: number },
+    db?: Prisma.TransactionClient | PrismaService,
   ): Promise<ShippingRate[]> {
-    return this.provider.quote({ origin, destination, parcel: pkg });
+    const tx = db && db !== this.prisma ? (db as Prisma.TransactionClient) : undefined;
+    return this.provider.quote({ origin, destination, parcel: pkg }, tx);
   }
 }

@@ -64,8 +64,8 @@ export class MockShippingProvider extends ShippingProvider {
     super();
   }
 
-  async quote(request: ShippingQuoteRequest): Promise<ShippingRate[]> {
-    const rates = await this.settings.shippingRates();
+  async quote(request: ShippingQuoteRequest, db?: Prisma.TransactionClient): Promise<ShippingRate[]> {
+    const rates = await this.settings.shippingRates(db);
     const route = routeBetween(request.origin, request.destination);
     const volumetricGrams = Math.ceil((request.parcel.volumeCm3 / rates.volumetricDivisor) * 1000);
     const chargeableWeightGrams = Math.max(request.parcel.weightGrams, volumetricGrams);

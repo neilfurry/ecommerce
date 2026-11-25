@@ -20,6 +20,8 @@ export const workerEnvSchema = z
     REDIS_URL: redisUrlSchema,
     /** Needed by jobs that work on the database (reservation expiry). Required in production. */
     DATABASE_URL: postgresUrlSchema.optional(),
+    /** For links in emails the worker composes itself (cancelled unpaid orders). */
+    STOREFRONT_URL: z.url().default('http://localhost:5173'),
     /** Optional override of every queue's concurrency; unset = per-queue defaults. */
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).optional(),
     WORKER_HEARTBEAT_INTERVAL_SECONDS: envInteger(15, 1, 300),
@@ -73,6 +75,7 @@ export class WorkerConfig {
   readonly logLevel: WorkerEnv['LOG_LEVEL'];
   readonly redisUrl: string;
   readonly databaseUrl: string | undefined;
+  readonly storefrontUrl: string;
   readonly concurrencyOverride: number | undefined;
   readonly heartbeatIntervalSeconds: number;
   readonly devToolsEnabled: boolean;
@@ -96,6 +99,7 @@ export class WorkerConfig {
     this.logLevel = env.LOG_LEVEL;
     this.redisUrl = env.REDIS_URL;
     this.databaseUrl = env.DATABASE_URL;
+    this.storefrontUrl = env.STOREFRONT_URL.replace(/\/$/, '');
     this.concurrencyOverride = env.WORKER_CONCURRENCY;
     this.heartbeatIntervalSeconds = env.WORKER_HEARTBEAT_INTERVAL_SECONDS;
     this.devToolsEnabled = env.DEV_TOOLS_ENABLED;

@@ -35,7 +35,15 @@ export class PostgresSearchProvider extends SearchProvider {
   async search(request: ProductSearchRequest): Promise<ProductSearchResponse> {
     const now = new Date();
     const q = request.q?.trim() || null;
-    const like = q ? `%${escapeLike(q.toLowerCase())}%` : null;
+    // Words of the query (letters and digits only, so the tsquery syntax cannot be injected);
+    // each must match, as a word prefix ("tumb" finds "Tumbler").
+    const words = (q ?? '')
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(Boolean)
+      .slice(0, 8);
+    const prefixQuery = words.map((w) => `${w}:*`).join(' & ');
+    const likes = words.map((w) => `%${escapeLike(w)}%`);
     const document = Prisma.sql`to_tsvector('simple'::regconfig, p."name" || ' ' || coalesce(p."description", ''))`;
 
     const filters: Prisma.Sql[] = [
@@ -45,12 +53,10 @@ export class PostgresSearchProvider extends SearchProvider {
       Prisma.sql`c."status" = 'ACTIVE'`,
       Prisma.sql`price."min_price" IS NOT NULL`,
     ];
-    if (q) {
+    if (words.length > 0) {
       filters.push(Prisma.sql`(
-        ${document} @@ websearch_to_tsquery('simple', ${q})
-        OR lower(p."name") LIKE ${like}
-        OR lower(coalesce(b."name", '')) LIKE ${like}
-        OR lower(c."name") LIKE ${like})`);
+        ${document} @@ to_tsquery('simple', ${prefixQuery})
+        OR lower(p."name" || ' ' || coalesce(b."name", '') || ' ' || c."name") LIKE ALL(${likes}::text[]))`);
     }
     if (request.categoryIds?.length)
       filters.push(Prisma.sql`p."category_id" = ANY(${request.categoryIds}::uuid[])`);
@@ -66,9 +72,10 @@ export class PostgresSearchProvider extends SearchProvider {
     const brandFilter = request.brandIds?.length
       ? Prisma.sql`"brand_id" = ANY(${request.brandIds}::uuid[])`
       : Prisma.sql`TRUE`;
-    const rank = q
-      ? Prisma.sql`ts_rank(${document}, websearch_to_tsquery('simple', ${q})) + similarity(lower(p."name"), lower(${q}))`
-      : Prisma.sql`0`;
+    const rank =
+      words.length > 0
+        ? Prisma.sql`ts_rank(${document}, to_tsquery('simple', ${prefixQuery})) + similarity(lower(p."name"), ${words.join(' ')})`
+        : Prisma.sql`0`;
     const offset = (request.page - 1) * request.pageSize;
 
     const [row] = await this.prisma.$queryRaw<
