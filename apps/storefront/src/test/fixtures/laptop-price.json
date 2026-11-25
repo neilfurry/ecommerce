@@ -1,0 +1,23 @@
+{
+  "lines": [
+    {
+      "variantId": "01a211bd-19bd-753b-a90a-8b00c37f8f21",
+      "productId": "01a211bd-19a5-771f-9fc0-ccabc4647356",
+      "sellerId": "01a211bd-197c-7369-bdb2-47dfd66aed5f",
+      "sku": "AERO14-512",
+      "quantity": 1,
+      "currency": "PHP",
+      "unitPrice": "32999.00",
+      "lineTotal": "32999.00",
+      "regularPrice": "32999.00",
+      "source": "REGULAR",
+      "rule": null,
+      "tiers": [],
+      "minOrderQuantity": 1,
+      "maxOrderQuantity": null,
+      "wholesaleEligible": false,
+      "flashSale": null
+    }
+  ],
+  "evaluatedAt": "2026-11-25T09:34:51.586Z"
+}

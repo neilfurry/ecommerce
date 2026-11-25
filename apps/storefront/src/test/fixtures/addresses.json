@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "id": "01a211bd-1a25-734f-bd9f-3f0cf3a4af62",
+      "label": "Home",
+      "recipientName": "Juan Dela Cruz",
+      "mobile": "+639170000001",
+      "region": {
+        "code": "1300000000",
+        "name": "National Capital Region (NCR)",
+        "level": "REGION"
+      },
+      "province": null,
+      "city": {
+        "code": "1381300000",
+        "name": "Quezon City",
+        "level": "CITY"
+      },
+      "barangay": {
+        "code": "1381300009",
+        "name": "Bagong Pag-asa",
+        "level": "BARANGAY"
+      },
+      "postalCode": "1105",
+      "streetAddress": "45 Kalayaan Street",
+      "addressLine2": "Blue gate near the barangay hall",
+      "isDefault": true,
+      "formatted": "45 Kalayaan Street, Blue gate near the barangay hall, Bagong Pag-asa, Quezon City, Metro Manila, 1105",
+      "createdAt": "2026-11-25T08:05:35.397Z"
+    }
+  ]
+}

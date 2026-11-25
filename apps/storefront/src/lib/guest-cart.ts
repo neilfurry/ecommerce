@@ -67,7 +67,8 @@ export const guestCart = {
     };
   },
   add(input: CartLineInput) {
-    const lines = [...guestCart.get()];
+    // Copies: the current snapshot is what React rendered and must not change.
+    const lines = guestCart.get().map((l) => ({ ...l }));
     const quantity = Number(input.quantity);
     const existing = lines.find((l) => l.variantId === input.variantId);
     if (existing) {
@@ -80,7 +81,7 @@ export const guestCart = {
         savedForLater: input.savedForLater ?? false,
       });
     }
-    write(lines.map((l) => ({ ...l })));
+    write(lines);
   },
   update(variantId: string, change: { quantity?: number; savedForLater?: boolean }) {
     write(guestCart.get().map((l) => (l.variantId === variantId ? { ...l, ...change } : l)));

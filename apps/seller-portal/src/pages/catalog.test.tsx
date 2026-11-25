@@ -135,7 +135,7 @@ const page = (items: unknown[]) => ({
   totalPages: 1,
 });
 
-type Routes = Record<string, (init?: RequestInit) => Response>;
+type Routes = Record<string, (init?: RequestInit, url?: URL) => Response>;
 
 function api(overrides: Routes = {}, sessionBody: unknown = session()) {
   const routes: Routes = {
@@ -234,7 +234,7 @@ function api(overrides: Routes = {}, sessionBody: unknown = session()) {
           },
         ],
       }),
-    'GET /locations': (_init, url) => {
+    'GET /locations': (_init?: RequestInit, url?: URL) => {
       const parent = url?.searchParams.get('parentCode');
       const items = !parent
         ? [{ code: '1300000000', name: 'National Capital Region (NCR)', level: 'REGION' }]
