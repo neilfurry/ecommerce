@@ -225,6 +225,8 @@ function api(overrides: Routes = {}, sessionBody: unknown = session()) {
             postalCode: '1105',
             contactName: null,
             phone: null,
+            location: null,
+            canShip: false,
             status: 'ACTIVE',
             isDefault: true,
             totals: { skus: 1, onHand: 12, reserved: 4, damaged: 1 },
@@ -232,6 +234,17 @@ function api(overrides: Routes = {}, sessionBody: unknown = session()) {
           },
         ],
       }),
+    'GET /locations': (_init, url) => {
+      const parent = url?.searchParams.get('parentCode');
+      const items = !parent
+        ? [{ code: '1300000000', name: 'National Capital Region (NCR)', level: 'REGION' }]
+        : parent === '1300000000'
+          ? [{ code: '1380600000', name: 'City of Manila', level: 'CITY' }]
+          : [{ code: '1380600001', name: 'Barangay 1', level: 'BARANGAY' }];
+      return json({ items });
+    },
+    'POST /inventory/warehouses': (init) =>
+      json({ ...(JSON.parse(String(init?.body)) as object), id: WAREHOUSE_ID }, 201),
     ...overrides,
   };
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -239,7 +252,7 @@ function api(overrides: Routes = {}, sessionBody: unknown = session()) {
     const path = url.pathname.replace(/^\/api(\/v1)?/, '');
     const handler = routes[`${init?.method ?? 'GET'} ${path}`];
     return handler
-      ? handler(init)
+      ? handler(init, url)
       : json({ error: { code: 'NOT_FOUND', message: 'Not found', statusCode: 404 } }, 404);
   }) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
 }
@@ -393,6 +406,48 @@ describe('Seller Center inventory', () => {
     renderAt('/inventory/warehouses', api());
     expect(await screen.findByRole('heading', { name: 'Quezon City main' })).toBeInTheDocument();
     expect(screen.getByText('Default')).toBeInTheDocument();
+    // Checkout cannot quote shipping from a warehouse without a PSGC location.
+    expect(screen.getByText('No location for shipping')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add warehouse/ })).toBeInTheDocument();
+  });
+
+  it('adds a warehouse with its PSGC location as the shipping origin', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = api();
+    renderAt('/inventory/warehouses', fetchImpl);
+    await user.click(await screen.findByRole('button', { name: /Add warehouse/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/customers cannot check out/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('City or municipality (as written)')).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Name'), 'Manila hub');
+    await user.type(within(dialog).getByLabelText('Code'), 'MNL-1');
+    await user.type(within(dialog).getByLabelText('Street address'), '1 Rizal Ave');
+    const region = within(dialog).getByLabelText('Region');
+    await vi.waitFor(() => expect(region).not.toBeDisabled());
+    await user.selectOptions(region, '1300000000');
+    const area = within(dialog).getByLabelText('Province');
+    await vi.waitFor(() => expect(area).not.toBeDisabled());
+    await user.selectOptions(area, '1380600000');
+    const barangay = within(dialog).getByLabelText('Barangay');
+    await vi.waitFor(() => expect(barangay).not.toBeDisabled());
+    await user.selectOptions(barangay, '1380600001');
+    // The text fields are filled from the official names, so they are hidden.
+    expect(within(dialog).queryByLabelText('City or municipality (as written)')).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Add warehouse' }));
+    await vi.waitFor(() =>
+      expect(bodyOf(fetchImpl, 'POST', '/inventory/warehouses')).toMatchObject({
+        name: 'Manila hub',
+        code: 'MNL-1',
+        city: 'City of Manila',
+        province: 'National Capital Region (NCR)',
+        barangay: 'Barangay 1',
+        location: {
+          regionCode: '1300000000',
+          provinceCode: null,
+          cityCode: '1380600000',
+          barangayCode: '1380600001',
+        },
+      }),
+    );
   });
 });

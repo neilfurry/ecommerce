@@ -41,7 +41,9 @@ import {
 } from '@marketplace/validation';
 import { PencilIcon, PlusIcon, StarIcon, WarehouseIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
+import { draftFromLocation, type LocationDraft } from '../../components/catalog/location-draft';
+import { LocationPicker } from '../../components/catalog/location-picker';
 import { showError } from '../../lib/errors';
 
 const FIELDS: [keyof CreateWarehouseRequest, string, string?][] = [
@@ -49,9 +51,9 @@ const FIELDS: [keyof CreateWarehouseRequest, string, string?][] = [
   ['code', 'Code', 'Short and unique, e.g. QC-1'],
   ['addressLine1', 'Street address'],
   ['addressLine2', 'Unit, building (optional)'],
-  ['barangay', 'Barangay (optional)'],
-  ['city', 'City or municipality'],
-  ['province', 'Province'],
+  ['barangay', 'Barangay (as written)'],
+  ['city', 'City or municipality (as written)'],
+  ['province', 'Province (as written)'],
   ['postalCode', 'Postal code (optional)'],
   ['contactName', 'Contact person (optional)'],
   ['phone', 'Contact mobile (optional)'],
@@ -66,6 +68,9 @@ function WarehouseDialog({
 }) {
   const { create, update } = useWarehouseMutations();
   const [formError, setFormError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<LocationDraft>(() =>
+    draftFromLocation(warehouse?.location ?? null),
+  );
   const form = useForm<CreateWarehouseRequest>({
     resolver: zodResolver(createWarehouseSchema),
     defaultValues: {
@@ -79,9 +84,14 @@ function WarehouseDialog({
       postalCode: warehouse?.postalCode ?? null,
       contactName: warehouse?.contactName ?? '',
       phone: warehouse?.phone ?? null,
+      location:
+        warehouse?.location && warehouse.location.barangayCode
+          ? { ...warehouse.location, barangayCode: warehouse.location.barangayCode }
+          : null,
       isDefault: false,
     },
   });
+  const location = useWatch({ control: form.control, name: 'location' });
   const submit = form.handleSubmit(async (values) => {
     setFormError(null);
     const body = { ...values, postalCode: values.postalCode || null, phone: values.phone || null };
@@ -109,7 +119,34 @@ function WarehouseDialog({
             <div className="sm:col-span-2">
               <FormAlert message={formError} />
             </div>
-            {FIELDS.map(([name, label, description]) => (
+            <div className="space-y-2 sm:col-span-2">
+              <p className="text-sm font-medium">Location</p>
+              <p className="text-sm text-muted-foreground">
+                Checkout uses this to quote shipping from this warehouse.
+              </p>
+              <LocationPicker
+                draft={draft}
+                onDraftChange={setDraft}
+                onComplete={(value, names) => {
+                  form.setValue('location', value);
+                  if (value && names) {
+                    form.setValue('barangay', names.barangay);
+                    form.setValue('city', names.city);
+                    form.setValue('province', names.province ?? names.region, {
+                      shouldValidate: form.formState.isSubmitted,
+                    });
+                  }
+                }}
+              />
+              {!location ? (
+                <p className="text-sm text-warning-foreground">
+                  Without a barangay, customers cannot check out items stocked only here.
+                </p>
+              ) : null}
+            </div>
+            {FIELDS.filter(
+              ([name]) => !location || !['barangay', 'city', 'province'].includes(name),
+            ).map(([name, label, description]) => (
               <FormField
                 key={name}
                 control={form.control}
@@ -185,6 +222,11 @@ export function WarehousesPage() {
                   </Badge>
                   {w.isDefault ? <Badge>Default</Badge> : null}
                   {w.status === 'INACTIVE' ? <Badge variant="secondary">Inactive</Badge> : null}
+                  {!w.canShip ? (
+                    <Badge variant="warning" title="Edit it and choose the barangay">
+                      No location for shipping
+                    </Badge>
+                  ) : null}
                 </CardTitle>
                 <CardDescription>
                   {[w.addressLine1, w.addressLine2, w.barangay, w.city, w.province, w.postalCode]

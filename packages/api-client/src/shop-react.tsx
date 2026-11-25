@@ -52,6 +52,7 @@ export const shopKeys = {
   adminOrders: (query: object) => ['admin', 'orders', query] as const,
   adminOrder: (id: string) => ['admin', 'orders', 'detail', id] as const,
   adminSellerOrders: (query: object) => ['admin', 'seller-orders', query] as const,
+  adminSellerOrder: (id: string) => ['admin', 'seller-orders', 'detail', id] as const,
   banners: ['admin', 'banners'] as const,
   featured: ['admin', 'featured'] as const,
   adminCoupons: (query: object) => ['admin', 'coupons', query] as const,
@@ -414,6 +415,25 @@ export function useAdminOrder(orderId: string | undefined) {
   return useQuery({
     queryKey: shopKeys.adminOrder(orderId ?? ''),
     queryFn: ({ signal }) => client.admin.shop.orders.get(orderId!, signal),
+    enabled: !!orderId,
+  });
+}
+
+/** Seller suborders across all sellers (Admin Console). */
+export function useAdminSellerOrders(query: ListQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: shopKeys.adminSellerOrders(query),
+    queryFn: ({ signal }) => client.admin.shop.sellerOrders.list(query, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAdminSellerOrder(orderId: string | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: shopKeys.adminSellerOrder(orderId ?? ''),
+    queryFn: ({ signal }) => client.admin.shop.sellerOrders.get(orderId!, signal),
     enabled: !!orderId,
   });
 }

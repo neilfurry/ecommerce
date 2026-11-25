@@ -9,7 +9,12 @@ import {
   BriefcaseBusinessIcon,
   BuildingIcon,
   HardDriveIcon,
+  ImageIcon,
   KeyRoundIcon,
+  ReceiptIcon,
+  SettingsIcon,
+  StarIcon,
+  TicketPercentIcon,
   ListChecksIcon,
   MessageSquareIcon,
   ScrollTextIcon,
@@ -21,8 +26,8 @@ import {
 type NavEntry = SidebarNavItem & { permission?: Permission };
 
 /**
- * Navigation lists only working pages the user may open. Catalog moderation, orders,
- * finance and settings are added by the phases that deliver them.
+ * Navigation lists only working pages the user may open. Finance and fulfilment are added by
+ * the phases that deliver them.
  */
 export function buildNavSections(
   devToolsEnabled: boolean,
@@ -33,7 +38,34 @@ export function buildNavSections(
   const sections: { title: string; items: NavEntry[] }[] = [
     {
       title: 'Platform',
-      items: [{ to: '/system-health', label: 'System health', icon: ActivityIcon }],
+      items: [
+        { to: '/system-health', label: 'System health', icon: ActivityIcon },
+        {
+          to: '/settings',
+          label: 'Settings',
+          icon: SettingsIcon,
+          permission: 'settings.manage',
+        },
+      ],
+    },
+    {
+      title: 'Sales',
+      items: [
+        { to: '/orders', label: 'Orders', icon: ReceiptIcon, permission: 'orders.read' },
+        {
+          to: '/promotions',
+          label: 'Promotions',
+          icon: TicketPercentIcon,
+          permission: 'marketing.manage',
+        },
+        {
+          to: '/storefront',
+          label: 'Storefront content',
+          icon: ImageIcon,
+          permission: 'marketing.manage',
+        },
+        { to: '/reviews', label: 'Reviews', icon: StarIcon, permission: 'reviews.moderate' },
+      ],
     },
     {
       title: 'Marketplace',
