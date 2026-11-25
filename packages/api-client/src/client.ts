@@ -15,6 +15,11 @@ import {
   createSellerClient,
   createStoresPublicClient,
 } from './admin';
+import {
+  createAdminCatalogClient,
+  createCatalogClient,
+  createSellerCatalogClient,
+} from './catalog';
 import { createAuthClient } from './auth';
 import { createDevToolsClient } from './dev-tools';
 import { ApiError } from './errors';
@@ -196,8 +201,13 @@ export function createApiClient({ baseUrl, app, fetchImpl, onSessionEnded }: Api
       return () => sessionEndedListeners.delete(listener);
     },
     auth: createAuthClient(request),
-    admin: { ...createAdminClient(request), ...createMarketplaceAdminClient(request) },
-    seller: createSellerClient(request),
+    admin: {
+      ...createAdminClient(request),
+      ...createMarketplaceAdminClient(request),
+      catalog: createAdminCatalogClient(request),
+    },
+    seller: { ...createSellerClient(request), ...createSellerCatalogClient(request) },
+    catalog: createCatalogClient(request),
     stores: createStoresPublicClient(request),
     account: createAccountClient(request),
     devTools: createDevToolsClient(request),
