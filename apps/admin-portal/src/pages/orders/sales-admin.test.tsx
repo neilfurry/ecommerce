@@ -63,6 +63,31 @@ const sellerOrder = (id: string, n: number, store: string, storeName: string, to
   vatAmount: '0.00',
   total,
   customerNote: null,
+  acceptedAt: null,
+  shippedAt: null,
+  deliveredAt: null,
+  completedAt: null,
+  cancelledAt: null,
+  cancelReason: null,
+  returnWindowEndsAt: null,
+  shipments: [],
+  cod: { expectedAmount: total, status: 'PENDING', collectedAt: null },
+  cancellationRequest: null,
+  returns: [],
+  refunds: [],
+  notes: [],
+  actions: {
+    accept: false,
+    cancel: true,
+    requestCancellation: false,
+    answerCancellation: false,
+    bookShipment: false,
+    updateShipment: false,
+    confirmReceived: false,
+    requestReturn: false,
+    moveTo: ['PROCESSING'],
+    canManage: true,
+  },
 });
 
 const orderSummary = {
@@ -102,10 +127,29 @@ const orderDetail = {
     grandTotal: '33598.00',
   },
   vat: { rate: '0.1200', included: true },
-  events: [{ type: 'PLACED', note: null, createdAt: NOW }],
+  events: [
+    {
+      type: 'PLACED',
+      sellerOrderId: null,
+      fromStatus: null,
+      toStatus: null,
+      actorType: 'CUSTOMER',
+      note: null,
+      createdAt: NOW,
+    },
+  ],
   cancelledAt: null,
   cancelReason: null,
   cancellable: true,
+  payment: {
+    attempts: [],
+    canPay: false,
+    bankTransfer: null,
+    canUploadProof: false,
+    amountReceived: '0.00',
+    amountRefunded: '0.00',
+  },
+  notes: [],
   commissionAmount: '1679.90',
 };
 
@@ -122,6 +166,8 @@ const sellerOrderSummary = {
   commissionAmount: '1649.95',
   store: { id: STORE_1, name: 'Isla Tech Gadgets' },
   seller: { id: SELLER_1, businessName: 'Isla Tech Inc.' },
+  cancellationRequested: false,
+  trackingNumber: null,
   placedAt: NOW,
 };
 
@@ -160,6 +206,12 @@ const settings = {
     sameDayFee: '180.00',
   },
   commissionRules: [{ id: RULE_ID, category: null, ratePercent: '5.00', updatedAt: NOW }],
+  orders: {
+    bankTransfer: { windowHours: 24, accounts: [], instructions: '' },
+    cod: { maxOrderAmount: '50000.00', maxFailedDeliveries: 2 },
+    returns: { windowDays: 7, sellerResponseDays: 3 },
+    carriers: { MOCK: true, SELF: true },
+  },
 };
 
 type Routes = Record<string, (init?: RequestInit) => Response>;

@@ -20,6 +20,7 @@ import {
   createCatalogClient,
   createSellerCatalogClient,
 } from './catalog';
+import { createFulfilmentClient } from './fulfilment';
 import { createAdminShopClient, createSellerShopClient, createShopClient } from './shop';
 import { createAuthClient } from './auth';
 import { createDevToolsClient } from './dev-tools';
@@ -218,6 +219,8 @@ export function createApiClient({ baseUrl, app, fetchImpl, onSessionEnded }: Api
     },
     catalog: createCatalogClient(request),
     shop: createShopClient(request),
+    /** Phase 5: payments, shipments, returns, refunds (customer, seller and admin groups). */
+    fulfilment: createFulfilmentClient(request),
     stores: createStoresPublicClient(request),
     account: createAccountClient(request),
     devTools: createDevToolsClient(request),

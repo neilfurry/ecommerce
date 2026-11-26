@@ -244,6 +244,7 @@ export function actionsFor(
     confirmReceived: false,
     requestReturn: false,
     moveTo: [],
+    canManage: viewer.canManage,
   };
   if (!viewer.canManage) return none;
   if (viewer.type === 'CUSTOMER') {

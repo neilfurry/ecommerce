@@ -105,7 +105,13 @@ export class ReviewsService {
         take: 100,
       }),
       this.prisma.orderItem.findMany({
-        where: { order: { customerId: user.id, status: 'PLACED' }, review: null },
+        where: {
+          order: { customerId: user.id, status: { in: ['PLACED', 'COMPLETED'] } },
+          sellerOrder: {
+            status: { notIn: ['CANCELLED', 'RETURNED_TO_SELLER', 'AWAITING_PAYMENT'] },
+          },
+          review: null,
+        },
         include: {
           order: { select: { orderNumber: true, placedAt: true } },
           product: { select: { id: true, name: true, slug: true } },
@@ -142,12 +148,20 @@ export class ReviewsService {
   async create(user: AuthenticatedUser, input: CreateReviewRequest): Promise<MyReviews> {
     const item = await this.prisma.orderItem.findFirst({
       where: { id: input.orderItemId, order: { customerId: user.id } },
-      include: { order: { select: { status: true } }, review: { select: { id: true } } },
+      include: {
+        order: { select: { status: true } },
+        sellerOrder: { select: { status: true } },
+        review: { select: { id: true } },
+      },
     });
     if (!item) {
       throw new ApiException(HttpStatus.NOT_FOUND, 'NOT_FOUND', 'Order item not found.');
     }
-    if (item.order.status !== 'PLACED') {
+    // Placed (or completed) orders, except parts that were cancelled or never delivered.
+    if (
+      !['PLACED', 'COMPLETED'].includes(item.order.status) ||
+      ['CANCELLED', 'RETURNED_TO_SELLER', 'AWAITING_PAYMENT'].includes(item.sellerOrder.status)
+    ) {
       throw new ApiException(
         HttpStatus.UNPROCESSABLE_ENTITY,
         'VALIDATION_FAILED',

@@ -87,7 +87,7 @@ export const orderSettingsSchema = z.object({
     sellerResponseDays: z.coerce.number().int().min(1).max(14),
   }),
   /** Couriers sellers may book. Prepared couriers can be enabled only once configured. */
-  carriers: z.record(carrierSchema, z.boolean()),
+  carriers: z.partialRecord(carrierSchema, z.boolean()),
 });
 export type OrderSettings = z.infer<typeof orderSettingsSchema>;
 export type OrderSettingsInput = z.input<typeof orderSettingsSchema>;
@@ -685,6 +685,8 @@ export const sellerOrderActionsSchema = z.object({
   requestReturn: z.boolean(),
   /** Staff: statuses they can move it to. */
   moveTo: z.array(fulfilmentStatusSchema),
+  /** The viewer may act on this order at all (write notes, manage shipments). */
+  canManage: z.boolean(),
 });
 export type SellerOrderActions = z.infer<typeof sellerOrderActionsSchema>;
 

@@ -1,10 +1,14 @@
-import { toDisplayError, useCancelOrder, useMyOrder } from '@marketplace/api-client';
+import {
+  toDisplayError,
+  useCancelOrder,
+  useFulfilmentAction,
+  useMyOrder,
+} from '@marketplace/api-client';
 import {
   ORDER_EVENT_LABELS,
   ORDER_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
-  SELLER_ORDER_STATUS_LABELS,
 } from '@marketplace/shared-types';
 import {
   Alert,
@@ -26,14 +30,23 @@ import {
   ErrorState,
   formatMoney,
   Label,
+  RefundList,
+  ReturnStatusBadge,
+  SellerOrderStatusBadge,
+  ShipmentList,
   Skeleton,
   Textarea,
   toast,
 } from '@marketplace/ui';
 import { CheckCircle2Icon, ImageIcon, StoreIcon, TruckIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Countdown } from '../../components/shop/countdown';
+import {
+  OrderMessages,
+  PackageActions,
+  PaymentHistory,
+  PaymentPanel,
+} from '../../components/orders/order-actions';
 import { productPath } from '../../lib/paths';
 import { statusVariant } from '../../lib/order-status';
 
@@ -51,7 +64,7 @@ function CancelOrder({ orderId }: { orderId: string }) {
           <DialogHeader>
             <DialogTitle>Cancel this order?</DialogTitle>
             <DialogDescription>
-              Every store’s part of the order is cancelled and nothing is charged.
+              Every store’s part of the order is cancelled. Anything already paid is refunded.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -96,8 +109,23 @@ function CancelOrder({ orderId }: { orderId: string }) {
 
 export function OrderPage() {
   const { orderId } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const order = useMyOrder(orderId);
+  const verify = useFulfilmentAction();
+  const verified = useRef(false);
+  const returning = params.get('payment');
+  // Back from the payment page: the server asks the provider; the redirect itself proves nothing.
+  useEffect(() => {
+    if (!returning || !orderId || verified.current) return;
+    verified.current = true;
+    verify.mutate((f) => f.customer.verifyPayment(orderId), {
+      onSettled: () => {
+        params.delete('payment');
+        params.delete('cancelled');
+        setParams(params, { replace: true });
+      },
+    });
+  }, [returning, orderId, verify, params, setParams]);
   if (order.isPending) return <Skeleton className="h-96" />;
   if (order.isError) {
     return (
@@ -125,15 +153,12 @@ export function OrderPage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {o.status === 'AWAITING_PAYMENT' && o.paymentDueAt ? (
+      {verify.isPending ? (
         <Alert>
-          <AlertTitle>Waiting for {PAYMENT_METHOD_LABELS[o.paymentMethod]} payment</AlertTitle>
-          <AlertDescription>
-            Online payment opens in a later release. This order is held for{' '}
-            <Countdown until={o.paymentDueAt} /> and is cancelled automatically if not paid.
-          </AlertDescription>
+          <AlertTitle>Checking your payment with the provider…</AlertTitle>
         </Alert>
       ) : null}
+      <PaymentPanel order={o} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Order {o.orderNumber}</h1>
@@ -171,7 +196,9 @@ export function OrderPage() {
                   </Link>
                   <span className="flex items-center gap-2 text-sm font-normal">
                     <span className="text-muted-foreground">{so.number}</span>
-                    <Badge variant="outline">{SELLER_ORDER_STATUS_LABELS[so.status]}</Badge>
+                    <span data-testid="package-status">
+                      <SellerOrderStatusBadge status={so.status} />
+                    </span>
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -206,7 +233,11 @@ export function OrderPage() {
                               ? ' (flash sale)'
                               : ''}
                         </p>
-                        {o.status === 'PLACED' && !item.reviewed ? (
+                        {['PLACED', 'COMPLETED'].includes(o.status) &&
+                        !['CANCELLED', 'RETURNED_TO_SELLER', 'AWAITING_PAYMENT'].includes(
+                          so.status,
+                        ) &&
+                        !item.reviewed ? (
                           <Link
                             to={`/account/reviews?item=${item.id}`}
                             className="text-xs text-primary underline"
@@ -252,6 +283,20 @@ export function OrderPage() {
                 <p className="text-right text-sm">
                   Package total <span className="font-semibold">{formatMoney(so.total)}</span>
                 </p>
+                {so.shipments.length > 0 ? <ShipmentList shipments={so.shipments} /> : null}
+                {so.cancelReason && so.status === 'CANCELLED' ? (
+                  <p className="text-sm text-muted-foreground">Cancelled: {so.cancelReason}</p>
+                ) : null}
+                {so.returns.map((r) => (
+                  <p key={r.id} className="flex items-center justify-between text-sm">
+                    <Link to={`/account/returns/${r.id}`} className="hover:underline">
+                      Return {r.number}
+                    </Link>
+                    <ReturnStatusBadge status={r.status} />
+                  </p>
+                ))}
+                {so.refunds.length > 0 ? <RefundList refunds={so.refunds} /> : null}
+                <PackageActions order={o} so={so} />
               </CardContent>
             </Card>
           ))}
@@ -304,6 +349,8 @@ export function OrderPage() {
               ) : null}
             </CardContent>
           </Card>
+          <PaymentHistory order={o} />
+          <OrderMessages order={o} />
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Delivery address</CardTitle>

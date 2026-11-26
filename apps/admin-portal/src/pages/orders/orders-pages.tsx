@@ -48,11 +48,19 @@ import { ReceiptIcon } from 'lucide-react';
 import { type ReactNode, useDeferredValue, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { formatDateTime } from '../../lib/format';
+import {
+  AdminOrderPanels,
+  NoteForm,
+  RefundButtons,
+  StaffSellerOrderActions,
+  StaffShipmentButtons,
+} from './order-actions';
+import { useCan, useRun } from './use-actions';
 
 const PAGE_SIZE = 25;
 
 const orderVariant = (s: OrderStatus) =>
-  s === 'PLACED'
+  s === 'PLACED' || s === 'COMPLETED'
     ? ('success' as const)
     : s === 'CANCELLED'
       ? ('secondary' as const)
@@ -401,6 +409,7 @@ export function AdminOrderPage() {
           </Card>
         </div>
         <div className="space-y-6">
+          <AdminOrderPanels order={o} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Totals</CardTitle>
@@ -477,6 +486,8 @@ export function AdminOrderPage() {
 export function AdminSellerOrderPage() {
   const { orderId } = useParams();
   const order = useAdminSellerOrder(orderId);
+  const can = useCan();
+  const { run } = useRun();
   if (order.isPending) return <LoadingState />;
   if (order.isError)
     return (
@@ -496,7 +507,24 @@ export function AdminSellerOrderPage() {
         ]}
       />
       <PageHeader title={`Seller order ${o.number}`} description={o.store.name} />
-      <SellerOrderView order={o} />
+      <SellerOrderView
+        order={o}
+        actions={<StaffSellerOrderActions order={o} />}
+        shipmentActions={(s) => <StaffShipmentButtons shipment={s} />}
+        refundActions={(r) => <RefundButtons refund={r} />}
+        returnLink={(id) => `/disputes/${id}`}
+        noteForm={
+          can('orders.manage') ? (
+            <NoteForm
+              onSend={(body, visibility) =>
+                run('Could not add the note', 'Note added', (f) =>
+                  f.admin.addSellerOrderNote(o.id, { body, visibility }),
+                )
+              }
+            />
+          ) : undefined
+        }
+      />
     </div>
   );
 }

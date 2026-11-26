@@ -141,7 +141,7 @@ export function SidebarLayout({
                 <MenuIcon />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 bg-sidebar p-0">
+            <SheetContent side="left" className="flex w-72 flex-col bg-sidebar p-0">
               <SheetHeader className="border-b">
                 <SheetTitle asChild>
                   <div>
@@ -150,7 +150,10 @@ export function SidebarLayout({
                 </SheetTitle>
                 <SheetDescription className="sr-only">Main navigation</SheetDescription>
               </SheetHeader>
-              <SidebarNav sections={sections} onNavigate={() => setMobileOpen(false)} />
+              {/* Scrolls when the menu is taller than the screen. */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <SidebarNav sections={sections} onNavigate={() => setMobileOpen(false)} />
+              </div>
             </SheetContent>
           </Sheet>
           <div className="lg:hidden">
