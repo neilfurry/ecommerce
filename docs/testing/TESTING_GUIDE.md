@@ -119,7 +119,23 @@ this for you.
 | Seller and admin screens      | seller `sales.test.tsx` and `catalog.test.tsx` (warehouse location), admin `orders/sales-admin.test.tsx`                                                                                                                                                                                                      |
 | Mobile layout                 | Playwright `shopping.spec.ts` runs the whole checkout on the mobile project (Pixel 7) as well as on desktop                                                                                                                                                                                                   |
 
-API e2e tests create their own users directly in the database and give each test client its
+### Phase 5 (orders, payments, shipping, returns and refunds)
+
+| Requirement               | Proven by                                                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Successful payment        | `payments.e2e-spec.ts` (mock checkout → signed webhook → order paid, earnings posted once; the return redirect alone leaves it unpaid), storefront `orders.test.tsx`, Playwright `fulfilment.spec.ts`                     |
+| Duplicate webhook         | `payments.e2e-spec.ts` (the same event three times concurrently and again later: one payment, one event row, ledger posted once)                                                                                          |
+| Invalid signature         | `payments.e2e-spec.ts` (tampered and unsigned: 401, nothing stored), `payments.test.ts`, `fulfilment.spec.ts` (mock courier)                                                                                              |
+| Failed payment            | `payments.e2e-spec.ts` (declined attempt, retry with a new attempt, "pay now" twice returns the same attempt)                                                                                                             |
+| Payment timeout           | `payments.e2e-spec.ts` (expiry cancels; late money goes to the review queue and reconciliation, refunded once), worker `order-jobs.spec.ts` (providers asked before expiry)                                               |
+| Bank transfer             | `payments.e2e-spec.ts` (proof, one at a time, no expiry while under review, rejection with more time, approval once), admin `finance.test.tsx`                                                                            |
+| Refund and partial refund | `fulfilment.e2e-spec.ts` (automatic refund on a paid cancellation, ledger reversal, no second refund; partial goodwill refund; over-refund refused; return refund)                                                        |
+| Multiple seller suborders | `fulfilment.e2e-spec.ts` (two sellers, isolation of orders and labels, read-only employee)                                                                                                                                |
+| COD reconciliation        | `fulfilment.e2e-spec.ts` (collected ≠ received; remittance mismatch needs a note; duplicate reference refused; earnings on remittance), admin `finance.test.tsx`                                                          |
+| Shipment status updates   | `fulfilment.e2e-spec.ts` (pickup converts stock; failed delivery and return to seller restock and close COD; out-of-order events ignored; manual jumps refused), `fulfilment.spec.ts` unit tests (state machines, labels) |
+| Concurrent status updates | `fulfilment.e2e-spec.ts` (three simultaneous accepts: one wins; approve vs. decline a cancellation; two receipts of one return)                                                                                           |
+
+directly in the database and give each test client its
 own address (`X-Forwarded-For` with `TRUST_PROXY=1`), so per-address limits never leak between
 tests. They read SMS codes and email links from the queued jobs; Playwright reads them from the
 SMS outbox and Mailpit, like a developer would. Playwright signs in to the staff apps once

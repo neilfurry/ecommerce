@@ -516,3 +516,84 @@ when the order is fulfilled; converting an expired one is refused (`RESERVATION_
 | ------ | ---------------- | ------------------ |
 | GET    | `/api/docs`      | Swagger UI         |
 | GET    | `/api/docs-json` | OpenAPI 3 document |
+
+## Phase 5: orders, payments, shipping, returns and refunds
+
+Decisions: ADR 0022 (payments and webhooks), 0023 (state machine), 0024 (shipments),
+0025 (COD, returns, refunds, payables). Amounts are decimal strings in pesos. `test: true` /
+`livemode: false` marks mock or sandbox records (no real money or parcel).
+
+### Customers (`/api/v1/account/*`, `/api/v1/dev/*`)
+
+| Method    | Path                                                       | Description                                                                                                                                  |
+| --------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST      | `/account/orders/{id}/payments`                            | Pay now: the open hosted checkout, or a new attempt → `{ payment, checkoutUrl }`; 409 when paid, cancelled or past the deadline              |
+| POST      | `/account/orders/{id}/payments/verify`                     | After returning from the provider: the API asks the provider (server to server) → order                                                      |
+| POST      | `/account/orders/{id}/bank-transfer-proofs`                | Multipart `file` (PDF, JPG, PNG) + `bankName, referenceNumber, amount, transferredAt` → order; 409 when one is already under review          |
+| GET       | `/account/orders/{id}/bank-transfer-proofs/{proofId}/file` | My proof                                                                                                                                     |
+| POST      | `/account/orders/{id}/notes`                               | `{ body }` message to the sellers and support                                                                                                |
+| POST      | `/account/seller-orders/{id}/cancel`                       | `{ reason }` cancel one package while it is new (paid money refunded)                                                                        |
+| POST      | `/account/seller-orders/{id}/cancellation-request`         | `{ reason }` ask the seller (once) while it is being prepared                                                                                |
+| POST      | `/account/seller-orders/{id}/confirm-received`             | Seller-arranged deliveries                                                                                                                   |
+| POST      | `/account/seller-orders/{id}/notes`                        | `{ body }`                                                                                                                                   |
+| GET       | `/account/returns`, `/account/returns/{id}`                | My returns                                                                                                                                   |
+| POST      | `/account/returns`                                         | Multipart `data` (JSON `{ sellerOrderId, items: [{ orderItemId, quantity }], reason, description, requestedResolution }`) + up to 5 `images` |
+| POST      | `/account/returns/{id}/escalate`                           | `{ note }` after a rejection or no answer in time                                                                                            |
+| POST      | `/account/returns/{id}/cancel`                             | Withdraw                                                                                                                                     |
+| POST      | `/account/returns/{id}/ship-back`                          | `{ carrierName, trackingNumber }`                                                                                                            |
+| GET, POST | `/dev/mock-payments/{sessionId}`                           | The mock provider's test checkout (owner only; `{ outcome: paid\|failed }` sends a signed webhook). Not in production                        |
+
+### Webhooks (public; authenticated by signature over the raw body)
+
+| Method | Path                              | Description                                                                                                                  |
+| ------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/payments/webhooks/paymongo`     | `Paymongo-Signature`; 401 when invalid (nothing stored); 200 `{ received, duplicate }`; 500 when processing failed (retried) |
+| POST   | `/payments/webhooks/mock`         | `x-mock-signature` (development)                                                                                             |
+| POST   | `/shipping/webhooks/mock-courier` | `x-mock-courier-signature` (development)                                                                                     |
+
+### Seller Center (`/api/v1/seller/*`; read `seller.orders.read`, act `seller.orders.manage`, returns `seller.returns.manage`)
+
+| Method | Path                                                                                                                     | Description                                                                                                  |
+| ------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| GET    | `/seller/orders?tab=NEW\|PROCESSING\|READY_FOR_PICKUP\|SHIPPED\|COMPLETED\|CANCELLED&search`                             | Dashboard tabs (search covers tracking numbers)                                                              |
+| GET    | `/seller/orders/counts`                                                                                                  | Orders per tab, returns to answer, cancellation requests                                                     |
+| GET    | `/seller/orders/{id}`                                                                                                    | Adds shipments, COD, cancellation request, returns, refunds, notes, payables ledger and `actions`            |
+| POST   | `/seller/orders/{id}/accept`, `/cancel` `{ reason }`                                                                     |                                                                                                              |
+| POST   | `/seller/orders/{id}/cancellation-request/approve` `{ response? }`, `/reject` `{ response }`                             |                                                                                                              |
+| POST   | `/seller/orders/{id}/notes`                                                                                              | `{ body, visibility: CUSTOMER\|SELLER }`                                                                     |
+| GET    | `/seller/shipping/carriers`                                                                                              | Couriers enabled and set up                                                                                  |
+| POST   | `/seller/orders/{id}/shipments`                                                                                          | `{ carrier: MOCK }` or `{ carrier: SELF, carrierName, trackingNumber }`                                      |
+| POST   | `/seller/shipments/{id}/cancel`                                                                                          | Before pickup                                                                                                |
+| POST   | `/seller/shipments/{id}/events`                                                                                          | `{ status, description?, location? }` self-arranged deliveries; 409 `INVALID_TRANSITION`                     |
+| GET    | `/seller/shipments/{id}/waybill`                                                                                         | Label PDF                                                                                                    |
+| GET    | `/seller/returns`, `/seller/returns/{id}`                                                                                |                                                                                                              |
+| POST   | `/seller/returns/{id}/approve`                                                                                           | `{ resolution: FULL_REFUND\|PARTIAL_REFUND\|REPLACEMENT, refundAmount?, requiresReturnShipment, response? }` |
+| POST   | `/seller/returns/{id}/reject` `{ response }`, `/receive` `{ restock }`, `/replacement` `{ carrierName, trackingNumber }` |                                                                                                              |
+| GET    | `/seller/ledger`                                                                                                         | Payables ledger with the balance                                                                             |
+
+### Admin Console
+
+| Method | Path                                                                                                            | Access            | Description                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------- |
+| POST   | `/orders/{id}/cancel` `{ reason }`                                                                              | `orders.manage`   | Whole order before anything ships                                                            |
+| POST   | `/orders/{id}/notes`                                                                                            | `orders.manage`   | `{ body, visibility: CUSTOMER\|SELLER\|STAFF }`                                              |
+| POST   | `/orders/{id}/payments/verify`                                                                                  | `payments.manage` | Ask the provider                                                                             |
+| POST   | `/seller-orders/{id}/cancel`, `/transition` `{ to, note }`, `/cancellation-request/{approve\|reject}`, `/notes` | `orders.manage`   | Transition: accept for the seller or complete a delivered order                              |
+| GET    | `/payments?queue=review\|failed&status&provider&method&search`, `/payments/{id}`                                | `payments.read`   | Attempts with history, proofs, refunds                                                       |
+| POST   | `/payments/{id}/resolve` `{ note }`                                                                             | `payments.manage` | Review item handled                                                                          |
+| GET    | `/payments/gateways`, `/payments/reconciliation?from&to`, `/payments/webhook-events`                            | `payments.read`   | Payload never shown                                                                          |
+| POST   | `/payments/webhook-events/{id}/reprocess`                                                                       | `payments.manage` | Failed events only                                                                           |
+| GET    | `/payments/bank-transfer-proofs?status`, `/{id}/file`                                                           | `payments.read`   | Queue oldest first                                                                           |
+| POST   | `/payments/bank-transfer-proofs/{id}/approve`, `/reject` `{ reason }`                                           | `payments.manage` |                                                                                              |
+| GET    | `/refunds`, `/refunds/{id}`                                                                                     | `payments.read`   |                                                                                              |
+| POST   | `/refunds`                                                                                                      | `refunds.manage`  | `{ sellerOrderId \| paymentId, reason, kind: FULL\|PARTIAL, amount?, note, idempotencyKey }` |
+| POST   | `/refunds/{id}/mark-paid` `{ payoutReference }`, `/retry`, `/resend`                                            | `refunds.manage`  |                                                                                              |
+| GET    | `/sellers/{id}/ledger`                                                                                          | `payments.read`   |                                                                                              |
+| GET    | `/cod/collections?status&carrier`, `/cod/remittances`                                                           | `payments.read`   |                                                                                              |
+| POST   | `/cod/remittances`                                                                                              | `cod.manage`      | `{ carrier, reference, remittedAt, amount, collectionIds, discrepancyNote? }`                |
+| GET    | `/shipping/carriers`, `/shipments`                                                                              | `orders.read`     |                                                                                              |
+| PUT    | `/settings/orders`                                                                                              | `settings.manage` | Bank accounts and window, COD limits, return windows, couriers                               |
+| POST   | `/shipments/{id}/events`, `/cancel`, `/simulate` (mock, development)                                            | `shipping.manage` |                                                                                              |
+| GET    | `/shipments/{id}/waybill`                                                                                       | `orders.read`     |                                                                                              |
+| GET    | `/returns?status`, `/returns/{id}`                                                                              | `orders.read`     | ESCALATED: the dispute queue                                                                 |
+| POST   | `/returns/{id}/decide`, `/receive`                                                                              | `disputes.manage` | `{ resolution, refundAmount?, requiresReturnShipment?, note }`                               |
