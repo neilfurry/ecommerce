@@ -68,6 +68,18 @@ export const apiEnvSchema = z
     PAYMONGO_CHECKOUT_VERSION: z.enum(['v1', 'v2']).default('v2'),
     /** Signs the mock payment provider's and mock courier's webhooks (development). */
     MOCK_WEBHOOK_SECRET: z.string().min(16).default('local-mock-webhook-secret-change-me'),
+    /**
+     * PayMongo payouts (Phase 6): the wallet money is sent from (GET /v2/wallets shows it).
+     * Without an account number, payouts are recorded manually only.
+     */
+    PAYMONGO_WALLET_ACCOUNT_NUMBER: z.string().optional(),
+    PAYMONGO_WALLET_ACCOUNT_NAME: z.string().optional(),
+    PAYMONGO_WALLET_BIC: z.string().default('PAEYPHM2XXX'),
+    /** Encrypts sellers' bank account numbers (AES-256-GCM). At least 32 random characters. */
+    FINANCE_ENCRYPTION_KEY: z
+      .string()
+      .min(32, 'Use at least 32 random characters')
+      .default('dev-only-finance-key-change-me-0123456789abcdef'),
     /** Public base URL of this API, for provider callbacks shown in the admin console. */
     API_PUBLIC_URL: z.url().default('http://localhost:3000'),
 
@@ -151,6 +163,13 @@ export const apiEnvSchema = z
           message: 'Required for PayMongo: the secret shown when you create the webhook',
         });
       }
+    }
+    if (env.NODE_ENV === 'production' && env.FINANCE_ENCRYPTION_KEY.startsWith('dev-only-')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FINANCE_ENCRYPTION_KEY'],
+        message: 'Set a random key in production (it encrypts sellers’ bank account numbers)',
+      });
     }
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {
       ctx.addIssue({

@@ -46,6 +46,8 @@ describe('Checkout (e2e)', () => {
     admin = (await signedInClient(app, 'admin', ['ADMIN'], 'checkout-admin')).client;
     categoryId = (await testCategory(app)).id;
     sellerA = await shopSeller(app, PLACES.cebuCity);
+    // Phase 6: goods tax follows the seller's registration (seller A VAT-registered, B not).
+    await prisma.seller.update({ where: { id: sellerA.sellerId }, data: { vatRegistered: true } });
     sellerB = await shopSeller(app, PLACES.davaoCity);
     laptop = await listed(sellerA, admin, categoryId, {
       name: 'Aero 14 Laptop',
@@ -103,8 +105,13 @@ describe('Checkout (e2e)', () => {
     expect(q.totals.grandTotal).toBe(
       D(q.totals.itemsSubtotal).plus(q.totals.shippingFee).toFixed(2),
     );
-    // VAT is included (12%): total × 12 / 112 per seller order.
-    expect(a.vatAmount).toBe(D(a.total).times(12).dividedBy(112).toDecimalPlaces(2).toFixed(2));
+    // VAT (tax rule PH-VAT-GOODS, 12% included) applies to the VAT-registered seller's goods
+    // only: line total × 12 / 112. The non-VAT seller's goods carry no VAT.
+    expect(a.vatAmount).toBe(
+      D(a.itemsSubtotal).times(12).dividedBy(112).toDecimalPlaces(2).toFixed(2),
+    );
+    expect(b.vatAmount).toBe('0.00');
+    expect(q.vat).toEqual({ rate: null, included: true });
 
     const res = await placeOrder(buyer.client, { addressId: buyer.addressId });
     expect(res.status).toBe(201);
@@ -439,7 +446,8 @@ describe('Checkout (e2e)', () => {
         const gcash = await quote(buyer.client, { ...body, paymentMethod: 'GCASH' });
         expect(gcash.totals.chargesTotal).toBe('0.00');
         expect(D(cod.totals.grandTotal).minus(gcash.totals.grandTotal).toFixed(2)).toBe('20.00');
-        expect(cod.vat).toEqual({ rate: '0.12', included: true });
+        // The keyboard's seller is not VAT-registered: no goods tax.
+        expect(cod.vat).toEqual({ rate: '0', included: true });
       } finally {
         await settings
           .put('/api/v1/settings/checkout')

@@ -157,6 +157,8 @@ export const ORDER_JOBS = {
   COMPLETE_DELIVERED: 'order-processing.complete-delivered',
   /** Periodic: return requests the seller did not answer in time go to the marketplace. */
   ESCALATE_OVERDUE_RETURNS: 'order-processing.escalate-overdue-returns',
+  /** Periodic: settles sellers' eligible orders for the last closed settlement period. */
+  SETTLE_SELLERS: 'order-processing.settle-sellers',
 } as const;
 
 export const PAYMENT_JOBS = {
@@ -167,6 +169,9 @@ export const PAYMENT_JOBS = {
 export const FULFILMENT_SWEEP_SCHEDULER_ID = 'order-processing:fulfilment-sweep';
 export const FULFILMENT_SWEEP_INTERVAL_SECONDS = 3600;
 export const RETURN_ESCALATION_SCHEDULER_ID = 'order-processing:return-escalation';
+export const SETTLEMENT_SCHEDULER_ID = 'order-processing:settlement';
+/** Settlement runs every few hours; each period is settled once (unique per seller and period). */
+export const SETTLEMENT_INTERVAL_SECONDS = 6 * 3600;
 export const PAYMENT_RECONCILIATION_SCHEDULER_ID = 'payment-events:reconcile-open-payments';
 export const PAYMENT_RECONCILIATION_INTERVAL_SECONDS = 300;
 

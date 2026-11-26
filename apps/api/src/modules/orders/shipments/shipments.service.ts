@@ -4,6 +4,7 @@ import {
   FilePurpose,
   InvalidTransitionError,
   lockOrderInTx,
+  postCodCollectedInTx,
   postShippingCreditIfDueInTx,
   Prisma,
   transitionSellerOrderInTx,
@@ -742,6 +743,11 @@ export class ShipmentsService {
         await tx.$executeRaw`
           UPDATE "cod_collections" SET "collected_amount" = "expected_amount"
           WHERE "seller_order_id" = ${so.id}::uuid AND "collected_amount" IS NULL`;
+        const collection = await tx.codCollection.findUniqueOrThrow({
+          where: { sellerOrderId: so.id },
+          select: { id: true },
+        });
+        await postCodCollectedInTx(tx, collection.id);
         await tx.orderEvent.create({
           data: {
             orderId: so.orderId,

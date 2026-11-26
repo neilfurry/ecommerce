@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@marketplace/database';
+import {
+  commissionAmount,
+  type Prisma,
+  type ResolvedCommission,
+  type TaxRuleSnapshot,
+} from '@marketplace/database';
 import {
   type AuthenticatedUser,
   ONLINE_PAYMENT_METHODS,
@@ -22,10 +27,9 @@ import { formatAddress } from '../addresses/addresses.service';
 import { availableOf, optionsOf, thumbnailOf } from '../cart/cart.service';
 import { PaymentsService } from '../orders/payments/payments.service';
 import { PricingService, shopperOf } from '../pricing/pricing.service';
-import {
-  PlatformSettingsService,
-  type ResolvedCommission,
-} from '../settings/platform-settings.service';
+import { CommissionRulesService } from '../settings/commission-rules.service';
+import { PlatformSettingsService } from '../settings/platform-settings.service';
+import { TaxRulesService } from '../settings/tax-rules.service';
 import type { ShippingPlace, ShippingRate } from '../shipping/shipping-provider';
 import { type ShippingOrigin, ShippingService } from '../shipping/shipping.service';
 import { allocate, cents, D, type Decimal, includedVat, min, sum, ZERO } from './money';
@@ -60,6 +64,8 @@ export interface PlannedLine {
   lineTotal: Decimal;
   vatAmount: Decimal;
   commission: ResolvedCommission & { base: Decimal; amount: Decimal };
+  /** Goods tax rule snapshot (by the seller's registration at the time of the order). */
+  tax: TaxRuleSnapshot;
 }
 
 export interface PlannedCoupon {
@@ -131,6 +137,8 @@ export class CheckoutPricingService {
     private readonly pricing: PricingService,
     private readonly shipping: ShippingService,
     private readonly settingsService: PlatformSettingsService,
+    private readonly commissionRules: CommissionRulesService,
+    private readonly taxRules: TaxRulesService,
     private readonly payments: PaymentsService,
   ) {}
 
@@ -204,8 +212,10 @@ export class CheckoutPricingService {
       where: { id: { in: requested.map((r) => r.variantId) } },
       include: variantInclude,
     });
-    const commissions = await this.settingsService.commissionFor(
-      [...new Set(variants.map((v) => v.product.categoryId))],
+    const commissionOf = await this.commissionRules.resolverAt(now, db);
+    const goodsTax = await this.taxRules.goodsTaxFor(
+      [...new Set(variants.map((v) => v.sellerId))],
+      now,
       db,
     );
     const groupsBySeller = new Map<string, PlannedGroup>();
@@ -249,7 +259,16 @@ export class CheckoutPricingService {
         platformDiscount: ZERO,
         lineTotal: lineSubtotal,
         vatAmount: ZERO,
-        commission: { ...commissions.get(variant.product.categoryId)!, base: ZERO, amount: ZERO },
+        commission: {
+          ...commissionOf({
+            productId: variant.productId,
+            sellerId: variant.sellerId,
+            categoryId: variant.product.categoryId,
+          }),
+          base: ZERO,
+          amount: ZERO,
+        },
+        tax: goodsTax.get(variant.sellerId)!,
       });
     });
     const groups = [...groupsBySeller.values()];
@@ -318,8 +337,8 @@ export class CheckoutPricingService {
       db,
     );
 
-    // 6. Charges, VAT and commission per seller order.
-    const vatRate = D(settings.vat.rate);
+    // 6. Charges, taxes and commission per seller order. The goods tax follows the seller's
+    // registration (tax rules); a tax-exclusive rule adds the tax on top of the price.
     const paymentMethod = input.paymentMethod;
     if (!settings.paymentMethods.includes(paymentMethod)) {
       problems.push({
@@ -343,26 +362,36 @@ export class CheckoutPricingService {
         }))
         .filter((c) => c.amount.greaterThan(0));
       group.chargesTotal = sum(group.charges.map((c) => c.amount));
-      group.total = discountedItems
-        .plus(group.shippingFee)
-        .minus(group.sellerShippingDiscount)
-        .minus(group.platformShippingDiscount)
-        .plus(group.chargesTotal);
-      group.vatAmount = includedVat(group.total, vatRate);
+      let taxOnTop = ZERO;
       for (const line of group.lines) {
         line.lineTotal = line.lineSubtotal.minus(line.sellerDiscount).minus(line.platformDiscount);
-        line.vatAmount = includedVat(line.lineTotal, vatRate);
+        const rate = D(line.tax.ratePercent).dividedBy(100);
+        if (line.tax.inclusive) {
+          line.vatAmount = includedVat(line.lineTotal, rate);
+        } else {
+          line.vatAmount = cents(line.lineTotal.times(rate));
+          taxOnTop = taxOnTop.plus(line.vatAmount);
+        }
         // Commission on what the item sold for after the seller's own discount (marketplace-paid
         // discounts do not lower the seller's sale).
         const base = line.lineSubtotal.minus(line.sellerDiscount);
         line.commission = {
           ...line.commission,
           base,
-          amount: cents(base.times(line.commission.ratePercent).dividedBy(100)),
+          amount: commissionAmount(line.commission, base, line.quantity),
         };
       }
+      group.total = discountedItems
+        .plus(taxOnTop)
+        .plus(group.shippingFee)
+        .minus(group.sellerShippingDiscount)
+        .minus(group.platformShippingDiscount)
+        .plus(group.chargesTotal);
+      group.vatAmount = sum(group.lines.map((l) => l.vatAmount));
       group.commissionAmount = sum(group.lines.map((l) => l.commission.amount));
     }
+    const lineTaxes = groups.flatMap((g) => g.lines.map((l) => l.tax));
+    const rates = [...new Set(lineTaxes.map((t) => D(t.ratePercent).dividedBy(100).toString()))];
 
     const totals = {
       itemsSubtotal: sum(groups.map((g) => g.itemsSubtotal)),
@@ -460,7 +489,10 @@ export class CheckoutPricingService {
         vatAmount: money(totals.vatAmount),
         grandTotal: money(totals.grandTotal),
       },
-      vat: { rate: settings.vat.rate, included: true },
+      vat: {
+        rate: rates.length === 1 ? rates[0]! : null,
+        included: lineTaxes.every((t) => t.inclusive),
+      },
       problems,
       evaluatedAt: now.toISOString(),
     };

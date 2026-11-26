@@ -12,6 +12,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ProductsModule } from './modules/products/products.module';
 import { DevToolsModule } from './modules/dev-tools/dev-tools.module';
+import { FinanceModule } from './modules/finance/finance.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -64,6 +65,7 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
     SellerMembersModule,
     // Storefront, cart and checkout (Phase 4)
     SettingsModule,
+    FinanceModule,
     LocationsModule,
     AddressesModule,
     StorefrontModule,

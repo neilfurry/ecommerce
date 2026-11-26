@@ -10,7 +10,7 @@ import {
   RETURN_STATUS_LABELS,
   RETURN_STATUSES,
   type ReturnStatus,
-  SELLER_LEDGER_TYPE_LABELS,
+  ledgerKindLabel,
 } from '@marketplace/shared-types';
 import {
   Breadcrumbs,
@@ -385,7 +385,7 @@ export function ReturnPage() {
 
 const ledgerColumns: DataTableColumn<LedgerEntryDto>[] = [
   { id: 'date', header: 'Date', cell: (e) => formatDateTime(e.createdAt) },
-  { id: 'type', header: 'Type', cell: (e) => SELLER_LEDGER_TYPE_LABELS[e.type] },
+  { id: 'type', header: 'Type', cell: (e) => ledgerKindLabel(e.type) },
   {
     id: 'description',
     header: 'Description',

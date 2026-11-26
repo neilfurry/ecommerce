@@ -471,6 +471,28 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerType, string> = {
   ADJUSTMENT: 'Adjustment',
 };
 
+/**
+ * Phase 6: kinds of seller payable lines in the double-entry ledger (journal_entries.kind),
+ * as shown to sellers and staff.
+ */
+export const LEDGER_KIND_LABELS: Record<string, string> = {
+  SALE: 'Sale',
+  COMMISSION: 'Commission',
+  COMMISSION_REVERSAL: 'Commission returned',
+  PAYMENT_FEE: 'Payment fee',
+  COD_FEE: 'COD fee',
+  SHIPPING_CREDIT: 'Shipping fee',
+  REFUND: 'Refund',
+  SETTLEMENT: 'Settlement',
+  WITHHOLDING: 'Withholding tax',
+  PAYOUT: 'Payout',
+  RESERVE: 'Reserve',
+  ADJUSTMENT: 'Adjustment',
+  ORDER_EARNING: 'Sale',
+};
+export const ledgerKindLabel = (kind: string | null | undefined) =>
+  (kind && LEDGER_KIND_LABELS[kind]) ?? kind ?? 'Adjustment';
+
 /** Default return window after delivery and seller response time (configurable). */
 export const DEFAULT_RETURN_WINDOW_DAYS = 7;
 export const DEFAULT_RETURN_RESPONSE_DAYS = 3;

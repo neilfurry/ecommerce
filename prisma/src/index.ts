@@ -23,7 +23,6 @@ export {
   escalateOverdueReturns,
   InvalidTransitionError,
   postSellerEarningsInTx,
-  postShippingCreditIfDueInTx,
   syncOrderStatusInTx,
   transitionSellerOrderInTx,
   type TransitionInput,
@@ -37,3 +36,13 @@ export {
   type PaymentConfirmationSource,
   type PaymentSucceededResult,
 } from './payments';
+export * from './ledger';
+export * from './commission';
+export {
+  eligibleSellerOrders,
+  nextDocumentNumber,
+  runSettlement,
+  settleSellerInTx,
+  type SettleResult,
+} from './settlement';
+export { backfillLedger } from './ledger-backfill';

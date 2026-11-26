@@ -86,9 +86,15 @@ function Totals({ quote }: { quote: CheckoutQuote }) {
       ) : null}
       <Separator className="my-2" />
       <Row label="Total" value={formatMoney(t.grandTotal)} strong />
-      <p className="text-xs text-muted-foreground">
-        Includes VAT of {formatMoney(t.vatAmount)} ({Math.round(Number(quote.vat.rate) * 100)}%).
-      </p>
+      {Number(t.vatAmount) > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {quote.vat.included ? 'Includes' : 'Plus'} VAT of {formatMoney(t.vatAmount)}
+          {quote.vat.rate !== null
+            ? ` (${Number((Number(quote.vat.rate) * 100).toFixed(2))}%)`
+            : ''}
+          .
+        </p>
+      ) : null}
     </dl>
   );
 }

@@ -1,5 +1,6 @@
 import { Prisma } from './generated/prisma/client';
 import { postSellerEarningsInTx, transitionSellerOrderInTx } from './fulfilment';
+import { postPaymentFeeInTx, postPaymentReceivedInTx } from './ledger';
 
 type Tx = Prisma.TransactionClient;
 
@@ -127,6 +128,9 @@ export async function applyPaymentSucceededInTx(
       },
     });
     await event(reason, {}, 'CANCELLED');
+    // The money is in the books (unallocated, in clearing) until finance refunds it.
+    await postPaymentReceivedInTx(tx, payment.id, now);
+    await postPaymentFeeInTx(tx, payment.id, now);
     return { result: 'NEEDS_REVIEW', ...base, reason };
   }
 
@@ -142,6 +146,7 @@ export async function applyPaymentSucceededInTx(
     },
   });
   await event('PAID', {}, 'PAID');
+  await postPaymentReceivedInTx(tx, payment.id, now);
 
   // Other open attempts of the same order can no longer be used.
   const others = await tx.payment.findMany({
@@ -200,6 +205,7 @@ export async function applyPaymentSucceededInTx(
     });
     await postSellerEarningsInTx(tx, so.id, now);
   }
+  await postPaymentFeeInTx(tx, payment.id, now);
   return {
     result: 'PAID',
     ...base,

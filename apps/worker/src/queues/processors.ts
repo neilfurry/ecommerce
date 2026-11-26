@@ -8,6 +8,7 @@ import { SmsOtpHandler } from '../jobs/sms-otp.handler';
 import { ReleaseExpiredReservationsHandler } from '../jobs/reservation-sweep';
 import { CompleteDeliveredHandler, EscalateOverdueReturnsHandler } from '../jobs/fulfilment-sweep';
 import { ReconcileOpenPaymentsHandler } from '../jobs/payment-reconciliation';
+import { SettleSellersHandler } from '../jobs/settlement';
 import { ExpireUnpaidOrdersHandler } from '../jobs/unpaid-order-sweep';
 import {
   LowStockEmailHandler,
@@ -128,10 +129,17 @@ export class OrderProcessingProcessor extends DomainProcessor {
     expireUnpaidOrders: ExpireUnpaidOrdersHandler,
     completeDelivered: CompleteDeliveredHandler,
     escalateOverdueReturns: EscalateOverdueReturnsHandler,
+    settleSellers: SettleSellersHandler,
   ) {
     super(
       QUEUE_NAMES.ORDER_PROCESSING,
-      [releaseExpiredReservations, expireUnpaidOrders, completeDelivered, escalateOverdueReturns],
+      [
+        releaseExpiredReservations,
+        expireUnpaidOrders,
+        completeDelivered,
+        escalateOverdueReturns,
+        settleSellers,
+      ],
       config,
       deadLetters,
     );

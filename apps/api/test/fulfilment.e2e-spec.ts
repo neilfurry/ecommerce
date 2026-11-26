@@ -144,7 +144,7 @@ describe('Fulfilment (e2e)', () => {
       amount: soB.total,
     });
     expect(cancelledB.ledger.map((e) => e.type).sort()).toEqual(
-      ['COMMISSION', 'COMMISSION_REVERSAL', 'ORDER_EARNING', 'REFUND'].sort(),
+      ['COMMISSION', 'COMMISSION_REVERSAL', 'SALE', 'REFUND'].sort(),
     );
     const balance = cancelledB.ledger.reduce((s, e) => s + Number(e.amount), 0);
     expect(balance).toBeCloseTo(0, 2);
@@ -309,7 +309,7 @@ describe('Fulfilment (e2e)', () => {
     const remitted = await sellerOrderOf(sellerB.client, so.id);
     expect(remitted.cod).toMatchObject({ status: 'REMITTED' });
     expect(remitted.paymentStatus).toBe('PAID');
-    expect(remitted.ledger.map((e) => e.type).sort()).toEqual(['COMMISSION', 'ORDER_EARNING']);
+    expect(remitted.ledger.map((e) => e.type).sort()).toEqual(['COMMISSION', 'SALE']);
     const ledger = sellerLedgerSchema.parse(
       (await sellerB.client.get('/api/v1/seller/ledger').expect(200)).body,
     );

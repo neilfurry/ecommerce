@@ -177,12 +177,18 @@ const orderDetail = {
       {
         orderItemId: ITEM_ID,
         ruleId: RULE_ID,
+        scope: 'DEFAULT',
+        type: 'PERCENTAGE',
         ratePercent: '5.00',
+        fixedAmount: null,
         base: '998.00',
         amount: '49.90',
       },
     ],
   },
+  taxes: [{ orderItemId: ITEM_ID, ratePercent: '12', inclusive: true, amount: '106.93' }],
+  sellerInvoice: null,
+  settlement: null,
   coupons: [],
   events: [
     {

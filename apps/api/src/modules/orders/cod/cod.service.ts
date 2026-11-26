@@ -1,5 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { lockOrderInTx, postSellerEarningsInTx, Prisma } from '@marketplace/database';
+import {
+  lockOrderInTx,
+  postCodFeeInTx,
+  postCodRemittanceInTx,
+  postSellerEarningsInTx,
+  Prisma,
+} from '@marketplace/database';
 import type { AuthenticatedUser, Carrier, PaginatedResponse } from '@marketplace/shared-types';
 import type {
   CodCollectionDto,
@@ -190,6 +196,7 @@ export class CodService {
             data: { status: 'REMITTED', remittanceId: remittance.id },
           });
           const now = new Date();
+          await postCodRemittanceInTx(tx, remittance.id);
           const byOrder = new Map<string, typeof rows>();
           for (const r of rows) byOrder.set(r.order_id, [...(byOrder.get(r.order_id) ?? []), r]);
           for (const [orderId, collections] of [...byOrder].sort(([a], [b]) =>
@@ -229,6 +236,7 @@ export class CodService {
             });
             for (const c of collections) {
               await postSellerEarningsInTx(tx, c.seller_order_id, now);
+              await postCodFeeInTx(tx, c.id, now);
               await tx.orderEvent.create({
                 data: {
                   orderId,
