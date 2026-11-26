@@ -28,7 +28,9 @@ test.describe('Orders, payments and shipping', () => {
     await expect(page.getByText('Added to cart')).toBeVisible();
     await page.goto(`${STOREFRONT}/cart`);
     await page.getByRole('button', { name: 'Sign in to check out' }).click();
-    await storefrontSignIn(page, 'customer@marketplace.local');
+    // The wholesale demo customer: the shopping test checks out the retail demo customer's cart
+    // in parallel, and two tests must not share one cart.
+    await storefrontSignIn(page, 'wholesale@marketplace.local');
     await expect(page).toHaveURL(/\/checkout$/);
     await page.getByRole('radio', { name: /GCash/ }).check();
     await page.getByRole('button', { name: /Place order/ }).click();
