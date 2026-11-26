@@ -32,6 +32,7 @@ test.describe('Orders, payments and shipping', () => {
     // in parallel, and two tests must not share one cart.
     await storefrontSignIn(page, 'wholesale@marketplace.local');
     await expect(page).toHaveURL(/\/checkout$/);
+    await expect(page.getByText(/Package 1 of/)).toBeVisible();
     await page.getByRole('radio', { name: /GCash/ }).check();
     await page.getByRole('button', { name: /Place order/ }).click();
 

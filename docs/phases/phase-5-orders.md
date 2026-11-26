@@ -304,6 +304,10 @@ GitHub Actions run `45822065277`, commit `b81f822`:
   the new menu items.
 - **Reviews:** they stayed open for completed orders and closed for cancelled or returned
   packages.
+- **Checkout right after sign-in (a Phase 4 bug):** checkout could be quoted before the browser
+  cart was merged into the account and then showed "Nothing to check out" until reloaded. The
+  quote is now refreshed after the merge. The new unit test fails on the old code and passes on
+  the new.
 
 ## 8. Remaining issues and limitations
 
