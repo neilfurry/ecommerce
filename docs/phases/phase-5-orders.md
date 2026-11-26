@@ -2,7 +2,7 @@
 
 - Branch: `phase-5-orders` (PR #5, based on `phase-4-storefront`)
 - Date: 2026-11-26
-- Verified on: GitHub Actions run `45822065277`, commit `b81f822` (all three jobs green; see §7)
+- Verified on: GitHub Actions run `45826461377`, commit `e4fc7e9` (all three jobs green, nothing flaky)
 - Status: **Complete, awaiting review and approval.** Phase 6 has not been started and will not
   start until you send the Phase 6 details.
 
@@ -241,7 +241,7 @@ pnpm install
 
 All results below come from real runs.
 
-GitHub Actions run `45822065277`, commit `b81f822`:
+GitHub Actions run `45826461377`, commit `e4fc7e9` (all three jobs green, no flaky tests):
 
 | Suite                                                   | Result                                                                                                                                                                                         |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -255,19 +255,17 @@ GitHub Actions run `45822065277`, commit `b81f822`:
 
 **Note on the CI history:**
 
-- On the first attempt of this run, one Phase 2 browser test (sign up by SMS and confirm the
-  email; Phase 5 did not change that code) failed once and passed on its retry. CI counts that
-  as a failure, so the job was red.
-- Rerunning the job turned everything green. That test also passed in the previous run
-  (`45819769237`).
-- It is an intermittent test, listed under §8.
-- That earlier run also failed because the new Phase 5 browser test and the shopping test used
-  the same demo customer's cart in parallel. Fixed: the new test uses the wholesale demo
-  customer.
+- Earlier runs of this PR found two problems in the new browser test, both fixed:
+  - It shared the demo customer's cart with the shopping test running in parallel. It now uses
+    the wholesale demo customer.
+  - It exposed a Phase 4 race: checkout right after sign-in could show an empty cart. Fixed
+    (see "Fixed during verification").
+- One Phase 2 browser test (SMS sign-up with email confirmation) failed once in run
+  `45822065277` and passed on its retry. It passed in every other run, including the final one.
 
 **Run locally as well:**
 
-- unit 460 passed, API e2e 257 passed;
+- unit 461 passed, API e2e 257 passed;
 - Playwright: every test that does not need Mailpit passed on desktop and Pixel 7. Mailpit is
   not available here, so the email tests run only in CI.
 
@@ -327,8 +325,8 @@ GitHub Actions run `45822065277`, commit `b81f822`:
 - **Bank transfer proofs** are checked by hand. There is no bank statement import, and uploaded
   files are not malware-scanned (as for images since Phase 3).
 - **Intermittent Phase 2 browser test:** the SMS sign-up and email confirmation test failed once
-  in CI and passed on retry and on the rerun. I could not reproduce it here, because it needs
-  Mailpit.
+  in CI (run `45822065277`) and passed on its retry and in every other run. I could not
+  reproduce it here, because it needs Mailpit. I will keep watching it.
 - **Local test data builds up.** Repeated local browser runs reserve the demo laptop's stock and
   leave pending wholesale applications, which can make the Phase 3–4 browser tests time out on a
   long-used database. Running `pnpm db:reset` and then `.\scripts\setup.ps1` restores it; CI always starts
