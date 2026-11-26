@@ -29,3 +29,5 @@ export * from './catalog-react';
 export * from './shop-react';
 export * from './fulfilment-react';
 export type { FulfilmentListQuery } from './fulfilment';
+export * from './finance-react';
+export type { FinanceQuery } from './finance';

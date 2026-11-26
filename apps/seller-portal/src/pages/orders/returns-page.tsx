@@ -1,7 +1,6 @@
 import {
   toDisplayError,
   useFulfilmentAction,
-  useSellerLedger,
   useSellerReturn,
   useSellerReturns,
 } from '@marketplace/api-client';
@@ -10,7 +9,6 @@ import {
   RETURN_STATUS_LABELS,
   RETURN_STATUSES,
   type ReturnStatus,
-  ledgerKindLabel,
 } from '@marketplace/shared-types';
 import {
   Breadcrumbs,
@@ -41,8 +39,8 @@ import {
   Textarea,
   toast,
 } from '@marketplace/ui';
-import type { LedgerEntryDto, ReturnDto } from '@marketplace/validation';
-import { RotateCcwIcon, WalletIcon } from 'lucide-react';
+import type { ReturnDto } from '@marketplace/validation';
+import { RotateCcwIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { showError } from '../../lib/errors';
@@ -380,78 +378,5 @@ export function ReturnPage() {
         </>
       }
     />
-  );
-}
-
-const ledgerColumns: DataTableColumn<LedgerEntryDto>[] = [
-  { id: 'date', header: 'Date', cell: (e) => formatDateTime(e.createdAt) },
-  { id: 'type', header: 'Type', cell: (e) => ledgerKindLabel(e.type) },
-  {
-    id: 'description',
-    header: 'Description',
-    hideOnMobile: true,
-    cell: (e) =>
-      e.sellerOrderId ? (
-        <Link to={`/orders/${e.sellerOrderId}`} className="hover:underline">
-          {e.description}
-        </Link>
-      ) : (
-        e.description
-      ),
-  },
-  {
-    id: 'amount',
-    header: 'Amount',
-    cell: (e) => (
-      <span className={`font-mono ${Number(e.amount) < 0 ? 'text-destructive' : ''}`}>
-        {formatMoney(e.amount)}
-      </span>
-    ),
-  },
-];
-
-/** What the marketplace owes the seller: earnings less commission and refunds (payouts: Finance phase). */
-export function PayablesPage() {
-  const [page, setPage] = useState(1);
-  const ledger = useSellerLedger({ page, pageSize: PAGE_SIZE });
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Payables"
-        description="Earnings are added when the customer’s money is received (cash on delivery: when the courier remits it)."
-        actions={
-          ledger.data ? (
-            <p className="text-lg font-semibold">
-              Balance <span className="font-mono">{formatMoney(ledger.data.balance)}</span>
-            </p>
-          ) : undefined
-        }
-      />
-      <DataTable
-        label="Payables ledger"
-        columns={ledgerColumns}
-        rows={ledger.data?.items}
-        getRowId={(e) => e.id}
-        isLoading={ledger.isPending}
-        error={toDisplayError(ledger.error)}
-        onRetry={() => void ledger.refetch()}
-        empty={{
-          icon: WalletIcon,
-          title: 'Nothing yet',
-          description: 'Paid orders add earnings here.',
-        }}
-        pagination={
-          ledger.data
-            ? {
-                page,
-                pageSize: PAGE_SIZE,
-                totalItems: ledger.data.totalItems,
-                onPageChange: setPage,
-                isFetching: ledger.isFetching,
-              }
-            : undefined
-        }
-      />
-    </div>
   );
 }

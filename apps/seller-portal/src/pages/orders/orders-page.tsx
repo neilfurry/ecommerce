@@ -53,6 +53,7 @@ import { ReceiptIcon } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { openBlob, showError } from '../../lib/errors';
+import { SalesInvoiceCard } from '../finance/finance-pages';
 import { formatDateTime } from '../../lib/format';
 
 const PAGE_SIZE = 20;
@@ -543,6 +544,9 @@ export function OrderPage() {
         noteForm={a.canManage ? <NoteForm orderId={o.id} /> : undefined}
         returnLink={(id) => `/returns/${id}`}
       />
+      {o.status !== 'AWAITING_PAYMENT' && o.status !== 'CANCELLED' ? (
+        <SalesInvoiceCard orderId={o.id} invoice={o.sellerInvoice} editable={a.canManage} />
+      ) : null}
     </div>
   );
 }
