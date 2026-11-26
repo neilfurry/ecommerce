@@ -16,3 +16,24 @@ export {
   type LocationRow,
 } from './locations';
 export { cancelOrderInTx, expireUnpaidOrders, type CancelledOrder } from './orders';
+export {
+  cancelSellerOrderInTx,
+  completeDeliveredSellerOrders,
+  ConcurrentUpdateError,
+  escalateOverdueReturns,
+  InvalidTransitionError,
+  postSellerEarningsInTx,
+  postShippingCreditIfDueInTx,
+  syncOrderStatusInTx,
+  transitionSellerOrderInTx,
+  type TransitionInput,
+  type TransitionResult,
+} from './fulfilment';
+export {
+  applyPaymentFailedInTx,
+  lockOrderInTx,
+  applyPaymentSucceededInTx,
+  syncOrderPaymentStatusInTx,
+  type PaymentConfirmationSource,
+  type PaymentSucceededResult,
+} from './payments';

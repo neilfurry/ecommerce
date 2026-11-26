@@ -69,6 +69,8 @@ const summary = {
   commissionAmount: '49.90',
   store: { id: STORE_ID, name: 'Santos Store' },
   seller: { id: SELLER_ID, businessName: 'Santos Trading' },
+  cancellationRequested: false,
+  trackingNumber: null,
   placedAt: NOW,
 };
 
@@ -136,6 +138,32 @@ const orderDetail = {
   vatAmount: '115.50',
   total: '1078.00',
   customerNote: null,
+  acceptedAt: null,
+  shippedAt: null,
+  deliveredAt: null,
+  completedAt: null,
+  cancelledAt: null,
+  cancelReason: null,
+  returnWindowEndsAt: null,
+  shipments: [],
+  cod: { expectedAmount: '1078.00', status: 'PENDING', collectedAt: null },
+  cancellationRequest: null,
+  returns: [],
+  refunds: [],
+  notes: [],
+  actions: {
+    accept: true,
+    cancel: true,
+    requestCancellation: false,
+    answerCancellation: false,
+    bookShipment: false,
+    updateShipment: false,
+    confirmReceived: false,
+    requestReturn: false,
+    moveTo: [],
+    canManage: true,
+  },
+  ledger: [],
   orderId: ORDER_ID,
   orderNumber: summary.orderNumber,
   paymentMethod: 'COD',
@@ -156,7 +184,17 @@ const orderDetail = {
     ],
   },
   coupons: [],
-  events: [{ type: 'PLACED', note: null, createdAt: NOW }],
+  events: [
+    {
+      type: 'PLACED',
+      sellerOrderId: null,
+      fromStatus: null,
+      toStatus: null,
+      actorType: 'CUSTOMER',
+      note: null,
+      createdAt: NOW,
+    },
+  ],
   placedAt: NOW,
 };
 
@@ -212,6 +250,17 @@ function api(permissions = ALL, overrides: Record<string, (init?: RequestInit) =
     'GET /auth/session': () => json(sessionBody(permissions)),
     'GET /auth/csrf': () => json({ csrfToken: 'csrf-test' }),
     'GET /seller/orders': () => json(page([summary])),
+    'GET /seller/orders/counts': () =>
+      json({
+        NEW: 1,
+        PROCESSING: 0,
+        READY_FOR_PICKUP: 0,
+        SHIPPED: 0,
+        COMPLETED: 0,
+        CANCELLED: 0,
+        returns: 0,
+        cancellationRequests: 0,
+      }),
     [`GET /seller/orders/${SUBORDER_ID}`]: () => json(orderDetail),
     'GET /seller/coupons': () => json(page([coupon])),
     'POST /seller/coupons': (init) =>
@@ -253,7 +302,7 @@ describe('Seller Center sales', () => {
     expect(within(table).getByText('Maria Cruz')).toBeInTheDocument();
     expect(within(table).getByText('₱1,078.00')).toBeInTheDocument();
     expect(within(table).getByText('₱49.90')).toBeInTheDocument();
-    expect(within(table).getByText('To process')).toBeInTheDocument();
+    expect(within(table).getByText('New')).toBeInTheDocument();
     await user.click(link);
     expect(router.state.location.pathname).toBe(`/orders/${SUBORDER_ID}`);
     expect(
@@ -262,6 +311,10 @@ describe('Seller Center sales', () => {
     expect(screen.getByText('Sinandomeng Rice 25 kg')).toBeInTheDocument();
     expect(screen.getByText(/Commission 5.00% of ₱998.00 = ₱49.90/)).toBeInTheDocument();
     expect(screen.getByText(address.formatted)).toBeInTheDocument();
+    // Fulfilment: what the seller can do next, and the shipments and payables sections.
+    expect(screen.getByRole('button', { name: 'Accept and start preparing' })).toBeInTheDocument();
+    expect(screen.getByText('No shipment yet.')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing posted yet/)).toBeInTheDocument();
   });
 
   it('hides orders from employees without the orders permission', async () => {

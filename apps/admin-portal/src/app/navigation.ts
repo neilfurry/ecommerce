@@ -2,6 +2,13 @@ import type { Permission } from '@marketplace/shared-types';
 import type { SidebarNavItem, SidebarNavSection } from '@marketplace/ui';
 import {
   ActivityIcon,
+  BanknoteIcon,
+  CreditCardIcon,
+  LandmarkIcon,
+  RotateCcwIcon,
+  ScaleIcon,
+  TruckIcon,
+  Undo2Icon,
   BoxesIcon,
   FolderTreeIcon,
   PackageSearchIcon,
@@ -26,8 +33,7 @@ import {
 type NavEntry = SidebarNavItem & { permission?: Permission };
 
 /**
- * Navigation lists only working pages the user may open. Finance and fulfilment are added by
- * the phases that deliver them.
+ * Navigation lists only working pages the user may open.
  */
 export function buildNavSections(
   devToolsEnabled: boolean,
@@ -53,6 +59,13 @@ export function buildNavSections(
       items: [
         { to: '/orders', label: 'Orders', icon: ReceiptIcon, permission: 'orders.read' },
         {
+          to: '/disputes',
+          label: 'Returns and disputes',
+          icon: RotateCcwIcon,
+          permission: 'orders.read',
+        },
+        { to: '/shipping', label: 'Shipping', icon: TruckIcon, permission: 'orders.read' },
+        {
           to: '/promotions',
           label: 'Promotions',
           icon: TicketPercentIcon,
@@ -65,6 +78,26 @@ export function buildNavSections(
           permission: 'marketing.manage',
         },
         { to: '/reviews', label: 'Reviews', icon: StarIcon, permission: 'reviews.moderate' },
+      ],
+    },
+    {
+      title: 'Finance',
+      items: [
+        { to: '/payments', label: 'Payments', icon: CreditCardIcon, permission: 'payments.read' },
+        {
+          to: '/bank-transfers',
+          label: 'Bank transfers',
+          icon: LandmarkIcon,
+          permission: 'payments.read',
+        },
+        { to: '/cod', label: 'Cash on delivery', icon: BanknoteIcon, permission: 'payments.read' },
+        { to: '/refunds', label: 'Refunds', icon: Undo2Icon, permission: 'payments.read' },
+        {
+          to: '/reconciliation',
+          label: 'Reconciliation',
+          icon: ScaleIcon,
+          permission: 'payments.read',
+        },
       ],
     },
     {

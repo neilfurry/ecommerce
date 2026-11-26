@@ -1,4 +1,5 @@
 import {
+  COD_COLLECTION_STATUS_LABELS,
   COUPON_TYPE_LABELS,
   ORDER_EVENT_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -13,10 +14,22 @@ import { Badge } from '../components/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
 import { Separator } from '../components/separator';
 import { formatMoney } from '../lib/money';
+import { LedgerList, NoteList, RefundList, ReturnStatusBadge, ShipmentList } from './fulfilment';
 
-const VARIANTS: Record<SellerOrderStatus, 'warning' | 'success' | 'secondary'> = {
+const VARIANTS: Record<
+  SellerOrderStatus,
+  'warning' | 'success' | 'secondary' | 'outline' | 'destructive'
+> = {
   AWAITING_PAYMENT: 'warning',
-  PENDING: 'success',
+  PENDING: 'warning',
+  PROCESSING: 'outline',
+  READY_FOR_PICKUP: 'outline',
+  SHIPPED: 'outline',
+  DELIVERY_FAILED: 'destructive',
+  RETURNING_TO_SELLER: 'destructive',
+  RETURNED_TO_SELLER: 'secondary',
+  DELIVERED: 'success',
+  COMPLETED: 'success',
   CANCELLED: 'secondary',
 };
 
@@ -45,11 +58,38 @@ const nonZero = (amount: string) => Number(amount) !== 0;
  * address, totals and the commission computed at checkout. Shared by Seller Center and the
  * Admin Console; the data comes from the seller-order detail endpoints.
  */
-export function SellerOrderView({ order }: { order: SellerOrderDetail }) {
+export function SellerOrderView({
+  order,
+  actions,
+  shipmentActions,
+  refundActions,
+  noteForm,
+  returnLink,
+}: {
+  order: SellerOrderDetail;
+  /** What the viewer can do now (accept, cancel, book...), shown above the summary. */
+  actions?: ReactNode;
+  shipmentActions?: (shipment: SellerOrderDetail['shipments'][number]) => ReactNode;
+  refundActions?: (refund: SellerOrderDetail['refunds'][number]) => ReactNode;
+  noteForm?: ReactNode;
+  returnLink?: (returnId: string) => string;
+}) {
   const commissionByItem = new Map(order.commission.items.map((c) => [c.orderItemId, c]));
+  const request = order.cancellationRequest;
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
+        {request?.status === 'REQUESTED' ? (
+          <Card className="border-warning">
+            <CardHeader>
+              <CardTitle className="text-base">The customer asked to cancel</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm">
+              <p>“{request.reason}”</p>
+              <p className="text-xs text-muted-foreground">{dateTime(request.createdAt)}</p>
+            </CardContent>
+          </Card>
+        ) : null}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Items</CardTitle>
@@ -134,6 +174,48 @@ export function SellerOrderView({ order }: { order: SellerOrderDetail }) {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Shipments</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ShipmentList shipments={order.shipments} actions={shipmentActions} />
+          </CardContent>
+        </Card>
+
+        {order.returns.length > 0 || order.refunds.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Returns and refunds</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {order.returns.map((r) => (
+                <p key={r.id} className="flex items-center justify-between text-sm">
+                  {returnLink ? (
+                    <a href={returnLink(r.id)} className="font-mono hover:underline">
+                      {r.number}
+                    </a>
+                  ) : (
+                    <span className="font-mono">{r.number}</span>
+                  )}
+                  <ReturnStatusBadge status={r.status} />
+                </p>
+              ))}
+              <RefundList refunds={order.refunds} actions={refundActions} />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Messages and notes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <NoteList notes={order.notes} />
+            {noteForm}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">History</CardTitle>
           </CardHeader>
           <CardContent>
@@ -153,6 +235,14 @@ export function SellerOrderView({ order }: { order: SellerOrderDetail }) {
       </div>
 
       <div className="space-y-6">
+        {actions ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Next steps</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">{actions}</CardContent>
+          </Card>
+        ) : null}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Summary</CardTitle>
@@ -192,6 +282,25 @@ export function SellerOrderView({ order }: { order: SellerOrderDetail }) {
             <Row label="Total paid by customer" value={formatMoney(order.total)} strong />
             <Row label="VAT included" value={formatMoney(order.vatAmount)} />
             <Row label="Commission" value={minus(order.commission.amount)} />
+            {order.cod ? (
+              <>
+                <Separator className="my-2" />
+                <Row label="Cash to collect" value={formatMoney(order.cod.expectedAmount)} />
+                <Row
+                  label="Cash on delivery"
+                  value={COD_COLLECTION_STATUS_LABELS[order.cod.status]}
+                />
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Payables</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LedgerList entries={order.ledger} />
           </CardContent>
         </Card>
 

@@ -4,6 +4,7 @@ import {
   LayoutDashboardIcon,
   MapPinIcon,
   PackageIcon,
+  RotateCcwIcon,
   ShieldIcon,
   StarIcon,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import { NavLink, Outlet } from 'react-router';
 const LINKS = [
   { to: '/account', label: 'Overview', icon: LayoutDashboardIcon, end: true },
   { to: '/account/orders', label: 'Orders', icon: PackageIcon },
+  { to: '/account/returns', label: 'Returns', icon: RotateCcwIcon },
   { to: '/account/addresses', label: 'Addresses', icon: MapPinIcon },
   { to: '/account/wishlist', label: 'Wishlist', icon: HeartIcon },
   { to: '/account/reviews', label: 'Reviews', icon: StarIcon },

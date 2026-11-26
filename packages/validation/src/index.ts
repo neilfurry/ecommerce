@@ -10,3 +10,4 @@ export * from './catalog';
 export * from './inventory';
 export * from './storefront';
 export * from './checkout';
+export * from './fulfilment';

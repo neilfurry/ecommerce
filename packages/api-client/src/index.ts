@@ -27,3 +27,5 @@ export {
 export * from './auth-react';
 export * from './catalog-react';
 export * from './shop-react';
+export * from './fulfilment-react';
+export type { FulfilmentListQuery } from './fulfilment';

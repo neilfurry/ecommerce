@@ -35,6 +35,10 @@ export const workerEnvSchema = z
     SMS_PROVIDER: z.enum(['mock', 'semaphore']).default('mock'),
     SEMAPHORE_API_KEY: z.string().optional(),
     SEMAPHORE_SENDER_NAME: z.string().max(11).optional(),
+    /** Payment reconciliation asks the same gateways as the API (see the API's .env section). */
+    PAYMONGO_SECRET_KEY: z.string().optional(),
+    PAYMONGO_WEBHOOK_SECRET: z.string().optional(),
+    MOCK_WEBHOOK_SECRET: z.string().min(16).default('local-mock-webhook-secret-change-me'),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {
@@ -92,6 +96,10 @@ export class WorkerConfig {
     semaphoreApiKey: string | undefined;
     semaphoreSenderName: string | undefined;
   };
+  readonly payments: {
+    paymongo: { secretKey: string; webhookSecret: string } | null;
+    mockWebhookSecret: string;
+  };
 
   constructor(env: WorkerEnv) {
     this.nodeEnv = env.NODE_ENV;
@@ -115,6 +123,13 @@ export class WorkerConfig {
       provider: env.SMS_PROVIDER,
       semaphoreApiKey: env.SEMAPHORE_API_KEY || undefined,
       semaphoreSenderName: env.SEMAPHORE_SENDER_NAME || undefined,
+    };
+    this.payments = {
+      paymongo:
+        env.PAYMONGO_SECRET_KEY && env.PAYMONGO_WEBHOOK_SECRET
+          ? { secretKey: env.PAYMONGO_SECRET_KEY, webhookSecret: env.PAYMONGO_WEBHOOK_SECRET }
+          : null,
+      mockWebhookSecret: env.MOCK_WEBHOOK_SECRET,
     };
   }
 

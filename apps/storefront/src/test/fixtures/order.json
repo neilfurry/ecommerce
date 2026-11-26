@@ -98,7 +98,36 @@
       "charges": [],
       "vatAmount": "3554.30",
       "total": "33173.47",
-      "customerNote": null
+      "customerNote": null,
+      "acceptedAt": null,
+      "shippedAt": null,
+      "deliveredAt": null,
+      "completedAt": null,
+      "cancelledAt": null,
+      "cancelReason": null,
+      "returnWindowEndsAt": null,
+      "shipments": [],
+      "cod": {
+        "expectedAmount": "33173.47",
+        "status": "PENDING",
+        "collectedAt": null
+      },
+      "cancellationRequest": null,
+      "returns": [],
+      "refunds": [],
+      "notes": [],
+      "actions": {
+        "accept": false,
+        "cancel": true,
+        "requestCancellation": false,
+        "answerCancellation": false,
+        "bookShipment": false,
+        "updateShipment": false,
+        "confirmReceived": false,
+        "requestReturn": false,
+        "moveTo": [],
+        "canManage": true
+      }
     },
     {
       "id": "01a2120d-ce11-740d-8a52-cfda8f28f3ec",
@@ -156,7 +185,36 @@
       "charges": [],
       "vatAmount": "101.63",
       "total": "948.53",
-      "customerNote": null
+      "customerNote": null,
+      "acceptedAt": null,
+      "shippedAt": null,
+      "deliveredAt": null,
+      "completedAt": null,
+      "cancelledAt": null,
+      "cancelReason": null,
+      "returnWindowEndsAt": null,
+      "shipments": [],
+      "cod": {
+        "expectedAmount": "948.53",
+        "status": "PENDING",
+        "collectedAt": null
+      },
+      "cancellationRequest": null,
+      "returns": [],
+      "refunds": [],
+      "notes": [],
+      "actions": {
+        "accept": false,
+        "cancel": true,
+        "requestCancellation": false,
+        "answerCancellation": false,
+        "bookShipment": false,
+        "updateShipment": false,
+        "confirmReceived": false,
+        "requestReturn": false,
+        "moveTo": [],
+        "canManage": true
+      }
     }
   ],
   "coupons": [
@@ -185,10 +243,23 @@
     {
       "type": "PLACED",
       "note": "Cash on delivery.",
-      "createdAt": "2026-11-25T09:33:44.300Z"
+      "createdAt": "2026-11-25T09:33:44.300Z",
+      "sellerOrderId": null,
+      "fromStatus": null,
+      "toStatus": null,
+      "actorType": "CUSTOMER"
     }
   ],
   "cancelledAt": null,
   "cancelReason": null,
-  "cancellable": true
+  "cancellable": true,
+  "payment": {
+    "attempts": [],
+    "canPay": false,
+    "bankTransfer": null,
+    "canUploadProof": false,
+    "amountReceived": "0.00",
+    "amountRefunded": "0.00"
+  },
+  "notes": []
 }

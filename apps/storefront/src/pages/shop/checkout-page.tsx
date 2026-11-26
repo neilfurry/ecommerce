@@ -158,6 +158,12 @@ export function CheckoutPage() {
       attempt.current = { key: newKey(), body: serialized };
     try {
       const order = await place.mutateAsync({ body: payload, idempotencyKey: attempt.current.key });
+      // Online payments continue on the provider's page (the mock's test page locally).
+      const checkoutUrl = order.payment.attempts.find((a) => a.checkoutUrl)?.checkoutUrl;
+      if (order.status === 'AWAITING_PAYMENT' && checkoutUrl) {
+        window.location.assign(checkoutUrl);
+        return;
+      }
       void navigate(`/account/orders/${order.id}?placed=1`, { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.code === 'CHECKOUT_CHANGED') {
@@ -396,24 +402,32 @@ export function CheckoutPage() {
                   {q.paymentMethods.map((m) => (
                     <label
                       key={m.method}
-                      className="flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      className="flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
                     >
                       <input
                         type="radio"
                         name="payment"
                         checked={paymentMethod === m.method}
+                        disabled={!!m.unavailableReason && paymentMethod !== m.method}
                         onChange={() => setPaymentMethod(m.method)}
                       />
-                      {m.label}
+                      <span>
+                        {m.label}
+                        {m.unavailableReason ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {m.unavailableReason}
+                          </span>
+                        ) : null}
+                      </span>
                     </label>
                   ))}
                 </fieldset>
                 {online ? (
                   <Alert className="mt-3">
                     <AlertDescription>
-                      Online payment opens in a later release. For now, an order paid by this method
-                      waits for payment and is cancelled automatically if it is not paid within{' '}
-                      {windowMinutes} minutes.
+                      {paymentMethod === 'BANK_TRANSFER'
+                        ? `After placing the order you get the bank details and a reference. Transfer within ${Math.round((windowMinutes ?? 0) / 60)} hours and upload the receipt; unpaid orders are cancelled automatically.`
+                        : `After placing the order you pay on the payment provider’s page. Orders not paid within ${windowMinutes} minutes are cancelled automatically.`}
                     </AlertDescription>
                   </Alert>
                 ) : null}

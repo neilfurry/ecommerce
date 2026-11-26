@@ -22,6 +22,7 @@ import { InventoryPage } from '../pages/inventory/inventory-page';
 import { WarehousesPage } from '../pages/inventory/warehouses-page';
 import { SellerCouponsPage, SellerFlashSalesPage } from '../pages/marketing/marketing-pages';
 import { OrderPage, OrdersPage } from '../pages/orders/orders-page';
+import { PayablesPage, ReturnPage, ReturnsPage } from '../pages/orders/returns-page';
 import { NewProductPage } from '../pages/products/new-product-page';
 import { ProductPage } from '../pages/products/product-page';
 import { ProductsPage } from '../pages/products/products-page';
@@ -132,6 +133,30 @@ export const routes: RouteObject[] = [
                 element: (
                   <RequirePermission permission="seller.orders.read">
                     <OrderPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'returns',
+                element: (
+                  <RequirePermission permission="seller.orders.read">
+                    <ReturnsPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'returns/:returnId',
+                element: (
+                  <RequirePermission permission="seller.orders.read">
+                    <ReturnPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'payables',
+                element: (
+                  <RequirePermission permission="seller.orders.read">
+                    <PayablesPage />
                   </RequirePermission>
                 ),
               },

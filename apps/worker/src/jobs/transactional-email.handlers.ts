@@ -3,6 +3,7 @@ import { EMAIL_JOBS } from '@marketplace/config';
 import {
   lowStockJobSchema,
   orderCancelledJobSchema,
+  orderUpdateJobSchema,
   orderPlacedJobSchema,
   sellerNewOrderJobSchema,
   passwordResetJobSchema,
@@ -19,6 +20,7 @@ import { MailerService, type SentEmail } from '../mail/mailer.service';
 import {
   lowStockTemplate,
   orderCancelledTemplate,
+  orderUpdateTemplate,
   orderPlacedTemplate,
   sellerNewOrderTemplate,
   passwordResetTemplate,
@@ -177,7 +179,18 @@ export class OrderCancelledEmailHandler extends TemplatedEmailHandler<
   }
 }
 
+@Injectable()
+export class OrderUpdateEmailHandler extends TemplatedEmailHandler<typeof orderUpdateJobSchema> {
+  readonly jobName = EMAIL_JOBS.ORDER_UPDATE;
+  protected readonly schema = orderUpdateJobSchema;
+  protected render = orderUpdateTemplate;
+  constructor(mailer: MailerService) {
+    super(mailer);
+  }
+}
+
 export const TRANSACTIONAL_EMAIL_HANDLERS = [
+  OrderUpdateEmailHandler,
   OrderPlacedEmailHandler,
   SellerNewOrderEmailHandler,
   OrderCancelledEmailHandler,

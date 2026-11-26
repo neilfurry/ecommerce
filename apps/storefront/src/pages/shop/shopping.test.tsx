@@ -152,6 +152,32 @@ describe('checkout', () => {
     ).toBeInTheDocument();
   });
 
+  it('quotes again once the browser cart has been merged after sign-in', async () => {
+    // Signed in with a browser cart still to merge: the first quote sees an empty account cart.
+    guestCart.add({ variantId: LAPTOP_512, quantity: 1 });
+    let merged = false;
+    let releaseMerge = () => undefined as void;
+    const mergeDone = new Promise<void>((resolve) => (releaseMerge = resolve));
+    const fetchImpl = api(true, {
+      'POST /checkout/quote': () => json(merged ? quoteNoCoupon : { ...quoteNoCoupon, groups: [] }),
+      'POST /cart/merge': () => {
+        merged = true;
+        return json(guestCartFixture);
+      },
+    });
+    const slowFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/cart/merge')) await mergeDone;
+      return fetchImpl(input, init);
+    }) as typeof fetch;
+    renderAt('/checkout', slowFetch);
+    expect(await screen.findByText('Nothing to check out')).toBeInTheDocument();
+    releaseMerge();
+    expect(
+      await screen.findByRole('button', { name: 'Place order · ₱34,272.00' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Nothing to check out')).not.toBeInTheDocument();
+  });
+
   it('re-quotes when the server says prices changed, and retries with a new key', async () => {
     const user = userEvent.setup();
     let attempts = 0;

@@ -47,6 +47,7 @@ model Currency {
   products Product[]
   orders   Order[]
   coupons  Coupon[]
+  payments Payment[] @relation("PaymentCurrency")
 
   @@map("currencies")
 }
@@ -84,6 +85,12 @@ enum FilePurpose {
   CATEGORY_IMAGE
   /// Storefront banners (home page hero and promotions). Public.
   HOME_BANNER
+  /// Bank transfer receipts uploaded by customers. Private: the customer and finance staff.
+  PAYMENT_PROOF
+  /// Photos supporting a return request. Private: the customer, the seller and staff.
+  RETURN_IMAGE
+  /// Shipping labels (waybills). Private: the seller and staff.
+  WAYBILL
 
   @@map("file_purpose")
 }
@@ -107,12 +114,15 @@ model StoredFile {
   deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
   sellerDocument SellerDocument?
-  storeLogo      Store?          @relation("StoreLogo")
-  storeBanner    Store?          @relation("StoreBanner")
-  categoryImage  Category?       @relation("CategoryImage")
-  productImage   ProductImage?   @relation("ProductImageFile")
-  productThumb   ProductImage?   @relation("ProductImageThumbnail")
-  homeBanner     HomeBanner?     @relation("HomeBannerImage")
+  storeLogo      Store?             @relation("StoreLogo")
+  storeBanner    Store?             @relation("StoreBanner")
+  categoryImage  Category?          @relation("CategoryImage")
+  productImage   ProductImage?      @relation("ProductImageFile")
+  productThumb   ProductImage?      @relation("ProductImageThumbnail")
+  homeBanner     HomeBanner?        @relation("HomeBannerImage")
+  paymentProof   BankTransferProof? @relation("PaymentProofFile")
+  returnImage    ReturnImage?       @relation("ReturnImageFile")
+  waybill        Shipment?          @relation("ShipmentWaybill")
 
   @@unique([bucket, objectKey])
   @@index([purpose, status, createdAt])
@@ -191,6 +201,20 @@ model User {
   createdBanners       HomeBanner[]           @relation("HomeBannerCreator")
   createdFlashSales    FlashSale[]            @relation("FlashSaleCreator")
   platformSettings     PlatformSetting[]
+  reviewedPayments     Payment[]              @relation("PaymentReviewer")
+  paymentEvents        PaymentEvent[]         @relation("PaymentEventActor")
+  submittedProofs      BankTransferProof[]    @relation("ProofSubmitter")
+  reviewedProofs       BankTransferProof[]    @relation("ProofReviewer")
+  bookedShipments      Shipment[]             @relation("ShipmentBooker")
+  shipmentEvents       ShipmentEvent[]        @relation("ShipmentEventActor")
+  codRemittances       CodRemittance[]        @relation("RemittanceRecorder")
+  cancellationRequests CancellationRequest[]  @relation("CancellationRequester")
+  cancellationAnswers  CancellationRequest[]  @relation("CancellationResponder")
+  orderNotes           OrderNote[]            @relation("OrderNoteAuthor")
+  returnRequests       ReturnRequest[]        @relation("ReturnCustomer")
+  decidedReturns       ReturnRequest[]        @relation("ReturnDecider")
+  requestedRefunds     Refund[]               @relation("RefundRequester")
+  processedRefunds     Refund[]               @relation("RefundProcessor")
 
   @@index([status, createdAt])
   @@map("users")
@@ -551,6 +575,8 @@ model Seller {
   coupons            Coupon[]
   flashSaleItems     FlashSaleItem[]
   reviews            ProductReview[]
+  returnRequests     ReturnRequest[]     @relation("SellerReturns")
+  ledgerEntries      SellerLedgerEntry[] @relation("SellerLedger")
 
   @@index([status, submittedAt])
   @@index([reviewedById])
@@ -1826,17 +1852,34 @@ model CommissionRule {
 enum OrderStatus {
   /// Paid online methods: stock is held until the payment deadline.
   AWAITING_PAYMENT
-  /// Placed (cash on delivery, or paid); the sellers prepare their suborders.
+  /// Placed (cash on delivery, or paid); the sellers fulfil their suborders.
   PLACED
+  /// Every seller order reached an end state, at least one of them completed.
+  COMPLETED
   CANCELLED
 
   @@map("order_status")
 }
 
+/// Seller order life cycle; transitions are validated by the order state machine.
 enum SellerOrderStatus {
   AWAITING_PAYMENT
-  /// Waiting for the seller to process it (fulfilment arrives in a later phase).
+  /// New: waiting for the seller to accept it.
   PENDING
+  /// Accepted; being packed.
+  PROCESSING
+  /// Parcel booked with the courier; waiting for pickup.
+  READY_FOR_PICKUP
+  /// With the courier.
+  SHIPPED
+  /// A delivery attempt failed; the courier tries again or returns the parcel.
+  DELIVERY_FAILED
+  /// The parcel is on its way back to the seller.
+  RETURNING_TO_SELLER
+  RETURNED_TO_SELLER
+  DELIVERED
+  /// Delivered and the return window has passed (or the customer confirmed).
+  COMPLETED
   CANCELLED
 
   @@map("seller_order_status")
@@ -1853,12 +1896,17 @@ enum PaymentMethod {
   @@map("payment_method")
 }
 
+/// The order's payment summary (each attempt is a row in payments).
 enum PaymentStatus {
-  /// Waiting for an online payment.
+  /// Waiting for an online payment or a bank transfer.
   PENDING
-  /// Cash on delivery: collected when the parcel arrives.
+  /// Cash on delivery: not financially collected until the courier's remittance is confirmed.
   PAY_ON_DELIVERY
+  /// Some seller orders' cash-on-delivery amounts were remitted, others not yet.
+  PARTIALLY_PAID
   PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
   /// Cancelled before anything was paid.
   VOIDED
 
@@ -1885,6 +1933,27 @@ enum OrderEventType {
   AWAITING_PAYMENT
   CANCELLED_BY_CUSTOMER
   PAYMENT_EXPIRED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  /// A seller order moved between statuses (from_status, to_status).
+  STATUS_CHANGED
+  CANCELLED_BY_SELLER
+  CANCELLED_BY_STAFF
+  CANCELLATION_REQUESTED
+  CANCELLATION_APPROVED
+  CANCELLATION_REJECTED
+  SHIPMENT_CREATED
+  SHIPMENT_UPDATED
+  COD_COLLECTED
+  COD_REMITTED
+  RETURN_REQUESTED
+  RETURN_UPDATED
+  REFUND_CREATED
+  REFUND_SUCCEEDED
+  REFUND_FAILED
+  NOTE_ADDED
+  PAYMENT_PROOF_SUBMITTED
+  PAYMENT_PROOF_REJECTED
 
   @@map("order_event_type")
 }
@@ -1940,6 +2009,10 @@ model Order {
   coupons      OrderCoupon[]
   redemptions  CouponRedemption[]
   events       OrderEvent[]
+  payments     Payment[]
+  notes        OrderNote[]
+  returns      ReturnRequest[]
+  refunds      Refund[]
 
   @@unique([customerId, idempotencyKey])
   @@index([customerId, placedAt])
@@ -1978,17 +2051,31 @@ model SellerOrder {
   /// Applied charges: [{ code, label, amount }].
   charges                  Json              @default("[]")
   customerNote             String?           @map("customer_note") @db.VarChar(500)
+  acceptedAt               DateTime?         @map("accepted_at") @db.Timestamptz(3)
+  shippedAt                DateTime?         @map("shipped_at") @db.Timestamptz(3)
+  deliveredAt              DateTime?         @map("delivered_at") @db.Timestamptz(3)
+  completedAt              DateTime?         @map("completed_at") @db.Timestamptz(3)
+  /// Customers may ask for a return until then (delivered_at plus the return window).
+  returnWindowEndsAt       DateTime?         @map("return_window_ends_at") @db.Timestamptz(3)
+  cancelReason             String?           @map("cancel_reason") @db.VarChar(500)
   cancelledAt              DateTime?         @map("cancelled_at") @db.Timestamptz(3)
   createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  order         Order               @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  seller        Seller              @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  store         Store               @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order         Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  seller        Seller                @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store         Store                 @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items         OrderItem[]
   shippingGroup OrderShippingGroup?
   coupons       OrderCoupon[]
   events        OrderEvent[]
+  shipments     Shipment[]
+  codCollection CodCollection?
+  notes         OrderNote[]
+  cancellations CancellationRequest[]
+  returns       ReturnRequest[]
+  refunds       Refund[]
+  ledgerEntries SellerLedgerEntry[]
 
   @@unique([orderId, sellerId])
   @@index([sellerId, status, createdAt])
@@ -2070,6 +2157,7 @@ model OrderItem {
   commissionRule CommissionRule?    @relation(fields: [commissionRuleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   reservations   StockReservation[]
   review         ProductReview?
+  returnItems    ReturnItem[]
 
   @@index([orderId])
   @@index([sellerOrderId])
@@ -2104,13 +2192,17 @@ model OrderCoupon {
 }
 
 model OrderEvent {
-  id            String         @id @default(uuid(7)) @db.Uuid
-  orderId       String         @map("order_id") @db.Uuid
-  sellerOrderId String?        @map("seller_order_id") @db.Uuid
+  id            String             @id @default(uuid(7)) @db.Uuid
+  orderId       String             @map("order_id") @db.Uuid
+  sellerOrderId String?            @map("seller_order_id") @db.Uuid
   type          OrderEventType
-  note          String?        @db.VarChar(1000)
-  actorId       String?        @map("actor_id") @db.Uuid
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  fromStatus    SellerOrderStatus? @map("from_status")
+  toStatus      SellerOrderStatus? @map("to_status")
+  /// Who acted: CUSTOMER, SELLER, STAFF, COURIER, PROVIDER or SYSTEM.
+  actorType     String             @default("SYSTEM") @map("actor_type") @db.VarChar(20)
+  note          String?            @db.VarChar(1000)
+  actorId       String?            @map("actor_id") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
 
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   sellerOrder SellerOrder? @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -2120,4 +2212,666 @@ model OrderEvent {
   @@index([sellerOrderId])
   @@index([actorId])
   @@map("order_events")
+}
+
+// ---------------------------------------------------------------------------------------
+// Phase 5: payments, shipments, cash on delivery, returns, refunds and seller payables
+// ---------------------------------------------------------------------------------------
+
+/// Who processes a payment. MOCK exists for development only and is refused in production.
+enum PaymentProvider {
+  MOCK
+  PAYMONGO
+  MAYA_BUSINESS
+  XENDIT
+  /// Bank transfer to the marketplace's account, verified by finance from the customer's proof.
+  MANUAL_BANK
+  /// Cash on delivery, collected by the courier and remitted to the marketplace.
+  COD
+
+  @@map("payment_provider")
+}
+
+enum PaymentAttemptStatus {
+  /// Created with the order; the provider has not been called yet.
+  CREATED
+  /// Waiting for the customer (or for the courier's remittance, for COD).
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+
+  @@map("payment_attempt_status")
+}
+
+/// One attempt to pay an order. An order can have several (e.g. a retry after a failure);
+/// at most one is PAID. Only the server's webhook processing, provider verification or
+/// finance approval marks it paid, never a browser redirect.
+model Payment {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  orderId           String               @map("order_id") @db.Uuid
+  /// Our reference, shown to the customer and sent to the provider (e.g. "PAY-7K3M9Q2X").
+  reference         String               @unique @db.VarChar(30)
+  method            PaymentMethod
+  provider          PaymentProvider
+  status            PaymentAttemptStatus
+  /// false for mock and sandbox payments: no real money moved.
+  livemode          Boolean              @default(false)
+  amount            Decimal              @db.Decimal(19, 4)
+  currency          String               @default("PHP") @db.Char(3)
+  /// What the provider (or the confirmed remittances) reported as received.
+  amountReceived    Decimal              @default(0) @map("amount_received") @db.Decimal(19, 4)
+  /// Refunds succeeded or in progress; never more than received (CHECK).
+  refundedAmount    Decimal              @default(0) @map("refunded_amount") @db.Decimal(19, 4)
+  /// The provider's checkout session or intent.
+  providerReference String?              @map("provider_reference") @db.VarChar(120)
+  /// The provider's payment, needed for refunds.
+  providerPaymentId String?              @map("provider_payment_id") @db.VarChar(120)
+  checkoutUrl       String?              @map("checkout_url") @db.VarChar(1000)
+  expiresAt         DateTime?            @map("expires_at") @db.Timestamptz(3)
+  paidAt            DateTime?            @map("paid_at") @db.Timestamptz(3)
+  failureCode       String?              @map("failure_code") @db.VarChar(60)
+  failureMessage    String?              @map("failure_message") @db.VarChar(500)
+  /// Set when finance must look at it: amount mismatch, paid after the order expired, ...
+  reviewReason      String?              @map("review_reason") @db.VarChar(40)
+  reviewedAt        DateTime?            @map("reviewed_at") @db.Timestamptz(3)
+  reviewedById      String?              @map("reviewed_by_id") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order       Order               @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reviewedBy  User?               @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  currencyRef Currency            @relation("PaymentCurrency", fields: [currency], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  events      PaymentEvent[]
+  proofs      BankTransferProof[]
+  refunds     Refund[]
+
+  @@unique([provider, providerReference])
+  @@index([orderId, createdAt])
+  @@index([status, expiresAt])
+  @@index([reviewReason])
+  @@index([reviewedById])
+  @@index([currency])
+  @@map("payments")
+}
+
+/// Append-only history of a payment: initialised, paid, failed, proofs, refunds...
+model PaymentEvent {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  paymentId      String                @map("payment_id") @db.Uuid
+  type           String                @db.VarChar(40)
+  fromStatus     PaymentAttemptStatus? @map("from_status")
+  toStatus       PaymentAttemptStatus? @map("to_status")
+  /// Safe details only (amounts, provider ids, reasons); never card data or secrets.
+  data           Json                  @default("{}")
+  actorId        String?               @map("actor_id") @db.Uuid
+  webhookEventId String?               @map("webhook_event_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment      Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actor        User?         @relation("PaymentEventActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([paymentId, createdAt])
+  @@index([actorId])
+  @@index([webhookEventId])
+  @@map("payment_events")
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  /// Valid but not relevant (unknown event type or object).
+  IGNORED
+  /// Processing failed; the provider's retry (or staff) processes it again.
+  FAILED
+
+  @@map("webhook_event_status")
+}
+
+/// Every verified webhook from a payment provider or courier, stored once per provider
+/// event id, so retries and duplicates are never processed twice.
+model WebhookEvent {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  /// "paymongo", "mock-payments", "mock-courier", ...
+  source      String             @db.VarChar(40)
+  eventId     String             @map("event_id") @db.VarChar(160)
+  eventType   String             @map("event_type") @db.VarChar(80)
+  livemode    Boolean            @default(false)
+  status      WebhookEventStatus @default(RECEIVED)
+  payload     Json
+  attempts    Int                @default(0)
+  error       String?            @db.VarChar(1000)
+  receivedAt  DateTime           @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt DateTime?          @map("processed_at") @db.Timestamptz(3)
+
+  paymentEvents PaymentEvent[]
+
+  @@unique([source, eventId])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
+}
+
+/// Development-only state of the mock payment provider's checkout sessions.
+model MockPaymentSession {
+  id               String   @id @db.VarChar(60)
+  paymentReference String   @map("payment_reference") @db.VarChar(30)
+  amount           Decimal  @db.Decimal(19, 4)
+  /// OPEN, PAID, FAILED, EXPIRED
+  status           String   @db.VarChar(20)
+  paymentId        String?  @map("payment_id") @db.VarChar(60)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([paymentReference])
+  @@map("mock_payment_sessions")
+}
+
+enum ProofStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+
+  @@map("proof_status")
+}
+
+/// A customer's evidence of a bank transfer, reviewed by finance.
+model BankTransferProof {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  paymentId       String      @map("payment_id") @db.Uuid
+  fileId          String      @unique @map("file_id") @db.Uuid
+  submittedById   String      @map("submitted_by_id") @db.Uuid
+  bankName        String      @map("bank_name") @db.VarChar(100)
+  /// The bank's transaction reference as the customer typed it.
+  referenceNumber String      @map("reference_number") @db.VarChar(60)
+  amount          Decimal     @db.Decimal(19, 4)
+  transferredAt   DateTime    @map("transferred_at") @db.Timestamptz(3)
+  status          ProofStatus @default(SUBMITTED)
+  reviewedById    String?     @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime?   @map("reviewed_at") @db.Timestamptz(3)
+  rejectionReason String?     @map("rejection_reason") @db.VarChar(500)
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment     Payment    @relation(fields: [paymentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  file        StoredFile @relation("PaymentProofFile", fields: [fileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  submittedBy User       @relation("ProofSubmitter", fields: [submittedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reviewedBy  User?      @relation("ProofReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([paymentId])
+  @@index([status, createdAt])
+  @@index([submittedById])
+  @@index([reviewedById])
+  @@map("bank_transfer_proofs")
+}
+
+/// Couriers. MOCK is for development; SELF means the seller arranged the delivery and
+/// enters the tracking details. The others are prepared adapters, off until configured.
+enum Carrier {
+  MOCK
+  SELF
+  JNT
+  LBC
+  NINJA_VAN
+  FLASH
+  TWO_GO
+
+  @@map("carrier")
+}
+
+enum ShipmentStatus {
+  BOOKED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  RETURNING
+  RETURNED
+  CANCELLED
+
+  @@map("shipment_status")
+}
+
+enum ShipmentDirection {
+  /// Seller to customer (including a replacement).
+  FORWARD
+  /// Customer back to seller for a return.
+  RETURN
+
+  @@map("shipment_direction")
+}
+
+model Shipment {
+  id                 String            @id @default(uuid(7)) @db.Uuid
+  sellerOrderId      String            @map("seller_order_id") @db.Uuid
+  returnRequestId    String?           @map("return_request_id") @db.Uuid
+  direction          ShipmentDirection
+  carrier            Carrier
+  /// For SELF: the courier the seller used, as typed.
+  carrierName        String            @map("carrier_name") @db.VarChar(80)
+  serviceName        String            @map("service_name") @db.VarChar(80)
+  trackingNumber     String            @map("tracking_number") @db.VarChar(60)
+  providerShipmentId String?           @map("provider_shipment_id") @db.VarChar(120)
+  status             ShipmentStatus
+  /// Cash to collect on delivery (0 when prepaid).
+  codAmount          Decimal           @default(0) @map("cod_amount") @db.Decimal(19, 4)
+  waybillFileId      String?           @unique @map("waybill_file_id") @db.Uuid
+  weightGrams        Int               @map("weight_grams")
+  origin             Json
+  destination        Json
+  failedAttempts     Int               @default(0) @map("failed_attempts")
+  /// false for the mock courier: no real parcel moves.
+  livemode           Boolean           @default(false)
+  bookedById         String?           @map("booked_by_id") @db.Uuid
+  pickedUpAt         DateTime?         @map("picked_up_at") @db.Timestamptz(3)
+  deliveredAt        DateTime?         @map("delivered_at") @db.Timestamptz(3)
+  lastEventAt        DateTime?         @map("last_event_at") @db.Timestamptz(3)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sellerOrder   SellerOrder     @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  returnRequest ReturnRequest?  @relation(fields: [returnRequestId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  waybillFile   StoredFile?     @relation("ShipmentWaybill", fields: [waybillFileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  bookedBy      User?           @relation("ShipmentBooker", fields: [bookedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  events        ShipmentEvent[]
+  codCollection CodCollection?
+
+  /// Unique per real courier (partial unique index in SQL); self-arranged deliveries are typed by people.
+  @@index([carrier, trackingNumber])
+  @@index([sellerOrderId])
+  @@index([returnRequestId])
+  @@index([status, lastEventAt])
+  @@index([bookedById])
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id              String         @id @default(uuid(7)) @db.Uuid
+  shipmentId      String         @map("shipment_id") @db.Uuid
+  status          ShipmentStatus
+  description     String         @db.VarChar(300)
+  location        String?        @db.VarChar(120)
+  occurredAt      DateTime       @map("occurred_at") @db.Timestamptz(3)
+  /// CARRIER, SELLER, STAFF, CUSTOMER or SYSTEM.
+  source          String         @db.VarChar(20)
+  /// The carrier's id for the event, so a repeated tracking update is stored once.
+  externalEventId String?        @map("external_event_id") @db.VarChar(120)
+  actorId         String?        @map("actor_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  actor    User?    @relation("ShipmentEventActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([shipmentId, externalEventId])
+  @@index([shipmentId, occurredAt])
+  @@index([actorId])
+  @@map("shipment_events")
+}
+
+enum CodCollectionStatus {
+  /// Out for delivery or not yet shipped: cash still to be collected.
+  PENDING
+  /// The courier collected the cash; the marketplace has not received it yet.
+  COLLECTED
+  /// The courier's remittance including this parcel was confirmed: financially collected.
+  REMITTED
+  /// Not collected: the delivery failed and the parcel goes back to the seller.
+  FAILED
+
+  @@map("cod_collection_status")
+}
+
+/// Cash to collect for one seller order paid on delivery.
+model CodCollection {
+  id              String              @id @default(uuid(7)) @db.Uuid
+  sellerOrderId   String              @unique @map("seller_order_id") @db.Uuid
+  orderId         String              @map("order_id") @db.Uuid
+  shipmentId      String?             @unique @map("shipment_id") @db.Uuid
+  carrier         Carrier?
+  expectedAmount  Decimal             @map("expected_amount") @db.Decimal(19, 4)
+  collectedAmount Decimal?            @map("collected_amount") @db.Decimal(19, 4)
+  status          CodCollectionStatus @default(PENDING)
+  collectedAt     DateTime?           @map("collected_at") @db.Timestamptz(3)
+  remittanceId    String?             @map("remittance_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sellerOrder SellerOrder    @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  shipment    Shipment?      @relation(fields: [shipmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  remittance  CodRemittance? @relation(fields: [remittanceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([status, carrier])
+  @@index([orderId])
+  @@index([remittanceId])
+  @@map("cod_collections")
+}
+
+/// A courier's (or a self-shipping seller's) payment of collected cash to the marketplace.
+model CodRemittance {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  carrier         Carrier
+  /// The bank or courier reference of the remittance.
+  reference       String   @db.VarChar(80)
+  remittedAt      DateTime @map("remitted_at") @db.Timestamptz(3)
+  /// What was actually received.
+  amount          Decimal  @db.Decimal(19, 4)
+  /// Sum of the collections it covers.
+  expectedAmount  Decimal  @map("expected_amount") @db.Decimal(19, 4)
+  /// Explanation required when amount differs from expected_amount.
+  discrepancyNote String?  @map("discrepancy_note") @db.VarChar(1000)
+  recordedById    String   @map("recorded_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  recordedBy  User            @relation("RemittanceRecorder", fields: [recordedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  collections CodCollection[]
+
+  @@unique([carrier, reference])
+  @@index([remittedAt])
+  @@index([recordedById])
+  @@map("cod_remittances")
+}
+
+enum CancellationRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+
+  @@map("cancellation_request_status")
+}
+
+/// A customer's request to cancel a seller order the seller already started.
+model CancellationRequest {
+  id            String                    @id @default(uuid(7)) @db.Uuid
+  sellerOrderId String                    @map("seller_order_id") @db.Uuid
+  requestedById String                    @map("requested_by_id") @db.Uuid
+  reason        String                    @db.VarChar(500)
+  status        CancellationRequestStatus @default(REQUESTED)
+  respondedById String?                   @map("responded_by_id") @db.Uuid
+  response      String?                   @db.VarChar(500)
+  respondedAt   DateTime?                 @map("responded_at") @db.Timestamptz(3)
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sellerOrder SellerOrder @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  requestedBy User        @relation("CancellationRequester", fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  respondedBy User?       @relation("CancellationResponder", fields: [respondedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([sellerOrderId, status])
+  @@index([requestedById])
+  @@index([respondedById])
+  @@map("cancellation_requests")
+}
+
+enum NoteVisibility {
+  /// Seen by the customer, the seller and staff.
+  CUSTOMER
+  /// Seen by the seller and staff.
+  SELLER
+  /// Seen by marketplace staff only.
+  STAFF
+
+  @@map("note_visibility")
+}
+
+model OrderNote {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  orderId       String         @map("order_id") @db.Uuid
+  sellerOrderId String?        @map("seller_order_id") @db.Uuid
+  authorId      String         @map("author_id") @db.Uuid
+  /// CUSTOMER, SELLER or STAFF.
+  authorType    String         @map("author_type") @db.VarChar(20)
+  visibility    NoteVisibility
+  body          String         @db.VarChar(2000)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sellerOrder SellerOrder? @relation(fields: [sellerOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  author      User         @relation("OrderNoteAuthor", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId, createdAt])
+  @@index([sellerOrderId])
+  @@index([authorId])
+  @@map("order_notes")
+}
+
+enum ReturnStatus {
+  /// Waiting for the seller (until seller_deadline).
+  REQUESTED
+  /// Accepted; waiting for the customer to send the item back (or for the refund).
+  APPROVED
+  /// The seller refused; the customer may escalate.
+  REJECTED
+  /// The customer asked the marketplace to decide.
+  ESCALATED
+  /// The customer sent the item back.
+  RETURN_SHIPPED
+  /// The seller received the item back.
+  RECEIVED
+  /// Refund or replacement done.
+  RESOLVED
+  /// Closed without a refund (rejection accepted, or staff decided against it).
+  CLOSED
+  /// The customer withdrew it.
+  CANCELLED
+
+  @@map("return_status")
+}
+
+enum ReturnReason {
+  DAMAGED
+  DEFECTIVE
+  WRONG_ITEM
+  MISSING_PARTS
+  NOT_AS_DESCRIBED
+  CHANGED_MIND
+  OTHER
+
+  @@map("return_reason")
+}
+
+enum ReturnResolution {
+  FULL_REFUND
+  PARTIAL_REFUND
+  REPLACEMENT
+  REJECTED
+
+  @@map("return_resolution")
+}
+
+model ReturnRequest {
+  id                     String            @id @default(uuid(7)) @db.Uuid
+  /// e.g. "RT-MP2611250001AB-1-1"
+  number                 String            @unique @db.VarChar(40)
+  orderId                String            @map("order_id") @db.Uuid
+  sellerOrderId          String            @map("seller_order_id") @db.Uuid
+  sellerId               String            @map("seller_id") @db.Uuid
+  customerId             String            @map("customer_id") @db.Uuid
+  status                 ReturnStatus
+  reason                 ReturnReason
+  description            String            @db.VarChar(2000)
+  /// What the customer asked for: FULL_REFUND or REPLACEMENT.
+  requestedResolution    ReturnResolution  @map("requested_resolution")
+  /// What was decided (by the seller, or by staff after escalation).
+  resolution             ReturnResolution?
+  /// Customer money to give back for a refund resolution (items only unless staff add shipping).
+  refundAmount           Decimal?          @map("refund_amount") @db.Decimal(19, 4)
+  /// Whether the item must be sent back before the refund or replacement.
+  requiresReturnShipment Boolean           @default(true) @map("requires_return_shipment")
+  sellerResponse         String?           @map("seller_response") @db.VarChar(1000)
+  sellerRespondedAt      DateTime?         @map("seller_responded_at") @db.Timestamptz(3)
+  sellerDeadline         DateTime          @map("seller_deadline") @db.Timestamptz(3)
+  escalationNote         String?           @map("escalation_note") @db.VarChar(1000)
+  escalatedAt            DateTime?         @map("escalated_at") @db.Timestamptz(3)
+  staffDecisionNote      String?           @map("staff_decision_note") @db.VarChar(1000)
+  decidedById            String?           @map("decided_by_id") @db.Uuid
+  receivedAt             DateTime?         @map("received_at") @db.Timestamptz(3)
+  /// Whether received items went back into sellable stock.
+  restocked              Boolean?
+  resolvedAt             DateTime?         @map("resolved_at") @db.Timestamptz(3)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sellerOrder SellerOrder   @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  seller      Seller        @relation("SellerReturns", fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  customer    User          @relation("ReturnCustomer", fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  decidedBy   User?         @relation("ReturnDecider", fields: [decidedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  items       ReturnItem[]
+  images      ReturnImage[]
+  shipments   Shipment[]
+  refunds     Refund[]
+
+  @@index([sellerOrderId])
+  @@index([orderId])
+  @@index([sellerId, status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([status, sellerDeadline])
+  @@index([decidedById])
+  @@map("return_requests")
+}
+
+model ReturnItem {
+  id              String @id @default(uuid(7)) @db.Uuid
+  returnRequestId String @map("return_request_id") @db.Uuid
+  orderItemId     String @map("order_item_id") @db.Uuid
+  quantity        Int
+
+  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([returnRequestId, orderItemId])
+  @@index([orderItemId])
+  @@map("return_items")
+}
+
+model ReturnImage {
+  id              String @id @default(uuid(7)) @db.Uuid
+  returnRequestId String @map("return_request_id") @db.Uuid
+  fileId          String @unique @map("file_id") @db.Uuid
+  position        Int
+
+  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  file          StoredFile    @relation("ReturnImageFile", fields: [fileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([returnRequestId])
+  @@map("return_images")
+}
+
+enum RefundStatus {
+  /// Created; the provider call (or manual payout) has not completed.
+  PROCESSING
+  /// Manual refund (bank transfer, cash on delivery) waiting for finance to pay it out.
+  AWAITING_PAYOUT
+  SUCCEEDED
+  FAILED
+
+  @@map("refund_status")
+}
+
+enum RefundReason {
+  CANCELLATION
+  RETURN
+  /// Paid after the order had already expired.
+  LATE_PAYMENT
+  DUPLICATE_PAYMENT
+  GOODWILL
+  OTHER
+
+  @@map("refund_reason")
+}
+
+/// Money given back to a customer. Each refund belongs to one payment and one seller order,
+/// splits into items, shipping and charges, and records what it costs the seller.
+model Refund {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  /// e.g. "RF-7K3M9Q2X"
+  reference          String       @unique @db.VarChar(30)
+  orderId            String       @map("order_id") @db.Uuid
+  sellerOrderId      String?      @map("seller_order_id") @db.Uuid
+  paymentId          String       @map("payment_id") @db.Uuid
+  returnRequestId    String?      @map("return_request_id") @db.Uuid
+  reason             RefundReason
+  /// FULL (everything still refundable on the seller order) or PARTIAL.
+  kind               String       @db.VarChar(10)
+  status             RefundStatus
+  amount             Decimal      @db.Decimal(19, 4)
+  itemsAmount        Decimal      @map("items_amount") @db.Decimal(19, 4)
+  shippingAmount     Decimal      @map("shipping_amount") @db.Decimal(19, 4)
+  chargesAmount      Decimal      @map("charges_amount") @db.Decimal(19, 4)
+  /// Taken back from the seller's payable (their share of the refunded items, and shipping
+  /// they were credited for).
+  sellerDebit        Decimal      @map("seller_debit") @db.Decimal(19, 4)
+  /// Commission the marketplace gives back to the seller for the refunded items.
+  commissionReversal Decimal      @map("commission_reversal") @db.Decimal(19, 4)
+  /// Through the provider (ORIGINAL) or paid out by finance (MANUAL).
+  method             String       @db.VarChar(10)
+  /// Stops the same refund being created twice (e.g. a double-clicked button).
+  idempotencyKey     String       @unique @map("idempotency_key") @db.VarChar(120)
+  providerRefundId   String?      @map("provider_refund_id") @db.VarChar(120)
+  payoutReference    String?      @map("payout_reference") @db.VarChar(80)
+  failureMessage     String?      @map("failure_message") @db.VarChar(500)
+  note               String?      @db.VarChar(1000)
+  livemode           Boolean      @default(false)
+  requestedById      String?      @map("requested_by_id") @db.Uuid
+  processedById      String?      @map("processed_by_id") @db.Uuid
+  succeededAt        DateTime?    @map("succeeded_at") @db.Timestamptz(3)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order         Order               @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sellerOrder   SellerOrder?        @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  payment       Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  returnRequest ReturnRequest?      @relation(fields: [returnRequestId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  requestedBy   User?               @relation("RefundRequester", fields: [requestedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  processedBy   User?               @relation("RefundProcessor", fields: [processedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  ledgerEntries SellerLedgerEntry[]
+
+  @@index([orderId])
+  @@index([sellerOrderId])
+  @@index([paymentId])
+  @@index([returnRequestId])
+  @@index([status, createdAt])
+  @@index([requestedById])
+  @@index([processedById])
+  @@map("refunds")
+}
+
+enum SellerLedgerType {
+  /// The seller's earning on a paid (or remitted) seller order: items minus their discount.
+  ORDER_EARNING
+  /// Marketplace commission (negative).
+  COMMISSION
+  /// Shipping fee paid by the customer, credited to a seller who shipped it themselves.
+  SHIPPING_CREDIT
+  /// A refund's cost to the seller (negative).
+  REFUND
+  /// Commission given back on refunded items (positive).
+  COMMISSION_REVERSAL
+  ADJUSTMENT
+
+  @@map("seller_ledger_type")
+}
+
+/// Append-only record of what the marketplace owes each seller (payouts in the finance
+/// phase). The balance is the sum of amounts.
+model SellerLedgerEntry {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  sellerId      String           @map("seller_id") @db.Uuid
+  sellerOrderId String?          @map("seller_order_id") @db.Uuid
+  refundId      String?          @map("refund_id") @db.Uuid
+  type          SellerLedgerType
+  /// Positive: owed to the seller; negative: owed by the seller.
+  amount        Decimal          @db.Decimal(19, 4)
+  description   String           @db.VarChar(300)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller      Seller       @relation("SellerLedger", fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sellerOrder SellerOrder? @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  refund      Refund?      @relation(fields: [refundId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([sellerId, createdAt])
+  @@index([sellerOrderId])
+  @@index([refundId])
+  @@map("seller_ledger_entries")
 }

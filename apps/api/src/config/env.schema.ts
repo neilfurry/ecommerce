@@ -57,6 +57,20 @@ export const apiEnvSchema = z
     /** Shipping rate provider. "mock" uses the admin-editable rate table (development). */
     SHIPPING_PROVIDER: z.enum(['mock']).default('mock'),
 
+    /**
+     * Online payments (GCash, Maya, cards, QR Ph): "mock" simulates them locally (never real
+     * money, refused in production); "paymongo" uses PayMongo with the keys below (sk_test_
+     * keys = sandbox).
+     */
+    PAYMENT_PROVIDER: z.enum(['mock', 'paymongo']).default('mock'),
+    PAYMONGO_SECRET_KEY: z.string().optional(),
+    PAYMONGO_WEBHOOK_SECRET: z.string().optional(),
+    PAYMONGO_CHECKOUT_VERSION: z.enum(['v1', 'v2']).default('v2'),
+    /** Signs the mock payment provider's and mock courier's webhooks (development). */
+    MOCK_WEBHOOK_SECRET: z.string().min(16).default('local-mock-webhook-secret-change-me'),
+    /** Public base URL of this API, for provider callbacks shown in the admin console. */
+    API_PUBLIC_URL: z.url().default('http://localhost:3000'),
+
     /** Signs access tokens (HS256). At least 32 random characters; rotate by redeploying. */
     AUTH_JWT_SECRET: z.string().min(32, 'Use at least 32 random characters'),
     /** HMAC key for one-time SMS codes. At least 32 random characters. */
@@ -114,6 +128,29 @@ export const apiEnvSchema = z
         path: ['SHIPPING_PROVIDER'],
         message: 'Mock shipping rates are for development; configure a carrier in production',
       });
+    }
+    if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'mock') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYMENT_PROVIDER'],
+        message: 'Mock payments are for development; configure a payment provider in production',
+      });
+    }
+    if (env.PAYMENT_PROVIDER === 'paymongo') {
+      if (!env.PAYMONGO_SECRET_KEY?.match(/^sk_(test|live)_/)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PAYMONGO_SECRET_KEY'],
+          message: 'Required for PayMongo: a secret key starting with sk_test_ or sk_live_',
+        });
+      }
+      if (!env.PAYMONGO_WEBHOOK_SECRET) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PAYMONGO_WEBHOOK_SECRET'],
+          message: 'Required for PayMongo: the secret shown when you create the webhook',
+        });
+      }
     }
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {
       ctx.addIssue({

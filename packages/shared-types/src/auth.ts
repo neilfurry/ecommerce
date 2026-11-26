@@ -175,6 +175,28 @@ export const PERMISSION_CATALOG = {
     description: 'Change checkout settings: VAT, charges, shipping rates and commission rates',
   },
   'reviews.moderate': { scope: 'platform', description: 'Hide and restore product reviews' },
+  'orders.manage': {
+    scope: 'platform',
+    description: 'Cancel orders, change seller order statuses and add staff notes',
+  },
+  'payments.read': {
+    scope: 'platform',
+    description: 'View payments, webhook events and reconciliation reports',
+  },
+  'payments.manage': {
+    scope: 'platform',
+    description: 'Verify bank transfers, resolve failed payments and reprocess webhooks',
+  },
+  'refunds.manage': { scope: 'platform', description: 'Create, approve and pay out refunds' },
+  'cod.manage': {
+    scope: 'platform',
+    description: 'Record courier remittances and reconcile cash-on-delivery collections',
+  },
+  'shipping.manage': {
+    scope: 'platform',
+    description: 'Configure couriers and update shipments',
+  },
+  'disputes.manage': { scope: 'platform', description: 'Decide escalated return requests' },
   'seller.profile.manage': {
     scope: 'seller',
     description: 'Edit the business profile, upload documents and submit for verification',
@@ -197,6 +219,14 @@ export const PERMISSION_CATALOG = {
     description: 'Set prices, sale prices, wholesale tiers and customer prices',
   },
   'seller.orders.read': { scope: 'seller', description: 'View the seller’s orders' },
+  'seller.orders.manage': {
+    scope: 'seller',
+    description: 'Accept, ship and cancel orders, and answer cancellation requests',
+  },
+  'seller.returns.manage': {
+    scope: 'seller',
+    description: 'Review return requests and confirm returned items',
+  },
   'seller.marketing.manage': {
     scope: 'seller',
     description: 'Create seller coupons and join flash sales',
@@ -224,6 +254,14 @@ export const SELLER_PERMISSIONS = permissionsInScope('seller');
 export const LOCKED_ROLES: readonly UserRole[] = ['SUPER_ADMIN', 'SELLER_OWNER'];
 
 /** Permissions a role may hold: only those of its own scope (customers hold none). */
+/** Whether the signed-in user holds a permission (UI hints; the API guards check again). */
+export function hasPermission(
+  user: Pick<AuthenticatedUser, 'permissions'>,
+  permission: Permission,
+): boolean {
+  return user.permissions.includes(permission);
+}
+
 export function assignablePermissions(role: UserRole): Permission[] {
   const scope = roleScope(role);
   return scope === 'customer' ? [] : permissionsInScope(scope);
@@ -256,6 +294,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'marketing.manage',
     'settings.manage',
     'reviews.moderate',
+    'orders.manage',
+    'payments.read',
+    'payments.manage',
+    'refunds.manage',
+    'cod.manage',
+    'shipping.manage',
+    'disputes.manage',
   ],
   FINANCE_ADMIN: [
     'users.read',
@@ -266,6 +311,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'inventory.read',
     'orders.read',
     'settings.manage',
+    'payments.read',
+    'payments.manage',
+    'refunds.manage',
+    'cod.manage',
   ],
   CUSTOMER_SUPPORT: [
     'users.read',
@@ -276,9 +325,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'catalog.products.read',
     'orders.read',
     'reviews.moderate',
+    'orders.manage',
+    'payments.read',
+    'disputes.manage',
   ],
   WAREHOUSE_STAFF: ['inventory.read'],
-  DELIVERY_STAFF: [],
+  DELIVERY_STAFF: ['orders.read', 'shipping.manage'],
   SELLER_OWNER: SELLER_PERMISSIONS,
   SELLER_MANAGER: [
     'seller.store.manage',
@@ -289,10 +341,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'seller.inventory.manage',
     'seller.orders.read',
     'seller.marketing.manage',
+    'seller.orders.manage',
+    'seller.returns.manage',
   ],
   SELLER_ENCODER: ['seller.members.read', 'seller.products.manage'],
   SELLER_INVENTORY: ['seller.members.read', 'seller.inventory.manage'],
-  SELLER_ORDER_PROCESSOR: ['seller.members.read', 'seller.orders.read'],
+  SELLER_ORDER_PROCESSOR: [
+    'seller.members.read',
+    'seller.orders.read',
+    'seller.orders.manage',
+    'seller.returns.manage',
+  ],
   SELLER_ACCOUNTING: ['seller.members.read', 'seller.orders.read'],
   CUSTOMER: [],
   WHOLESALE_CUSTOMER: [],

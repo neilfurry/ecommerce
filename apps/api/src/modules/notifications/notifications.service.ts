@@ -7,6 +7,7 @@ import type {
   ProductDecisionJob,
   LowStockJob,
   OrderCancelledJob,
+  OrderUpdateJob,
   OrderPlacedJob,
   SellerNewOrderJob,
   SellerStatusJob,
@@ -72,6 +73,10 @@ export class NotificationsService {
 
   sendOrderCancelled(job: OrderCancelledJob) {
     return this.emailQueue.add(EMAIL_JOBS.ORDER_CANCELLED, job);
+  }
+
+  sendOrderUpdate(job: OrderUpdateJob) {
+    return this.emailQueue.add(EMAIL_JOBS.ORDER_UPDATE, job);
   }
 
   /**

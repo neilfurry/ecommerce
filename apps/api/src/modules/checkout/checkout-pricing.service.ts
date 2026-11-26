@@ -14,11 +14,13 @@ import type {
   CheckoutRequestParsed,
   CheckoutSettings,
   CouponResult,
+  OrderSettings,
   PriceQuoteLine,
 } from '@marketplace/validation';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { formatAddress } from '../addresses/addresses.service';
 import { availableOf, optionsOf, thumbnailOf } from '../cart/cart.service';
+import { PaymentsService } from '../orders/payments/payments.service';
 import { PricingService, shopperOf } from '../pricing/pricing.service';
 import {
   PlatformSettingsService,
@@ -102,6 +104,7 @@ export interface CheckoutPlan {
   coupons: PlannedCoupon[];
   address: AddressRow | null;
   settings: CheckoutSettings;
+  orderSettings: OrderSettings;
   buyerType: 'RETAIL' | 'WHOLESALE';
   paymentMethod: PaymentMethod;
   grandTotal: Decimal;
@@ -128,6 +131,7 @@ export class CheckoutPricingService {
     private readonly pricing: PricingService,
     private readonly shipping: ShippingService,
     private readonly settingsService: PlatformSettingsService,
+    private readonly payments: PaymentsService,
   ) {}
 
   async plan(
@@ -138,6 +142,7 @@ export class CheckoutPricingService {
     const now = new Date();
     const { customerId, buyer } = shopperOf(user);
     const settings = await this.settingsService.checkout(db);
+    const orderSettings = await this.settingsService.orders(db);
     const problems: Problem[] = [];
 
     // 1. What is being bought: "buy now", chosen cart lines, or the whole cart.
@@ -372,6 +377,17 @@ export class CheckoutPricingService {
       grandTotal: sum(groups.map((g) => g.total)),
     };
 
+    const unavailable = await this.unavailableMethods(
+      customerId,
+      totals.grandTotal,
+      orderSettings,
+      db,
+    );
+    const reason = unavailable.get(paymentMethod);
+    if (reason && settings.paymentMethods.includes(paymentMethod)) {
+      problems.push({ path: 'paymentMethod', message: reason });
+    }
+
     const quote: CheckoutQuote = {
       currency: 'PHP',
       buyerType: buyer.wholesale ? 'WHOLESALE' : 'RETAIL',
@@ -426,9 +442,13 @@ export class CheckoutPricingService {
       paymentMethods: settings.paymentMethods.map((method) => ({
         method,
         label: PAYMENT_METHOD_LABELS[method],
-        paymentWindowMinutes: ONLINE_PAYMENT_METHODS.includes(method)
-          ? settings.paymentWindowMinutes
-          : null,
+        paymentWindowMinutes:
+          method === 'BANK_TRANSFER'
+            ? orderSettings.bankTransfer.windowHours * 60
+            : ONLINE_PAYMENT_METHODS.includes(method)
+              ? settings.paymentWindowMinutes
+              : null,
+        unavailableReason: unavailable.get(method) ?? null,
       })),
       totals: {
         itemsSubtotal: money(totals.itemsSubtotal),
@@ -450,11 +470,57 @@ export class CheckoutPricingService {
       coupons,
       address,
       settings,
+      orderSettings,
       buyerType: quote.buyerType,
       paymentMethod,
       grandTotal: totals.grandTotal,
       cartItemIds: requested.flatMap((r) => (r.cartItemId ? [r.cartItemId] : [])),
     };
+  }
+
+  /**
+   * Methods this order cannot use, with the reason shown to the customer: cash on delivery
+   * above the COD limit or for customers with too many failed COD deliveries, and bank
+   * transfer while finance has not configured a receiving account.
+   */
+  private async unavailableMethods(
+    customerId: string | null,
+    grandTotal: Decimal,
+    orderSettings: OrderSettings,
+    db: Db,
+  ): Promise<Map<PaymentMethod, string>> {
+    const result = new Map<PaymentMethod, string>();
+    const limit = D(orderSettings.cod.maxOrderAmount);
+    if (grandTotal.greaterThan(limit)) {
+      result.set(
+        'COD',
+        `Cash on delivery is available for orders up to ₱${limit.toFixed(2)}. Please choose another payment method.`,
+      );
+    } else if (customerId && orderSettings.cod.maxFailedDeliveries > 0) {
+      // Parcels sent back to the seller without ever being delivered.
+      const failed = await db.sellerOrder.count({
+        where: {
+          status: { in: ['RETURNING_TO_SELLER', 'RETURNED_TO_SELLER'] },
+          deliveredAt: null,
+          order: { customerId, paymentMethod: 'COD' },
+        },
+      });
+      if (failed >= orderSettings.cod.maxFailedDeliveries) {
+        result.set(
+          'COD',
+          'Cash on delivery is not available on your account because of earlier undelivered orders. Please pay online or by bank transfer.',
+        );
+      }
+    }
+    for (const method of ONLINE_PAYMENT_METHODS) {
+      if (method !== 'BANK_TRANSFER' && !this.payments.onlineAvailable(method)) {
+        result.set(method, `${PAYMENT_METHOD_LABELS[method]} is not available right now.`);
+      }
+    }
+    if (orderSettings.bankTransfer.accounts.length === 0) {
+      result.set('BANK_TRANSFER', 'Bank transfer is not available right now.');
+    }
+    return result;
   }
 
   private emptyGroup(

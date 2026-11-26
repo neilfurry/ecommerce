@@ -94,7 +94,7 @@ test.describe('Storefront shopping', () => {
     await expect(page).toHaveURL(/\/account\/orders\/.+\?placed=1/);
     await expect(page.getByText(/Your order MP\w+ is placed/)).toBeVisible();
     await expect(page.getByText(/split into 2 packages/)).toBeVisible();
-    await expect(page.getByTestId('order-status')).toHaveText('Placed');
+    await expect(page.getByTestId('order-status')).toHaveText('In progress');
     await expect(page.getByTestId('order-total')).toHaveText(total.trim());
     await expect(
       page.getByRole('region', { name: /Package 1: / }).or(page.getByLabel(/Package 1: /)),

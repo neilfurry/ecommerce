@@ -13,6 +13,7 @@ import { AddressesPage } from '../pages/account/addresses-page';
 import { OrderPage } from '../pages/account/order-page';
 import { OrdersPage } from '../pages/account/orders-page';
 import { AccountOverviewPage } from '../pages/account/overview-page';
+import { ReturnPage, ReturnsPage } from '../pages/account/returns-page';
 import { ReviewsPage } from '../pages/account/reviews-page';
 import { AccountSettingsPage } from '../pages/account/settings-page';
 import { WishlistPage } from '../pages/account/wishlist-page';
@@ -26,6 +27,7 @@ import { SignInPage } from '../pages/auth/sign-in-page';
 import { SignUpPage } from '../pages/auth/sign-up-page';
 import { VerifyEmailPage } from '../pages/auth/verify-email-page';
 import { HomePage } from '../pages/home-page';
+import { MockPayPage } from '../pages/pay/mock-pay-page';
 import { StatusPage } from '../pages/status-page';
 
 export const routes: RouteObject[] = [
@@ -66,6 +68,7 @@ export const routes: RouteObject[] = [
             element: <RequireSession />,
             children: [
               { path: 'checkout', element: <CheckoutPage /> },
+              { path: 'pay/mock/:sessionId', element: <MockPayPage /> },
               {
                 path: 'account',
                 element: <AccountLayout />,
@@ -73,6 +76,8 @@ export const routes: RouteObject[] = [
                   { index: true, element: <AccountOverviewPage /> },
                   { path: 'orders', element: <OrdersPage /> },
                   { path: 'orders/:orderId', element: <OrderPage /> },
+                  { path: 'returns', element: <ReturnsPage /> },
+                  { path: 'returns/:returnId', element: <ReturnPage /> },
                   { path: 'addresses', element: <AddressesPage /> },
                   { path: 'wishlist', element: <WishlistPage /> },
                   { path: 'reviews', element: <ReviewsPage /> },

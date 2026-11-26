@@ -6,11 +6,14 @@ import { DevTestEmailHandler } from '../jobs/dev-test-email.handler';
 import { HeartbeatHandler } from '../jobs/heartbeat.handler';
 import { SmsOtpHandler } from '../jobs/sms-otp.handler';
 import { ReleaseExpiredReservationsHandler } from '../jobs/reservation-sweep';
+import { CompleteDeliveredHandler, EscalateOverdueReturnsHandler } from '../jobs/fulfilment-sweep';
+import { ReconcileOpenPaymentsHandler } from '../jobs/payment-reconciliation';
 import { ExpireUnpaidOrdersHandler } from '../jobs/unpaid-order-sweep';
 import {
   LowStockEmailHandler,
   OrderCancelledEmailHandler,
   OrderPlacedEmailHandler,
+  OrderUpdateEmailHandler,
   PasswordResetEmailHandler,
   SellerNewOrderEmailHandler,
   ProductDecisionEmailHandler,
@@ -59,6 +62,7 @@ export class EmailProcessor extends DomainProcessor {
     orderPlaced: OrderPlacedEmailHandler,
     sellerNewOrder: SellerNewOrderEmailHandler,
     orderCancelled: OrderCancelledEmailHandler,
+    orderUpdate: OrderUpdateEmailHandler,
   ) {
     super(
       QUEUE_NAMES.EMAIL,
@@ -75,6 +79,7 @@ export class EmailProcessor extends DomainProcessor {
         orderPlaced,
         sellerNewOrder,
         orderCancelled,
+        orderUpdate,
       ],
       config,
       deadLetters,
@@ -105,8 +110,12 @@ export class ReportsProcessor extends DomainProcessor {
 
 @Processor(QUEUE_NAMES.PAYMENT_EVENTS)
 export class PaymentEventsProcessor extends DomainProcessor {
-  constructor(config: WorkerConfig, deadLetters: DeadLetterService) {
-    super(QUEUE_NAMES.PAYMENT_EVENTS, [], config, deadLetters);
+  constructor(
+    config: WorkerConfig,
+    deadLetters: DeadLetterService,
+    reconcileOpenPayments: ReconcileOpenPaymentsHandler,
+  ) {
+    super(QUEUE_NAMES.PAYMENT_EVENTS, [reconcileOpenPayments], config, deadLetters);
   }
 }
 
@@ -117,10 +126,12 @@ export class OrderProcessingProcessor extends DomainProcessor {
     deadLetters: DeadLetterService,
     releaseExpiredReservations: ReleaseExpiredReservationsHandler,
     expireUnpaidOrders: ExpireUnpaidOrdersHandler,
+    completeDelivered: CompleteDeliveredHandler,
+    escalateOverdueReturns: EscalateOverdueReturnsHandler,
   ) {
     super(
       QUEUE_NAMES.ORDER_PROCESSING,
-      [releaseExpiredReservations, expireUnpaidOrders],
+      [releaseExpiredReservations, expireUnpaidOrders, completeDelivered, escalateOverdueReturns],
       config,
       deadLetters,
     );

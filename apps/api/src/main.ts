@@ -10,6 +10,8 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     bodyParser: true,
+    // Payment and courier webhooks verify signatures over the exact bytes received.
+    rawBody: true,
   });
   const config = app.get(AppConfig);
   configureApp(app, config);

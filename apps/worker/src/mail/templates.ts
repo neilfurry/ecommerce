@@ -6,6 +6,7 @@ import type {
   ProductDecisionJob,
   LowStockJob,
   OrderCancelledJob,
+  OrderUpdateJob,
   OrderPlacedJob,
   SellerNewOrderJob,
   StaffInvitationJob,
@@ -298,9 +299,19 @@ export function orderCancelledTemplate(job: OrderCancelledJob): RenderedEmail {
     paragraphs: [
       `Your order ${job.orderNumber} was cancelled.`,
       `Reason: ${job.reason}`,
-      'You have not been charged.',
+      job.moneyReceived
+        ? 'We received your payment, so a refund will be arranged. You will get an email when it is sent.'
+        : 'You have not been charged.',
     ],
     action: { label: 'View the order', url: job.link },
+  });
+}
+
+export function orderUpdateTemplate(job: OrderUpdateJob): RenderedEmail {
+  return render(`${job.title} - order ${job.orderNumber}`, {
+    greeting: `Hi ${job.firstName},`,
+    paragraphs: [job.message],
+    action: { label: job.actionLabel ?? 'View the order', url: job.link },
   });
 }
 

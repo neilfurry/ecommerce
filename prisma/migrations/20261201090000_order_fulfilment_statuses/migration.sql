@@ -1,0 +1,47 @@
+-- Phase 5 (part 1): new values for existing enums. Kept apart from the tables that use them,
+-- because PostgreSQL cannot use an enum value in the transaction that added it.
+
+-- AlterEnum
+ALTER TYPE "file_purpose" ADD VALUE 'PAYMENT_PROOF';
+ALTER TYPE "file_purpose" ADD VALUE 'RETURN_IMAGE';
+ALTER TYPE "file_purpose" ADD VALUE 'WAYBILL';
+
+-- AlterEnum
+ALTER TYPE "order_status" ADD VALUE 'COMPLETED' BEFORE 'CANCELLED';
+
+-- AlterEnum
+ALTER TYPE "seller_order_status" ADD VALUE 'PROCESSING' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'READY_FOR_PICKUP' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'SHIPPED' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'DELIVERY_FAILED' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'RETURNING_TO_SELLER' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'RETURNED_TO_SELLER' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'DELIVERED' BEFORE 'CANCELLED';
+ALTER TYPE "seller_order_status" ADD VALUE 'COMPLETED' BEFORE 'CANCELLED';
+
+-- AlterEnum
+ALTER TYPE "payment_status" ADD VALUE 'PARTIALLY_PAID' BEFORE 'PAID';
+ALTER TYPE "payment_status" ADD VALUE 'PARTIALLY_REFUNDED' BEFORE 'VOIDED';
+ALTER TYPE "payment_status" ADD VALUE 'REFUNDED' BEFORE 'VOIDED';
+
+-- AlterEnum
+ALTER TYPE "order_event_type" ADD VALUE 'PAYMENT_RECEIVED';
+ALTER TYPE "order_event_type" ADD VALUE 'PAYMENT_FAILED';
+ALTER TYPE "order_event_type" ADD VALUE 'STATUS_CHANGED';
+ALTER TYPE "order_event_type" ADD VALUE 'CANCELLED_BY_SELLER';
+ALTER TYPE "order_event_type" ADD VALUE 'CANCELLED_BY_STAFF';
+ALTER TYPE "order_event_type" ADD VALUE 'CANCELLATION_REQUESTED';
+ALTER TYPE "order_event_type" ADD VALUE 'CANCELLATION_APPROVED';
+ALTER TYPE "order_event_type" ADD VALUE 'CANCELLATION_REJECTED';
+ALTER TYPE "order_event_type" ADD VALUE 'SHIPMENT_CREATED';
+ALTER TYPE "order_event_type" ADD VALUE 'SHIPMENT_UPDATED';
+ALTER TYPE "order_event_type" ADD VALUE 'COD_COLLECTED';
+ALTER TYPE "order_event_type" ADD VALUE 'COD_REMITTED';
+ALTER TYPE "order_event_type" ADD VALUE 'RETURN_REQUESTED';
+ALTER TYPE "order_event_type" ADD VALUE 'RETURN_UPDATED';
+ALTER TYPE "order_event_type" ADD VALUE 'REFUND_CREATED';
+ALTER TYPE "order_event_type" ADD VALUE 'REFUND_SUCCEEDED';
+ALTER TYPE "order_event_type" ADD VALUE 'REFUND_FAILED';
+ALTER TYPE "order_event_type" ADD VALUE 'NOTE_ADDED';
+ALTER TYPE "order_event_type" ADD VALUE 'PAYMENT_PROOF_SUBMITTED';
+ALTER TYPE "order_event_type" ADD VALUE 'PAYMENT_PROOF_REJECTED';

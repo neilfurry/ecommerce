@@ -13,6 +13,7 @@ import type { Queue } from 'bullmq';
 import { WorkerConfig } from '../config/worker-config';
 import { WorkerDatabase } from '../database/database.provider';
 import type { JobHandler } from '../queues/job-handler';
+import { PaymentReconciler } from './payment-reconciliation';
 
 /**
  * Cancels orders still waiting for an online payment after their deadline: the order and its
@@ -28,18 +29,34 @@ export class ExpireUnpaidOrdersHandler implements JobHandler<{ cancelled: number
     private readonly database: WorkerDatabase,
     private readonly config: WorkerConfig,
     @InjectQueue(QUEUE_NAMES.EMAIL) private readonly email: Queue,
+    private readonly reconciler: PaymentReconciler,
   ) {}
 
   async handle(): Promise<{ cancelled: number }> {
     if (!this.database.client) return { cancelled: 0 };
+    // A payment made just before the deadline may not have reached us yet: ask first.
+    await this.reconciler
+      .run({ dueOnly: true })
+      .catch((error: Error) =>
+        this.logger.warn(`Pre-expiry payment check failed: ${error.message}`),
+      );
     const cancelled = await expireUnpaidOrders(this.database.client, { limit: 100 });
     for (const order of cancelled) {
+      // The provider's checkout is closed too, so it cannot be paid after the cancellation.
+      for (const p of order.closedPayments) {
+        if (!p.providerReference) continue;
+        await this.reconciler
+          .gateway(p.provider)
+          ?.expire(p.providerReference)
+          .catch(() => undefined);
+      }
       const job: OrderCancelledJob = {
         to: order.customerEmail,
         firstName: order.customerFirstName,
         orderNumber: order.orderNumber,
         reason: 'Payment was not received in time.',
         link: `${this.config.storefrontUrl}/account/orders/${order.id}`,
+        moneyReceived: order.moneyReceived,
       };
       await this.email.add(EMAIL_JOBS.ORDER_CANCELLED, job);
     }

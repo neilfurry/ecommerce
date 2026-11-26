@@ -32,6 +32,15 @@ import {
   AdminSellerOrderPage,
 } from '../pages/orders/orders-pages';
 import { SettingsPage } from '../pages/settings/settings-page';
+import {
+  BankTransfersPage,
+  CodPage,
+  PaymentPage,
+  PaymentsPage,
+  ReconciliationPage,
+  RefundsPage,
+} from '../pages/finance/finance-pages';
+import { DisputePage, DisputesPage, ShippingPage } from '../pages/fulfilment/fulfilment-pages';
 import { PermissionsPage } from '../pages/permissions/permissions-page';
 import { RolesPage } from '../pages/roles/roles-page';
 import { SellerDetailPage } from '../pages/sellers/seller-detail-page';
@@ -117,6 +126,21 @@ export function buildRoutes(devToolsEnabled: boolean): RouteObject[] {
                   path: 'seller-orders/:orderId',
                   element: guarded('orders.read', <AdminSellerOrderPage />),
                 },
+                { path: 'payments', element: guarded('payments.read', <PaymentsPage />) },
+                { path: 'payments/:paymentId', element: guarded('payments.read', <PaymentPage />) },
+                {
+                  path: 'bank-transfers',
+                  element: guarded('payments.read', <BankTransfersPage />),
+                },
+                { path: 'cod', element: guarded('payments.read', <CodPage />) },
+                { path: 'refunds', element: guarded('payments.read', <RefundsPage />) },
+                {
+                  path: 'reconciliation',
+                  element: guarded('payments.read', <ReconciliationPage />),
+                },
+                { path: 'shipping', element: guarded('orders.read', <ShippingPage />) },
+                { path: 'disputes', element: guarded('orders.read', <DisputesPage />) },
+                { path: 'disputes/:returnId', element: guarded('orders.read', <DisputePage />) },
                 {
                   path: 'storefront',
                   element: guarded('marketing.manage', <StorefrontContentPage />),

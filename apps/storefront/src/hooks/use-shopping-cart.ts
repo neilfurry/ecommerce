@@ -39,6 +39,8 @@ export function useShoppingCart() {
       .then((cart) => {
         queryClient.setQueryData(shopKeys.cart, cart);
         guestCart.clear();
+        // A checkout opened right after sign-in may have been quoted before the merge.
+        return queryClient.invalidateQueries({ queryKey: ['shop', 'checkout'] });
       })
       .catch(() => undefined)
       .finally(() => {
