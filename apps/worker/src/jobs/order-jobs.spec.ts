@@ -10,6 +10,7 @@ import {
   SellerNewOrderEmailHandler,
 } from './transactional-email.handlers';
 import { ExpireUnpaidOrdersHandler } from './unpaid-order-sweep';
+import type { PaymentReconciler } from './payment-reconciliation';
 
 jest.mock('@marketplace/database', () => ({ expireUnpaidOrders: jest.fn() }));
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- the mocked module
@@ -118,19 +119,49 @@ describe('unpaid order sweep', () => {
   const add = jest.fn();
   const queue = { add } as unknown as Queue;
   const config = { storefrontUrl: 'http://localhost:5173' } as WorkerConfig;
+  const run = jest.fn();
+  const expire = jest.fn();
+  const reconciler = {
+    run,
+    gateway: (provider: string) => (provider === 'MOCK' ? { expire } : null),
+  } as unknown as PaymentReconciler;
   beforeEach(() => {
     expireUnpaidOrders.mockReset();
     add.mockReset();
+    run.mockReset().mockResolvedValue({ checked: 0, paid: 0, closed: 0 });
+    expire.mockReset().mockResolvedValue(undefined);
   });
 
   it('cancels overdue orders and emails each customer', async () => {
     expireUnpaidOrders.mockResolvedValue([
-      { id: 'o1', orderNumber: 'MP1', customerEmail: 'a@example.com', customerFirstName: 'Ana' },
-      { id: 'o2', orderNumber: 'MP2', customerEmail: 'b@example.com', customerFirstName: 'Ben' },
+      {
+        id: 'o1',
+        orderNumber: 'MP1',
+        customerEmail: 'a@example.com',
+        customerFirstName: 'Ana',
+        moneyReceived: false,
+        closedPayments: [{ provider: 'MOCK', providerReference: 'cs_mock_1' }],
+      },
+      {
+        id: 'o2',
+        orderNumber: 'MP2',
+        customerEmail: 'b@example.com',
+        customerFirstName: 'Ben',
+        moneyReceived: false,
+        closedPayments: [],
+      },
     ]);
-    const handler = new ExpireUnpaidOrdersHandler({ client: {} } as WorkerDatabase, config, queue);
+    const handler = new ExpireUnpaidOrdersHandler(
+      { client: {} } as WorkerDatabase,
+      config,
+      queue,
+      reconciler,
+    );
     expect(handler.jobName).toBe(ORDER_JOBS.EXPIRE_UNPAID_ORDERS);
     await expect(handler.handle()).resolves.toEqual({ cancelled: 2 });
+    // Providers are asked before anything expires, and the closed checkout is expired there.
+    expect(run).toHaveBeenCalledWith({ dueOnly: true });
+    expect(expire).toHaveBeenCalledWith('cs_mock_1');
     expect(add).toHaveBeenCalledWith(
       EMAIL_JOBS.ORDER_CANCELLED,
       expect.objectContaining({
@@ -146,6 +177,7 @@ describe('unpaid order sweep', () => {
       { client: null } as WorkerDatabase,
       config,
       queue,
+      reconciler,
     );
     await expect(handler.handle()).resolves.toEqual({ cancelled: 0 });
     expect(expireUnpaidOrders).not.toHaveBeenCalled();

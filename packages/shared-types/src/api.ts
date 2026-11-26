@@ -31,6 +31,10 @@ export const API_ERROR_CODES = [
   'RESERVATION_NOT_ACTIVE',
   /** Prices, stock or coupons changed since the checkout quote; the body carries the new quote. */
   'CHECKOUT_CHANGED',
+  /** The order (or shipment, return) is not in a status that allows this action. */
+  'INVALID_TRANSITION',
+  /** The payment provider or courier refused the request or could not be reached. */
+  'PROVIDER_ERROR',
   'RATE_LIMITED',
   'SERVICE_UNAVAILABLE',
   'INTERNAL_ERROR',

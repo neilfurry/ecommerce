@@ -354,10 +354,15 @@ describe('Checkout (e2e)', () => {
         source: 'WHOLESALE_TIER',
       });
       expect(w.totals).toMatchObject({ itemsSubtotal: '21000.00', wholesaleSavings: '4000.00' });
+      // Above the cash-on-delivery limit (₱50,000 by default, with heavy-parcel shipping).
+      expect(w.paymentMethods.find((p) => p.method === 'COD')!.unavailableReason).toMatch(
+        /up to ₱50000\.00/,
+      );
 
       const res = await placeOrder(wholesale.client, {
         addressId: wholesale.addressId,
         ...buy(50),
+        paymentMethod: 'GCASH',
       });
       expect(res.status).toBe(201);
       const order = orderDetailSchema.parse(res.body);
@@ -815,7 +820,19 @@ describe('Checkout (e2e)', () => {
         paymentStatus: 'VOIDED',
         cancellable: false,
       });
-      expect(after.events.map((e) => e.type)).toEqual(['AWAITING_PAYMENT', 'PAYMENT_EXPIRED']);
+      // The order's history and the seller order's own status change (state machine).
+      expect(after.events.map((e) => [e.type, e.sellerOrderId ? 'seller order' : 'order'])).toEqual(
+        [
+          ['AWAITING_PAYMENT', 'order'],
+          ['PAYMENT_EXPIRED', 'seller order'],
+          ['PAYMENT_EXPIRED', 'order'],
+        ],
+      );
+      expect(after.payment.attempts[0]).toMatchObject({
+        provider: 'MOCK',
+        status: 'EXPIRED',
+        test: true,
+      });
       const level = await prisma.stockLevel.findFirstOrThrow({
         where: { variantId: item.variantId },
       });

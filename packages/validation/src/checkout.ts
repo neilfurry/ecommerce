@@ -15,6 +15,14 @@ import { z } from 'zod';
 import { decimalStringSchema, paginationQuerySchema } from './common';
 import { paginatedSchema } from './dev-tools';
 import { priceQuoteLineSchema } from './catalog';
+import {
+  ledgerEntrySchema,
+  orderNoteSchema,
+  orderPaymentSchema,
+  orderSettingsSchema,
+  sellerOrderFulfilmentSchema,
+  sellerOrderTabSchema,
+} from './fulfilment';
 
 /**
  * Contracts for checkout and orders (Phase 4). The client sends what to buy, where to and how
@@ -195,6 +203,8 @@ export const checkoutQuoteSchema = z.object({
       label: z.string(),
       /** For online methods: the order waits for payment until this many minutes pass. */
       paymentWindowMinutes: z.number().int().nullable(),
+      /** Why this order cannot use the method (COD limit, no bank account configured...). */
+      unavailableReason: z.string().nullable().default(null),
     }),
   ),
   totals: z.object({
@@ -271,6 +281,7 @@ export const sellerOrderSchema = z.object({
   vatAmount: z.string(),
   total: z.string(),
   customerNote: z.string().nullable(),
+  ...sellerOrderFulfilmentSchema.shape,
 });
 export type SellerOrderDto = z.infer<typeof sellerOrderSchema>;
 
@@ -290,6 +301,11 @@ export type OrderAddress = z.infer<typeof orderAddressSchema>;
 
 export const orderEventSchema = z.object({
   type: orderEventTypeSchema,
+  sellerOrderId: z.uuid().nullable(),
+  fromStatus: sellerOrderStatusSchema.nullable(),
+  toStatus: sellerOrderStatusSchema.nullable(),
+  /** CUSTOMER, SELLER, STAFF, COURIER, PROVIDER or SYSTEM. */
+  actorType: z.string(),
   note: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
@@ -336,6 +352,9 @@ export const orderDetailSchema = orderSummarySchema.extend({
   cancelReason: z.string().nullable(),
   /** Whether the customer can still cancel. */
   cancellable: z.boolean(),
+  payment: orderPaymentSchema,
+  /** Order-level notes visible to the viewer. */
+  notes: z.array(orderNoteSchema),
 });
 export type OrderDetail = z.infer<typeof orderDetailSchema>;
 
@@ -359,6 +378,9 @@ export const sellerOrderSummarySchema = z.object({
   commissionAmount: z.string(),
   store: z.object({ id: z.uuid(), name: z.string() }),
   seller: z.object({ id: z.uuid(), businessName: z.string() }),
+  /** The customer asked to cancel and is waiting for an answer. */
+  cancellationRequested: z.boolean(),
+  trackingNumber: z.string().nullable(),
   placedAt: z.iso.datetime(),
 });
 export type SellerOrderSummary = z.infer<typeof sellerOrderSummarySchema>;
@@ -366,6 +388,7 @@ export const sellerOrderListSchema = paginatedSchema(sellerOrderSummarySchema);
 export type SellerOrderList = z.infer<typeof sellerOrderListSchema>;
 export const sellerOrderListQuerySchema = paginationQuerySchema.extend({
   status: sellerOrderStatusSchema.optional(),
+  tab: sellerOrderTabSchema.optional(),
   search: z.string().trim().max(100).optional(),
   sellerId: z.uuid().optional(),
 });
@@ -399,6 +422,8 @@ export const sellerOrderDetailSchema = sellerOrderSchema.extend({
     }),
   ),
   events: z.array(orderEventSchema),
+  /** What this seller order adds to (or takes from) the seller's payable. */
+  ledger: z.array(ledgerEntrySchema),
   placedAt: z.iso.datetime(),
 });
 export type SellerOrderDetail = z.infer<typeof sellerOrderDetailSchema>;
@@ -622,6 +647,7 @@ export const platformSettingsSchema = z.object({
   checkout: checkoutSettingsSchema,
   shippingRates: shippingRatesSchema,
   commissionRules: z.array(commissionRuleSchema),
+  orders: orderSettingsSchema,
 });
 export type PlatformSettings = z.infer<typeof platformSettingsSchema>;
 

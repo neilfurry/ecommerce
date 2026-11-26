@@ -28,7 +28,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   QR_PH: 'QR Ph',
   BANK_TRANSFER: 'Bank transfer',
 };
-/** Methods paid online: the order waits for payment (gateways arrive in the payments phase). */
+/** Methods not paid on delivery: the order waits for payment (online or bank transfer). */
 export const ONLINE_PAYMENT_METHODS: readonly PaymentMethod[] = [
   'GCASH',
   'MAYA',
@@ -36,45 +36,6 @@ export const ONLINE_PAYMENT_METHODS: readonly PaymentMethod[] = [
   'QR_PH',
   'BANK_TRANSFER',
 ];
-
-export const PAYMENT_STATUSES = ['PENDING', 'PAY_ON_DELIVERY', 'PAID', 'VOIDED'] as const;
-export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
-export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  PENDING: 'Waiting for payment',
-  PAY_ON_DELIVERY: 'Pay on delivery',
-  PAID: 'Paid',
-  VOIDED: 'Not charged',
-};
-
-export const ORDER_STATUSES = ['AWAITING_PAYMENT', 'PLACED', 'CANCELLED'] as const;
-export type OrderStatus = (typeof ORDER_STATUSES)[number];
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  AWAITING_PAYMENT: 'Waiting for payment',
-  PLACED: 'Placed',
-  CANCELLED: 'Cancelled',
-};
-
-export const SELLER_ORDER_STATUSES = ['AWAITING_PAYMENT', 'PENDING', 'CANCELLED'] as const;
-export type SellerOrderStatus = (typeof SELLER_ORDER_STATUSES)[number];
-export const SELLER_ORDER_STATUS_LABELS: Record<SellerOrderStatus, string> = {
-  AWAITING_PAYMENT: 'Waiting for payment',
-  PENDING: 'To process',
-  CANCELLED: 'Cancelled',
-};
-
-export const ORDER_EVENT_TYPES = [
-  'PLACED',
-  'AWAITING_PAYMENT',
-  'CANCELLED_BY_CUSTOMER',
-  'PAYMENT_EXPIRED',
-] as const;
-export type OrderEventType = (typeof ORDER_EVENT_TYPES)[number];
-export const ORDER_EVENT_LABELS: Record<OrderEventType, string> = {
-  PLACED: 'Order placed',
-  AWAITING_PAYMENT: 'Waiting for payment',
-  CANCELLED_BY_CUSTOMER: 'Cancelled by the customer',
-  PAYMENT_EXPIRED: 'Cancelled: not paid in time',
-};
 
 export const SHIPPING_METHODS = ['STANDARD', 'EXPRESS', 'SAME_DAY'] as const;
 export type ShippingMethod = (typeof SHIPPING_METHODS)[number];

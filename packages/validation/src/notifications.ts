@@ -114,6 +114,21 @@ export const orderCancelledJobSchema = z.object({
   orderNumber: z.string(),
   reason: z.string(),
   link: z.url(),
+  /** True when money was already received; the email then promises a refund instead of "not charged". */
+  moneyReceived: z.boolean().optional(),
+});
+
+/**
+ * Generic order update (payment confirmed, shipped, delivered, return decided, refund sent...).
+ * One template covers the many Phase 5 notifications; the API writes the title and message.
+ */
+export const orderUpdateJobSchema = z.object({
+  ...recipient,
+  orderNumber: z.string(),
+  title: z.string().min(1).max(120),
+  message: z.string().min(1).max(1000),
+  link: z.url(),
+  actionLabel: z.string().max(40).optional(),
 });
 
 export const smsOtpJobSchema = z.object({
@@ -135,3 +150,4 @@ export type LowStockJob = z.infer<typeof lowStockJobSchema>;
 export type OrderPlacedJob = z.infer<typeof orderPlacedJobSchema>;
 export type SellerNewOrderJob = z.infer<typeof sellerNewOrderJobSchema>;
 export type OrderCancelledJob = z.infer<typeof orderCancelledJobSchema>;
+export type OrderUpdateJob = z.infer<typeof orderUpdateJobSchema>;

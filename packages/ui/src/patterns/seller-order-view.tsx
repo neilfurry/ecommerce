@@ -14,9 +14,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/card';
 import { Separator } from '../components/separator';
 import { formatMoney } from '../lib/money';
 
-const VARIANTS: Record<SellerOrderStatus, 'warning' | 'success' | 'secondary'> = {
+const VARIANTS: Record<SellerOrderStatus, 'warning' | 'success' | 'secondary' | 'outline' | 'destructive'> = {
   AWAITING_PAYMENT: 'warning',
-  PENDING: 'success',
+  PENDING: 'warning',
+  PROCESSING: 'outline',
+  READY_FOR_PICKUP: 'outline',
+  SHIPPED: 'outline',
+  DELIVERY_FAILED: 'destructive',
+  RETURNING_TO_SELLER: 'destructive',
+  RETURNED_TO_SELLER: 'secondary',
+  DELIVERED: 'success',
+  COMPLETED: 'success',
   CANCELLED: 'secondary',
 };
 

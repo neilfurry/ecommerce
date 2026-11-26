@@ -13,6 +13,16 @@ import {
   ReleaseExpiredReservationsHandler,
   ReservationSweepScheduler,
 } from './jobs/reservation-sweep';
+import {
+  CompleteDeliveredHandler,
+  EscalateOverdueReturnsHandler,
+  FulfilmentSweepScheduler,
+} from './jobs/fulfilment-sweep';
+import {
+  PaymentReconciler,
+  PaymentReconciliationScheduler,
+  ReconcileOpenPaymentsHandler,
+} from './jobs/payment-reconciliation';
 import { SmsOtpHandler } from './jobs/sms-otp.handler';
 import { ExpireUnpaidOrdersHandler, UnpaidOrderSweepScheduler } from './jobs/unpaid-order-sweep';
 import { TRANSACTIONAL_EMAIL_HANDLERS } from './jobs/transactional-email.handlers';
@@ -82,6 +92,12 @@ import { smsProvider } from './sms/sms.module';
     ReservationSweepScheduler,
     ExpireUnpaidOrdersHandler,
     UnpaidOrderSweepScheduler,
+    PaymentReconciler,
+    ReconcileOpenPaymentsHandler,
+    PaymentReconciliationScheduler,
+    CompleteDeliveredHandler,
+    EscalateOverdueReturnsHandler,
+    FulfilmentSweepScheduler,
     ...DOMAIN_PROCESSORS,
   ],
 })

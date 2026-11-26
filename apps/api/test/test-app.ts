@@ -7,7 +7,10 @@ import { AppConfig } from '../src/config/app-config';
 /** Boots the full application with the production HTTP pipeline. */
 export async function createTestApp(): Promise<NestExpressApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    bufferLogs: true,
+    rawBody: true,
+  });
   configureApp(app, app.get(AppConfig));
   await app.init();
   return app;

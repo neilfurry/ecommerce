@@ -293,6 +293,8 @@ describe('Seller employees (e2e)', () => {
         'seller.pricing.manage',
         'seller.inventory.manage',
         'seller.orders.read',
+        'seller.orders.manage',
+        'seller.returns.manage',
         'seller.marketing.manage',
       ].sort(),
     );

@@ -140,6 +140,7 @@ export const EMAIL_JOBS = {
   ORDER_PLACED: 'email.order-placed',
   SELLER_NEW_ORDER: 'email.seller-new-order',
   ORDER_CANCELLED: 'email.order-cancelled',
+  ORDER_UPDATE: 'email.order-update',
 } as const;
 
 export const NOTIFICATION_JOBS = {
@@ -152,7 +153,22 @@ export const ORDER_JOBS = {
   RELEASE_EXPIRED_RESERVATIONS: 'order-processing.release-expired-reservations',
   /** Periodic: cancels orders waiting for an online payment past their deadline. */
   EXPIRE_UNPAID_ORDERS: 'order-processing.expire-unpaid-orders',
+  /** Periodic: delivered seller orders past the return window become COMPLETED. */
+  COMPLETE_DELIVERED: 'order-processing.complete-delivered',
+  /** Periodic: return requests the seller did not answer in time go to the marketplace. */
+  ESCALATE_OVERDUE_RETURNS: 'order-processing.escalate-overdue-returns',
 } as const;
+
+export const PAYMENT_JOBS = {
+  /** Periodic: asks the provider about open online payments (missed or delayed webhooks). */
+  RECONCILE_OPEN_PAYMENTS: 'payment-events.reconcile-open-payments',
+} as const;
+
+export const FULFILMENT_SWEEP_SCHEDULER_ID = 'order-processing:fulfilment-sweep';
+export const FULFILMENT_SWEEP_INTERVAL_SECONDS = 3600;
+export const RETURN_ESCALATION_SCHEDULER_ID = 'order-processing:return-escalation';
+export const PAYMENT_RECONCILIATION_SCHEDULER_ID = 'payment-events:reconcile-open-payments';
+export const PAYMENT_RECONCILIATION_INTERVAL_SECONDS = 300;
 
 export const DEAD_LETTER_JOBS = {
   ENTRY: 'dead-letter.entry',

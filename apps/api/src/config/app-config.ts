@@ -25,6 +25,12 @@ export class AppConfig {
   readonly redis: { url: string };
   readonly devToolsEnabled: boolean;
   readonly shippingProvider: ApiEnv['SHIPPING_PROVIDER'];
+  readonly payments: {
+    provider: ApiEnv['PAYMENT_PROVIDER'];
+    paymongo: { secretKey: string; webhookSecret: string; checkoutVersion: 'v1' | 'v2' } | null;
+    mockWebhookSecret: string;
+    apiPublicUrl: string;
+  };
   readonly auth: {
     jwtSecret: string;
     otpSecret: string;
@@ -70,6 +76,19 @@ export class AppConfig {
     this.redis = { url: env.REDIS_URL };
     this.devToolsEnabled = env.DEV_TOOLS_ENABLED;
     this.shippingProvider = env.SHIPPING_PROVIDER;
+    this.payments = {
+      provider: env.PAYMENT_PROVIDER,
+      paymongo:
+        env.PAYMONGO_SECRET_KEY && env.PAYMONGO_WEBHOOK_SECRET
+          ? {
+              secretKey: env.PAYMONGO_SECRET_KEY,
+              webhookSecret: env.PAYMONGO_WEBHOOK_SECRET,
+              checkoutVersion: env.PAYMONGO_CHECKOUT_VERSION,
+            }
+          : null,
+      mockWebhookSecret: env.MOCK_WEBHOOK_SECRET,
+      apiPublicUrl: env.API_PUBLIC_URL,
+    };
     this.auth = {
       jwtSecret: env.AUTH_JWT_SECRET,
       otpSecret: env.AUTH_OTP_SECRET,

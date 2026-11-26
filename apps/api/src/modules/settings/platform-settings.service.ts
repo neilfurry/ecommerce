@@ -1,12 +1,22 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@marketplace/database';
-import { type AuthenticatedUser, PAYMENT_METHODS } from '@marketplace/shared-types';
+import {
+  type AuthenticatedUser,
+  CARRIERS,
+  DEFAULT_BANK_TRANSFER_WINDOW_HOURS,
+  DEFAULT_RETURN_RESPONSE_DAYS,
+  DEFAULT_RETURN_WINDOW_DAYS,
+  PAYMENT_METHODS,
+} from '@marketplace/shared-types';
 import {
   type CheckoutSettings,
   type CheckoutSettingsInput,
   type CommissionRuleDto,
   type CommissionRuleInput,
   checkoutSettingsSchema,
+  type OrderSettings,
+  type OrderSettingsInput,
+  orderSettingsSchema,
   type PlatformSettings,
   type ShippingRates,
   shippingRatesSchema,
@@ -37,7 +47,31 @@ export const DEFAULT_SHIPPING_RATES: ShippingRates = {
   sameDayFee: '180.00',
 };
 
-const KEYS = { checkout: 'checkout', shippingRates: 'shipping_rates' } as const;
+/** Orders, payments, cash on delivery, returns and couriers. */
+export const DEFAULT_ORDER_SETTINGS: OrderSettings = {
+  bankTransfer: {
+    windowHours: DEFAULT_BANK_TRANSFER_WINDOW_HOURS,
+    // No account until finance enters one: bank transfer is not offered without it.
+    accounts: [],
+    instructions:
+      'Transfer the exact amount and put the payment reference in the transfer notes, then upload your receipt.',
+  },
+  cod: { maxOrderAmount: '50000.00', maxFailedDeliveries: 2 },
+  returns: {
+    windowDays: DEFAULT_RETURN_WINDOW_DAYS,
+    sellerResponseDays: DEFAULT_RETURN_RESPONSE_DAYS,
+  },
+  // The mock courier is allowed outside production only (checked when booking).
+  carriers: Object.fromEntries(
+    CARRIERS.map((c) => [c, c === 'MOCK' || c === 'SELF']),
+  ) as OrderSettings['carriers'],
+};
+
+const KEYS = {
+  checkout: 'checkout',
+  shippingRates: 'shipping_rates',
+  orders: 'orders',
+} as const;
 
 /** A commission rule and the rate that applies, for a category (or its nearest ancestor). */
 export interface ResolvedCommission {
@@ -72,11 +106,48 @@ export class PlatformSettingsService {
     return parsed?.success ? parsed.data : DEFAULT_SHIPPING_RATES;
   }
 
+  async orders(db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<OrderSettings> {
+    const row = await db.platformSetting.findUnique({ where: { key: KEYS.orders } });
+    const parsed = row ? orderSettingsSchema.safeParse(row.value) : null;
+    if (!parsed?.success) return DEFAULT_ORDER_SETTINGS;
+    return {
+      ...parsed.data,
+      carriers: { ...DEFAULT_ORDER_SETTINGS.carriers, ...parsed.data.carriers },
+    };
+  }
+
+  /**
+   * Saves order settings. `carrierAvailable` says which couriers can actually book
+   * shipments; enabling one that cannot is refused.
+   */
+  async saveOrders(
+    user: AuthenticatedUser,
+    input: OrderSettingsInput,
+    context: RequestContext,
+    carrierAvailable: (carrier: string) => boolean,
+  ): Promise<OrderSettings> {
+    const value = orderSettingsSchema.parse(input);
+    const refused = Object.entries(value.carriers)
+      .filter(([carrier, enabled]) => enabled && !carrierAvailable(carrier))
+      .map(([carrier]) => carrier);
+    if (refused.length > 0) {
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'VALIDATION_FAILED',
+        `These couriers are not set up yet: ${refused.join(', ')}.`,
+        refused.map((carrier) => ({ path: `carriers.${carrier}`, message: 'Not set up yet' })),
+      );
+    }
+    await this.save(KEYS.orders, value, user, context);
+    return value;
+  }
+
   async all(): Promise<PlatformSettings> {
     return {
       checkout: await this.checkout(),
       shippingRates: await this.shippingRates(),
       commissionRules: await this.commissionRules(),
+      orders: await this.orders(),
     };
   }
 

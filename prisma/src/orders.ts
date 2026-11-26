@@ -1,3 +1,9 @@
+import {
+  FINAL_SELLER_ORDER_STATUSES,
+  type OrderActor,
+  type SellerOrderStatus,
+} from '@marketplace/shared-types';
+import { cancelSellerOrderInTx } from './fulfilment';
 import type { Prisma, PrismaClient } from './generated/prisma/client';
 
 type Tx = Prisma.TransactionClient;
@@ -7,19 +13,27 @@ export interface CancelledOrder {
   orderNumber: string;
   customerEmail: string;
   customerFirstName: string;
+  /** Money was received: the caller must refund it. */
+  moneyReceived: boolean;
+  /** Provider checkouts to expire (best effort). */
+  closedPayments: { provider: string; providerReference: string }[];
 }
 
 /**
- * Cancels an order and undoes everything placing it did, inside the caller's transaction:
+ * Cancels a whole order inside the caller's transaction:
  *
- *  - the order and its seller suborders become CANCELLED (unpaid payments are voided);
- *  - stock held for its items is given back (reservations RELEASED, reserved quantity down);
- *  - coupon redemptions are released (used_count down);
- *  - flash sale quantities and products' sold counts are given back;
- *  - an order event records why.
+ *  - every seller order that is not final is cancelled through the state machine (so a seller
+ *    order the seller already started makes the whole cancellation fail), giving back its
+ *    stock, flash sale units, sold counts and seller coupon use;
+ *  - the remaining (marketplace) coupon uses are released;
+ *  - open payment attempts are closed (EXPIRED or CANCELLED); the caller expires them at the
+ *    provider with the returned references;
+ *  - the order becomes CANCELLED with the reason (payment VOIDED unless money was received:
+ *    then the caller refunds it).
  *
- * Only orders in one of `fromStatuses` are cancelled (compare-and-set, so two cancellations
- * can never both succeed). Returns null when the order was not in such a status.
+ * Only orders in one of `fromStatuses` are cancelled; the order row is locked first, so two
+ * cancellations (or a cancellation and a payment) never interleave. Returns null when the order
+ * was not in such a status.
  */
 export async function cancelOrderInTx(
   tx: Tx,
@@ -27,44 +41,44 @@ export async function cancelOrderInTx(
     orderId: string;
     fromStatuses: ('AWAITING_PAYMENT' | 'PLACED')[];
     reason: string;
-    eventType: 'CANCELLED_BY_CUSTOMER' | 'PAYMENT_EXPIRED';
+    eventType: 'CANCELLED_BY_CUSTOMER' | 'CANCELLED_BY_STAFF' | 'PAYMENT_EXPIRED';
     actorId: string | null;
     now?: Date;
   },
 ): Promise<CancelledOrder | null> {
   const now = input.now ?? new Date();
   const statuses = input.fromStatuses as string[];
-  const updated = await tx.$queryRaw<{ id: string; order_number: string; customer_id: string }[]>`
-    UPDATE "orders"
-    SET "status" = 'CANCELLED',
-        "payment_status" = CASE WHEN "payment_status" = 'PAID' THEN "payment_status" ELSE 'VOIDED' END,
-        "cancelled_at" = ${now}, "cancel_reason" = ${input.reason},
-        "cancelled_by_id" = ${input.actorId}::uuid, "updated_at" = ${now}
+  const locked = await tx.$queryRaw<
+    { id: string; order_number: string; customer_id: string; payment_status: string }[]
+  >`
+    SELECT "id", "order_number", "customer_id", "payment_status"::text FROM "orders"
     WHERE "id" = ${input.orderId}::uuid AND "status"::text = ANY(${statuses}::text[])
-    RETURNING "id", "order_number", "customer_id"`;
-  const order = updated[0];
+    FOR UPDATE`;
+  const order = locked[0];
   if (!order) return null;
+  const actor: OrderActor =
+    input.eventType === 'PAYMENT_EXPIRED'
+      ? 'SYSTEM'
+      : input.eventType === 'CANCELLED_BY_STAFF'
+        ? 'STAFF'
+        : 'CUSTOMER';
 
-  await tx.sellerOrder.updateMany({
+  const sellerOrders = await tx.sellerOrder.findMany({
     where: { orderId: order.id },
-    data: { status: 'CANCELLED', cancelledAt: now },
+    select: { id: true, status: true },
+    orderBy: { number: 'asc' },
   });
-
-  // Stock held for the order's items goes back, in one statement per stock row.
-  await tx.$executeRaw`
-    WITH released AS (
-      UPDATE "stock_reservations" r
-      SET "status" = 'RELEASED', "released_at" = ${now}, "updated_at" = ${now}
-      FROM "order_items" i
-      WHERE r."order_item_id" = i."id" AND i."order_id" = ${order.id}::uuid AND r."status" = 'ACTIVE'
-      RETURNING r."stock_level_id", r."quantity"
-    ),
-    totals AS (
-      SELECT "stock_level_id", SUM("quantity")::int AS "quantity" FROM released GROUP BY "stock_level_id"
-    )
-    UPDATE "stock_levels" s
-    SET "reserved_quantity" = s."reserved_quantity" - totals."quantity", "updated_at" = ${now}
-    FROM totals WHERE s."id" = totals."stock_level_id"`;
+  for (const so of sellerOrders) {
+    if (FINAL_SELLER_ORDER_STATUSES.includes(so.status as SellerOrderStatus)) continue;
+    await cancelSellerOrderInTx(tx, {
+      sellerOrderId: so.id,
+      actor,
+      actorId: input.actorId,
+      reason: input.reason,
+      eventType: input.eventType,
+      now,
+    });
+  }
 
   await tx.$executeRaw`
     WITH released AS (
@@ -76,28 +90,45 @@ export async function cancelOrderInTx(
     UPDATE "coupons" c SET "used_count" = c."used_count" - totals."uses", "updated_at" = ${now}
     FROM totals WHERE c."id" = totals."coupon_id"`;
 
-  await tx.$executeRaw`
-    WITH totals AS (
-      SELECT "flash_sale_item_id" AS "id", SUM("quantity")::int AS "quantity"
-      FROM "order_items" WHERE "order_id" = ${order.id}::uuid AND "flash_sale_item_id" IS NOT NULL
-      GROUP BY "flash_sale_item_id"
-    )
-    UPDATE "flash_sale_items" f
-    SET "sold_quantity" = GREATEST(f."sold_quantity" - totals."quantity", 0), "updated_at" = ${now}
-    FROM totals WHERE f."id" = totals."id"`;
+  const closed = await tx.payment.findMany({
+    where: { orderId: order.id, status: { in: ['CREATED', 'PENDING'] } },
+    select: { id: true, provider: true, providerReference: true, status: true },
+  });
+  const closedStatus = input.eventType === 'PAYMENT_EXPIRED' ? 'EXPIRED' : 'CANCELLED';
+  for (const p of closed) {
+    await tx.payment.update({ where: { id: p.id }, data: { status: closedStatus } });
+    await tx.paymentEvent.create({
+      data: {
+        paymentId: p.id,
+        type: closedStatus,
+        fromStatus: p.status,
+        toStatus: closedStatus,
+        data: { reason: input.reason },
+        actorId: input.actorId,
+        createdAt: now,
+      },
+    });
+  }
 
-  await tx.$executeRaw`
-    WITH totals AS (
-      SELECT "product_id", SUM("quantity")::int AS "quantity"
-      FROM "order_items" WHERE "order_id" = ${order.id}::uuid GROUP BY "product_id"
-    )
-    UPDATE "products" p SET "sold_count" = GREATEST(p."sold_count" - totals."quantity", 0)
-    FROM totals WHERE p."id" = totals."product_id"`;
-
+  const moneyReceived = ['PAID', 'PARTIALLY_PAID', 'PARTIALLY_REFUNDED'].includes(
+    order.payment_status,
+  );
+  await tx.order.update({
+    where: { id: order.id },
+    data: {
+      status: 'CANCELLED',
+      ...(moneyReceived ? {} : { paymentStatus: 'VOIDED' }),
+      paymentDueAt: null,
+      cancelledAt: now,
+      cancelReason: input.reason,
+      cancelledById: input.actorId,
+    },
+  });
   await tx.orderEvent.create({
     data: {
       orderId: order.id,
       type: input.eventType,
+      actorType: actor,
       note: input.reason,
       actorId: input.actorId,
       createdAt: now,
@@ -113,6 +144,10 @@ export async function cancelOrderInTx(
     orderNumber: order.order_number,
     customerEmail: customer.email,
     customerFirstName: customer.firstName,
+    moneyReceived,
+    closedPayments: closed
+      .filter((p) => p.providerReference !== null)
+      .map((p) => ({ provider: p.provider, providerReference: p.providerReference! })),
   };
 }
 
@@ -129,6 +164,9 @@ export async function expireUnpaidOrders(
   const due = await db.$queryRaw<{ id: string }[]>`
     SELECT "id" FROM "orders"
     WHERE "status" = 'AWAITING_PAYMENT' AND "payment_due_at" <= ${now}
+      AND NOT EXISTS (
+        SELECT 1 FROM "bank_transfer_proofs" bp JOIN "payments" p ON p."id" = bp."payment_id"
+        WHERE p."order_id" = "orders"."id" AND bp."status" = 'SUBMITTED')
     ORDER BY "payment_due_at" LIMIT ${options.limit ?? 100}::int`;
   const cancelled: CancelledOrder[] = [];
   for (const { id } of due) {
@@ -137,6 +175,14 @@ export async function expireUnpaidOrders(
         SELECT "id" FROM "orders" WHERE "id" = ${id}::uuid AND "status" = 'AWAITING_PAYMENT'
         FOR UPDATE SKIP LOCKED`;
       if (locked.length === 0) return null;
+      // A payment recorded meanwhile wins: only orders with no paid attempt expire.
+      const paid = await tx.payment.count({ where: { orderId: id, status: 'PAID' } });
+      if (paid > 0) return null;
+      // A bank transfer proof waiting for finance keeps the order open until it is reviewed.
+      const proofs = await tx.bankTransferProof.count({
+        where: { payment: { orderId: id }, status: 'SUBMITTED' },
+      });
+      if (proofs > 0) return null;
       return cancelOrderInTx(tx, {
         orderId: id,
         fromStatuses: ['AWAITING_PAYMENT'],

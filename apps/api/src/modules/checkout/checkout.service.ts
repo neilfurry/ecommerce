@@ -22,6 +22,7 @@ import { ReservationsService } from '../inventory/reservations.service';
 import { areaName } from '../locations/locations.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
+import { PaymentsService } from '../orders/payments/payments.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { type CheckoutPlan, CheckoutPricingService } from './checkout-pricing.service';
 import { D, ZERO } from './money';
@@ -59,6 +60,7 @@ export class CheckoutService {
     private readonly inventory: InventoryService,
     private readonly shipping: ShippingService,
     private readonly orders: OrdersService,
+    private readonly payments: PaymentsService,
     private readonly notifications: NotificationsService,
     private readonly config: AppConfig,
   ) {}
@@ -77,7 +79,12 @@ export class CheckoutService {
     });
     if (previous) return { order: await this.orders.getMine(user, previous.id), created: false };
 
-    let result: { orderId: string; plan: CheckoutPlan; stockLevelIds: string[] };
+    let result: {
+      orderId: string;
+      plan: CheckoutPlan;
+      stockLevelIds: string[];
+      payment: { paymentId: string; online: boolean };
+    };
     try {
       result = await this.prisma.$transaction(
         (tx) => this.placeInTx(tx, user, input, idempotencyKey),
@@ -98,6 +105,9 @@ export class CheckoutService {
       throw error;
     }
     await this.inventory.checkLowStock(result.stockLevelIds);
+    // The provider's hosted checkout is opened after the order is safely stored; if the
+    // provider is down the order waits and the customer presses "Pay now" again.
+    if (result.payment.online) await this.payments.openCheckout(result.payment.paymentId);
     const order = await this.orders.getMine(user, result.orderId);
     await this.notify(user, order, result.plan).catch((error: Error) =>
       this.logger.warn(`Order ${order.orderNumber}: could not queue emails (${error.message})`),
@@ -135,9 +145,12 @@ export class CheckoutService {
     const address = plan.address!;
     const online = ONLINE_PAYMENT_METHODS.includes(plan.paymentMethod);
     const now = new Date();
-    const paymentDueAt = online
-      ? new Date(now.getTime() + plan.settings.paymentWindowMinutes * 60_000)
-      : null;
+    // Bank transfers get hours (configurable); online payments get minutes.
+    const windowMs =
+      plan.paymentMethod === 'BANK_TRANSFER'
+        ? plan.orderSettings.bankTransfer.windowHours * 3_600_000
+        : plan.settings.paymentWindowMinutes * 60_000;
+    const paymentDueAt = online ? new Date(now.getTime() + windowMs) : null;
     const orderNumber = newOrderNumber(now);
     const place = { region: address.region, province: address.province };
     const shippingAddress = {
@@ -203,6 +216,7 @@ export class CheckoutService {
     });
 
     const holds: { variantId: string; quantity: number; orderItemId: string }[] = [];
+    const sellerOrders: { id: string; total: Prisma.Decimal }[] = [];
     for (const [index, group] of plan.groups.entries()) {
       const sellerOrder = await tx.sellerOrder.create({
         data: {
@@ -250,6 +264,7 @@ export class CheckoutService {
           },
         },
       });
+      sellerOrders.push({ id: sellerOrder.id, total: sellerOrder.total });
       for (const line of group.lines) {
         const item = await tx.orderItem.create({
           data: {
@@ -358,9 +373,11 @@ export class CheckoutService {
     if (plan.cartItemIds.length > 0) {
       await tx.cartItem.deleteMany({ where: { id: { in: plan.cartItemIds }, userId: user.id } });
     }
+    const payment = await this.payments.createForOrderInTx(tx, order, sellerOrders);
     return {
       orderId: order.id,
       plan,
+      payment,
       stockLevelIds: [...new Set(reserved.map((r) => r.stockLevelId))],
     };
   }
