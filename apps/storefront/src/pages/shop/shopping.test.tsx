@@ -154,10 +154,7 @@ describe('checkout', () => {
 
   it('quotes again once the browser cart has been merged after sign-in', async () => {
     // Signed in with a browser cart still to merge: the first quote sees an empty account cart.
-    window.localStorage.setItem(
-      GUEST_KEY,
-      JSON.stringify([{ variantId: LAPTOP_512, quantity: 1, savedForLater: false }]),
-    );
+    guestCart.add({ variantId: LAPTOP_512, quantity: 1 });
     let merged = false;
     let releaseMerge = () => undefined as void;
     const mergeDone = new Promise<void>((resolve) => (releaseMerge = resolve));
