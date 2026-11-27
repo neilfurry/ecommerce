@@ -1,4 +1,5 @@
 import { Prisma } from '@marketplace/database';
+import { carrierLabel } from '../shipping/mock-shipping.provider';
 import {
   canTransition,
   nextStatuses,
@@ -313,7 +314,7 @@ export function sellerOrderDto(
     shipping: g
       ? {
           method: g.method,
-          carrier: g.provider === 'mock' ? 'Mock Express' : g.provider,
+          carrier: carrierLabel(g.provider),
           serviceName: g.serviceName,
           origin: origin?.label ?? '',
           weightGrams: g.weightGrams,

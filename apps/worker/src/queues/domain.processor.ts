@@ -5,6 +5,8 @@ import { type Job, UnrecoverableError } from 'bullmq';
 import type { WorkerConfig } from '../config/worker-config';
 import { type DeadLetterService, isFinalFailure } from './dead-letter.service';
 import type { JobHandler } from './job-handler';
+import { reportError } from '../observability/error-reporting';
+import { jobDuration, jobFailures } from '../observability/metrics';
 
 /**
  * Base class for every queue processor: routes jobs to handlers by name, applies the
@@ -32,13 +34,16 @@ export abstract class DomainProcessor extends WorkerHost implements OnModuleInit
 
     this.worker.on('failed', (job, error) => {
       if (!job) return;
-      if (!isFinalFailure(job, error)) {
+      const final = isFinalFailure(job, error);
+      jobFailures.inc({ queue: this.queueName, job: job.name, final: String(final) });
+      if (!final) {
         this.logger.warn(
           `Job ${job.id} (${job.name}) failed attempt ${job.attemptsMade}/${job.opts.attempts ?? 1}; ` +
             `retrying with backoff: ${error.message}`,
         );
         return;
       }
+      reportError(error, { queue: this.queueName, job: job.name, jobId: job.id });
       this.deadLetters.record(this.queueName, job, error).catch((recordError: unknown) => {
         this.logger.error(
           `Could not dead-letter job ${job.id}: ${(recordError as Error).message}`,
@@ -59,6 +64,14 @@ export abstract class DomainProcessor extends WorkerHost implements OnModuleInit
       // Retrying cannot help: no code exists for this job yet.
       throw new UnrecoverableError(`No handler for job "${job.name}" on queue "${this.queueName}"`);
     }
-    return handler.handle(job);
+    const end = jobDuration.startTimer({ queue: this.queueName, job: job.name });
+    try {
+      const result = await handler.handle(job);
+      end({ result: 'completed' });
+      return result;
+    } catch (error) {
+      end({ result: 'failed' });
+      throw error;
+    }
   }
 }

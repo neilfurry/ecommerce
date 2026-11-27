@@ -1,3 +1,4 @@
+import { webhookRejections } from '../../../infrastructure/observability/metrics';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   applyPaymentFailedInTx,
@@ -426,6 +427,7 @@ export class PaymentsService {
     } catch (error) {
       if (error instanceof WebhookSignatureError) {
         this.logger.warn(`${provider} webhook refused: ${error.message}`);
+        webhookRejections.inc({ provider });
         throw new ApiException(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Invalid signature.');
       }
       throw error;

@@ -13,6 +13,11 @@ export class AppConfig {
   readonly nodeEnv: ApiEnv['NODE_ENV'];
   readonly isProduction: boolean;
   readonly version: string;
+  readonly observability: {
+    metricsPort: number;
+    sentryDsn: string | undefined;
+    sentryEnvironment: string;
+  };
   readonly http: {
     port: number;
     corsOrigins: string[];
@@ -69,6 +74,11 @@ export class AppConfig {
     this.nodeEnv = env.NODE_ENV;
     this.isProduction = env.NODE_ENV === 'production';
     this.version = env.APP_VERSION ?? readPackageVersion();
+    this.observability = {
+      metricsPort: env.METRICS_PORT,
+      sentryDsn: env.SENTRY_DSN,
+      sentryEnvironment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,
+    };
     this.http = {
       port: env.API_PORT,
       corsOrigins: env.CORS_ORIGINS,
