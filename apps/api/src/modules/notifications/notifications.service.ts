@@ -93,6 +93,21 @@ export class NotificationsService {
     });
   }
 
+  /**
+   * Asks the worker to deliver pending notification events now (they are written to the
+   * outbox in the same transaction as the change; the worker also sweeps every few seconds).
+   * Bursts collapse into one job.
+   */
+  async kickDispatch(): Promise<void> {
+    await this.safely('notification dispatch', () =>
+      this.notificationsQueue.add(
+        NOTIFICATION_JOBS.DISPATCH_PENDING,
+        {},
+        { jobId: 'dispatch-pending-kick', removeOnComplete: true, removeOnFail: true, attempts: 1 },
+      ),
+    );
+  }
+
   /** Enqueue after the database commit; a failure is logged, never surfaced to the user. */
   async safely(label: string, enqueue: () => Promise<unknown>): Promise<void> {
     try {

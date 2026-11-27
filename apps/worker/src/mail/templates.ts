@@ -319,3 +319,32 @@ export function orderUpdateTemplate(job: OrderUpdateJob): RenderedEmail {
 export function otpSmsBody(code: string, expiresInMinutes: number): string {
   return `${code} is your ${APP_NAME} code. It expires in ${expiresInMinutes} min. Never share this code with anyone, including our staff.`;
 }
+
+/**
+ * Fills {{name}} placeholders of an administrator-edited template. Unknown names become empty;
+ * values are inserted as text (the email layout escapes them for HTML).
+ */
+export function fillTemplate(template: string, data: Record<string, unknown>): string {
+  return template.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_match, name: string) => {
+    const value = data[name];
+    return value === null || value === undefined ? '' : String(value);
+  });
+}
+
+/** An email from a notification template: paragraphs split on blank lines, optional button. */
+export function notificationEmail(
+  subject: string,
+  body: string,
+  link: string | null,
+): RenderedEmail {
+  const blocks = body
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  const [greeting, ...paragraphs] = blocks.length > 1 ? blocks : ['Hello,', ...blocks];
+  return render(subject, {
+    greeting: greeting!,
+    paragraphs,
+    ...(link ? { action: { label: 'Open', url: link } } : {}),
+  });
+}

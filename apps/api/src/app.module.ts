@@ -6,12 +6,14 @@ import { QueueModule } from './infrastructure/queue/queue.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { ThrottlingModule } from './infrastructure/throttling/throttling.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ProductsModule } from './modules/products/products.module';
 import { DevToolsModule } from './modules/dev-tools/dev-tools.module';
+import { EngagementModule } from './modules/engagement/engagement.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
@@ -31,6 +33,7 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { StorefrontModule } from './modules/storefront/storefront.module';
+import { SupportModule } from './modules/support/support.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 
 /**
@@ -66,6 +69,9 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
     // Storefront, cart and checkout (Phase 4)
     SettingsModule,
     FinanceModule,
+    EngagementModule,
+    SupportModule,
+    AnalyticsModule,
     LocationsModule,
     AddressesModule,
     StorefrontModule,

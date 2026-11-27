@@ -2,6 +2,10 @@ import type { Permission } from '@marketplace/shared-types';
 import type { SidebarNavItem, SidebarNavSection } from '@marketplace/ui';
 import {
   ActivityIcon,
+  ChartColumnIcon,
+  LifeBuoyIcon,
+  MegaphoneIcon,
+  StarIcon,
   ArrowLeftRightIcon,
   BadgeCheckIcon,
   BoxesIcon,
@@ -75,6 +79,20 @@ export function buildNavSections(permissions: readonly Permission[]): SidebarNav
         { to: '/returns', label: 'Returns', icon: RotateCcwIcon, permission: 'seller.orders.read' },
         { to: '/marketing/coupons', label: 'Coupons', icon: TicketPercentIcon },
         { to: '/marketing/flash-sales', label: 'Flash sales', icon: ZapIcon },
+        { to: '/marketing/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
+        { to: '/reviews', label: 'Reviews and ratings', icon: StarIcon },
+        {
+          to: '/support',
+          label: 'Customer questions',
+          icon: LifeBuoyIcon,
+          permission: 'seller.support.manage',
+        },
+        {
+          to: '/reports',
+          label: 'Reports',
+          icon: ChartColumnIcon,
+          permission: 'seller.reports.read',
+        },
       ]),
     },
     {

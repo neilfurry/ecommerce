@@ -1,12 +1,15 @@
 import {
   BUYER_TYPES,
+  CAMPAIGN_TYPES,
   COUPON_SCOPES,
   COUPON_TYPES,
   MAX_LINE_QUANTITY,
+  MAX_PROMOTION_TARGETS,
   ORDER_EVENT_TYPES,
   ORDER_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
+  PROMOTION_APPLIES_TO,
   PROMOTION_STATUSES,
   SELLER_ORDER_STATUSES,
   SHIPPING_METHODS,
@@ -47,6 +50,8 @@ export const shippingMethodSchema = z.enum(SHIPPING_METHODS);
 export const buyerTypeSchema = z.enum(BUYER_TYPES);
 export const couponScopeSchema = z.enum(COUPON_SCOPES);
 export const couponTypeSchema = z.enum(COUPON_TYPES);
+export const campaignTypeSchema = z.enum(CAMPAIGN_TYPES);
+export const promotionAppliesToSchema = z.enum(PROMOTION_APPLIES_TO);
 export const orderEventTypeSchema = z.enum(ORDER_EVENT_TYPES);
 
 export const couponCodeSchema = z
@@ -77,6 +82,15 @@ export const checkoutRequestSchema = z
     /** At most one marketplace coupon and one coupon per seller; the server sorts them out. */
     couponCodes: z.array(couponCodeSchema).max(20).default([]),
     paymentMethod: paymentMethodSchema.default('COD'),
+    /** Loyalty points to spend (the server caps it at the balance and the redeem limit). */
+    pointsToRedeem: z.coerce.number().int().min(0).max(10_000_000).default(0),
+    /** Affiliate code from an affiliate link (stored by the storefront for the cookie window). */
+    affiliateCode: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9]{3,20}$/, 'Letters and numbers only')
+      .nullable()
+      .optional(),
     notes: z
       .array(z.object({ sellerId: z.uuid(), note: optionalText(500) }))
       .max(50)
@@ -107,6 +121,15 @@ export const placeOrderSchema = z
       .default([]),
     couponCodes: z.array(couponCodeSchema).max(20).default([]),
     paymentMethod: paymentMethodSchema,
+    /** Loyalty points to spend (the server caps it at the balance and the redeem limit). */
+    pointsToRedeem: z.coerce.number().int().min(0).max(10_000_000).default(0),
+    /** Affiliate code from an affiliate link (stored by the storefront for the cookie window). */
+    affiliateCode: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9]{3,20}$/, 'Letters and numbers only')
+      .nullable()
+      .optional(),
     notes: z
       .array(z.object({ sellerId: z.uuid(), note: optionalText(500) }))
       .max(50)
@@ -146,6 +169,14 @@ export const checkoutLineSchema = z.object({
   price: priceQuoteLineSchema,
   sellerDiscount: z.string(),
   platformDiscount: z.string(),
+  /** Campaign discount on this line (included in the seller or platform discount). */
+  promotionDiscount: z.string().default('0.00'),
+  promotion: z
+    .object({ campaignId: z.uuid(), name: z.string(), type: campaignTypeSchema })
+    .nullable()
+    .default(null),
+  /** Loyalty points value on this line (included in the platform discount). */
+  pointsDiscount: z.string().default('0.00'),
   lineTotal: z.string(),
   vatAmount: z.string(),
 });
@@ -165,6 +196,19 @@ export const couponResultSchema = z.object({
 });
 export type CouponResult = z.infer<typeof couponResultSchema>;
 
+/** A campaign applied to a seller's part of the order. */
+export const appliedPromotionSchema = z.object({
+  campaignId: z.uuid(),
+  name: z.string(),
+  type: campaignTypeSchema,
+  scope: couponScopeSchema,
+  season: z.string().nullable().default(null),
+  /** Item discount. */
+  amount: z.string(),
+  shippingAmount: z.string(),
+});
+export type AppliedPromotion = z.infer<typeof appliedPromotionSchema>;
+
 export const checkoutSellerGroupSchema = z.object({
   sellerId: z.uuid(),
   store: z.object({ id: z.uuid(), name: z.string(), slug: z.string() }),
@@ -183,6 +227,9 @@ export const checkoutSellerGroupSchema = z.object({
   wholesaleSavings: z.string(),
   sellerDiscount: z.string(),
   platformDiscount: z.string(),
+  promotionDiscount: z.string().default('0.00'),
+  pointsDiscount: z.string().default('0.00'),
+  promotions: z.array(appliedPromotionSchema).default([]),
   charges: z.array(chargeSchema),
   vatAmount: z.string(),
   total: z.string(),
@@ -196,6 +243,23 @@ export const checkoutQuoteSchema = z.object({
   address: z.object({ id: z.uuid(), formatted: z.string(), recipientName: z.string() }).nullable(),
   groups: z.array(checkoutSellerGroupSchema),
   coupons: z.array(couponResultSchema),
+  /** Loyalty points: what the customer has and what this order uses and would earn. */
+  loyalty: z
+    .object({
+      balance: z.number().int(),
+      pointValue: z.string(),
+      maxRedeemablePoints: z.number().int(),
+      pointsApplied: z.number().int(),
+      discount: z.string(),
+      earnEstimate: z.number().int(),
+      message: z.string().nullable(),
+    })
+    .nullable()
+    .default(null),
+  affiliate: z
+    .object({ code: z.string(), applied: z.boolean(), message: z.string().nullable() })
+    .nullable()
+    .default(null),
   paymentMethod: paymentMethodSchema,
   paymentMethods: z.array(
     z.object({
@@ -210,7 +274,12 @@ export const checkoutQuoteSchema = z.object({
   totals: z.object({
     itemsSubtotal: z.string(),
     wholesaleSavings: z.string(),
+    /** Automatic promotions (campaigns) on items. */
+    promotionDiscount: z.string().default('0.00'),
+    /** Coupon discounts on items. */
     couponDiscount: z.string(),
+    /** Loyalty points used. */
+    pointsDiscount: z.string().default('0.00'),
     shippingFee: z.string(),
     shippingDiscount: z.string(),
     chargesTotal: z.string(),
@@ -243,6 +312,8 @@ export const orderItemSchema = z.object({
   lineSubtotal: z.string(),
   sellerDiscount: z.string(),
   platformDiscount: z.string(),
+  promotionDiscount: z.string().default('0.00'),
+  pointsDiscount: z.string().default('0.00'),
   lineTotal: z.string(),
   vatAmount: z.string(),
   priceSource: z.string(),
@@ -276,6 +347,11 @@ export const sellerOrderSchema = z.object({
   wholesaleSavings: z.string(),
   sellerDiscount: z.string(),
   platformDiscount: z.string(),
+  promotionDiscount: z.string().default('0.00'),
+  pointsDiscount: z.string().default('0.00'),
+  promotions: z.array(appliedPromotionSchema).default([]),
+  /** Customer views: whether the customer has rated the seller for this order. */
+  sellerRated: z.boolean().default(false),
   shippingFee: z.string(),
   shippingDiscount: z.string(),
   charges: z.array(chargeSchema),
@@ -347,6 +423,7 @@ export const orderDetailSchema = orderSummarySchema.extend({
     }),
   ),
   totals: checkoutQuoteSchema.shape.totals,
+  pointsRedeemed: z.number().int().default(0),
   /** The tax on goods: a single rate (fraction, e.g. "0.12") or null when items differ or none. */
   vat: z.object({ rate: z.string().nullable(), included: z.boolean() }),
   events: z.array(orderEventSchema),
@@ -465,6 +542,10 @@ const couponFields = {
   usageLimit: z.coerce.number().int().min(1).max(1_000_000).nullable().optional(),
   perCustomerLimit: z.coerce.number().int().min(1).max(100).default(1),
   status: promotionStatusInputSchema.default('ACTIVE'),
+  appliesTo: promotionAppliesToSchema.default('ALL'),
+  productIds: z.array(z.uuid()).max(MAX_PROMOTION_TARGETS).default([]),
+  categoryIds: z.array(z.uuid()).max(MAX_PROMOTION_TARGETS).default([]),
+  firstOrderOnly: z.boolean().default(false),
 };
 const couponRefinements = <
   T extends z.ZodType<{
@@ -472,11 +553,22 @@ const couponRefinements = <
     value: string;
     startsAt: string;
     endsAt: string;
+    appliesTo: string;
+    productIds: string[];
+    categoryIds: string[];
   }>,
 >(
   schema: T,
 ) =>
   schema
+    .refine((v) => v.appliesTo !== 'PRODUCTS' || v.productIds.length > 0, {
+      message: 'Choose at least one product',
+      path: ['productIds'],
+    })
+    .refine((v) => v.appliesTo !== 'CATEGORIES' || v.categoryIds.length > 0, {
+      message: 'Choose at least one category',
+      path: ['categoryIds'],
+    })
     .refine((v) => v.type !== 'PERCENTAGE' || (Number(v.value) > 0 && Number(v.value) <= 100), {
       message: 'Between 1 and 100 percent',
       path: ['value'],
@@ -500,6 +592,10 @@ export const updateCouponSchema = z
     usageLimit: couponFields.usageLimit,
     perCustomerLimit: z.coerce.number().int().min(1).max(100),
     status: promotionStatusInputSchema,
+    appliesTo: promotionAppliesToSchema,
+    productIds: z.array(z.uuid()).max(MAX_PROMOTION_TARGETS),
+    categoryIds: z.array(z.uuid()).max(MAX_PROMOTION_TARGETS),
+    firstOrderOnly: z.boolean(),
   })
   .partial();
 export type UpdateCouponRequest = z.input<typeof updateCouponSchema>;
@@ -521,6 +617,10 @@ export const couponSchema = z.object({
   perCustomerLimit: z.number().int(),
   usedCount: z.number().int(),
   status: promotionStatusInputSchema,
+  appliesTo: promotionAppliesToSchema.default('ALL'),
+  products: z.array(z.object({ id: z.uuid(), name: z.string() })).default([]),
+  categories: z.array(z.object({ id: z.uuid(), name: z.string() })).default([]),
+  firstOrderOnly: z.boolean().default(false),
   createdAt: z.iso.datetime(),
 });
 export type CouponDto = z.infer<typeof couponSchema>;

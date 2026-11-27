@@ -12,6 +12,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Data visualization: categorical slot 1 (validated reference palette). */
+  --chart-series-1: #257de0;
   --radius: 0.625rem;
 
   --background: oklch(0.99 0.002 250);
@@ -52,6 +54,7 @@
 }
 
 .dark {
+  --chart-series-1: #338ced;
   --background: oklch(0.17 0.015 260);
   --foreground: oklch(0.96 0.005 255);
   --card: oklch(0.21 0.02 260);

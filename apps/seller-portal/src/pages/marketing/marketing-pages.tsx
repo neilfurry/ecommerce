@@ -5,6 +5,7 @@ import {
   useSellerCoupons,
   useSellerFlashSaleMutations,
   useSellerFlashSales,
+  useMyProducts,
   useSession,
 } from '@marketplace/api-client';
 import { applyApiErrors, CouponManager, FormAlert, SubmitButton } from '@marketplace/auth-ui';
@@ -61,6 +62,7 @@ export function SellerCouponsPage() {
   const [page, setPage] = useState(1);
   const coupons = useSellerCoupons({ page, pageSize: PAGE_SIZE });
   const { create, update } = useSellerCouponMutations();
+  const products = useMyProducts({ page: 1, pageSize: 100 });
   return (
     <div className="space-y-6">
       <PageHeader
@@ -74,6 +76,9 @@ export function SellerCouponsPage() {
         onPageChange={setPage}
         canManage={canManage}
         fundedBy="your business"
+        targets={{
+          products: (products.data?.items ?? []).map((p) => ({ id: p.id, name: p.name })),
+        }}
         mutations={{
           create: (body) => create.mutateAsync(body),
           update: (id, body) => update.mutateAsync({ id, body }),

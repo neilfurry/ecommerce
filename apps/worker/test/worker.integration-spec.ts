@@ -15,6 +15,8 @@ import type { Job, Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { SMTPServer } from 'smtp-server';
 import { deadLetterJobId } from '../src/queues/dead-letter.service';
+import { WorkerDatabase } from '../src/database/database.provider';
+import { MockPushProvider, PushProvider } from '../src/notifications/push-provider';
 import { REDIS_CLIENT } from '../src/redis.provider';
 import { WorkerModule } from '../src/worker.module';
 
@@ -214,5 +216,113 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
       '482913',
     );
     await job.remove();
+  });
+
+  describe('notification outbox (Phase 7)', () => {
+    const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const mobile = `+63917${suffix.slice(-7)}`;
+    const email = `notify-${suffix}@example.test`;
+    let userId: string;
+
+    beforeAll(async () => {
+      const db = app.get(WorkerDatabase).client!;
+      const user = await db.user.create({
+        data: {
+          email,
+          mobile,
+          firstName: 'Nina',
+          lastName: 'Notified',
+          status: 'ACTIVE',
+          passwordHash: 'not-a-real-hash',
+        },
+      });
+      userId = user.id;
+      await db.pushSubscription.create({
+        data: {
+          userId,
+          endpoint: `https://push.example.test/${suffix}`,
+          p256dh: 'p256dh-key-value',
+          auth: 'auth-key',
+        },
+      });
+    });
+
+    afterAll(async () => {
+      const db = app.get(WorkerDatabase).client!;
+      if (!userId) return;
+      await db.notificationEvent.deleteMany({ where: { userIds: { has: userId } } });
+      await db.user.delete({ where: { id: userId } });
+    });
+
+    const emit = async () => {
+      const db = app.get(WorkerDatabase).client!;
+      const event = await db.notificationEvent.create({
+        data: {
+          event: 'ORDER_SHIPPED',
+          userIds: [userId],
+          data: {
+            firstName: 'Nina',
+            orderNumber: `MP-${suffix}-1`,
+            storeName: 'Test Store',
+            carrier: 'Mock Express',
+            trackingNumber: `TRK${suffix}`,
+          },
+          link: '/account/orders/test',
+        },
+      });
+      await notificationsQueue.add(NOTIFICATION_JOBS.DISPATCH, { eventId: event.id });
+      return waitFor(async () => {
+        const row = await db.notificationEvent.findUnique({
+          where: { id: event.id },
+          include: { deliveries: true },
+        });
+        return row && row.status !== 'PENDING' ? row : null;
+      }, 20_000);
+    };
+
+    it('delivers an event in the background: inbox, email, mock SMS and push, with a delivery log', async () => {
+      const event = await emit();
+      expect(event.status).toBe('PROCESSED');
+      const status = Object.fromEntries(event.deliveries.map((d) => [d.channel, d.status]));
+      expect(status).toEqual({ IN_APP: 'SENT', EMAIL: 'SENT', SMS: 'SENT', PUSH: 'SENT' });
+      // Destinations are masked in the log.
+      expect(event.deliveries.find((d) => d.channel === 'EMAIL')!.destination).toBe(
+        `n***@example.test`,
+      );
+
+      const db = app.get(WorkerDatabase).client!;
+      const inbox = await db.notification.findFirstOrThrow({
+        where: { userId, eventId: event.id },
+      });
+      expect(inbox.title).toBe('Order shipped');
+      expect(inbox.body).toContain(`TRK${suffix}`);
+
+      const mail = await waitFor(async () => received.find((m) => m.to.includes(email)), 10_000);
+      expect(mail.raw).toContain(`MP-${suffix}-1`);
+
+      const sms = await waitFor(async () => {
+        const raw = await redis.lrange(REDIS_KEYS.DEV_SMS_OUTBOX, 0, 49);
+        return raw
+          .map((r) => JSON.parse(r) as { to: string; body: string })
+          .find((m) => m.to === mobile);
+      }, 5_000);
+      expect(sms.body).toContain(`TRK${suffix}`);
+
+      const push = app.get(PushProvider) as MockPushProvider;
+      expect(push.sent.some((p) => p.endpoint.endsWith(suffix))).toBe(true);
+    });
+
+    it('respects the customer’s channel choices and never delivers a channel twice', async () => {
+      const db = app.get(WorkerDatabase).client!;
+      await db.notificationPreference.create({ data: { userId, channel: 'SMS', enabled: false } });
+      const event = await emit();
+      const sms = event.deliveries.find((d) => d.channel === 'SMS')!;
+      expect(sms).toMatchObject({ status: 'SKIPPED', detail: 'Turned off by the user' });
+      // Dispatching again changes nothing: the event is no longer pending.
+      const job = await notificationsQueue.add(NOTIFICATION_JOBS.DISPATCH, { eventId: event.id });
+      expect(await waitForState(job, ['completed', 'failed'])).toBe('completed');
+      expect(await db.notificationDelivery.count({ where: { eventId: event.id } })).toBe(4);
+      expect(await db.notification.count({ where: { eventId: event.id } })).toBe(1);
+    });
   });
 });

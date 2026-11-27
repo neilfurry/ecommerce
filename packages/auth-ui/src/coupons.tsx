@@ -44,6 +44,7 @@ import { type Path, useForm, useWatch } from 'react-hook-form';
 import type { ZodType } from 'zod';
 import { applyApiErrors } from './form-errors';
 import { FormAlert, SubmitButton } from './pages';
+import { TargetPicker, type TargetOptions, type TargetValue } from './promotion-targets';
 
 /** Form fields as typed into the inputs; converted to the API shape on submit. */
 interface CouponFormValues {
@@ -59,6 +60,7 @@ interface CouponFormValues {
   usageLimit: string;
   perCustomerLimit: string;
   status: PromotionStatus;
+  firstOrderOnly: boolean;
 }
 
 /** ISO → the value a datetime-local input shows (in the browser's time zone). */
@@ -85,6 +87,7 @@ function defaults(coupon: CouponDto | null): CouponFormValues {
     usageLimit: coupon?.usageLimit ? String(coupon.usageLimit) : '',
     perCustomerLimit: String(coupon?.perCustomerLimit ?? 1),
     status: coupon?.status ?? 'ACTIVE',
+    firstOrderOnly: coupon?.firstOrderOnly ?? false,
   };
 }
 
@@ -112,14 +115,22 @@ function CouponDialog({
   coupon,
   mutations,
   fundedBy,
+  targets,
   onClose,
 }: {
   coupon: CouponDto | null;
   mutations: CouponMutations;
   fundedBy: string;
+  targets: TargetOptions;
   onClose: () => void;
 }) {
   const [formError, setFormError] = useState<string | null>(null);
+  const [target, setTarget] = useState<TargetValue>({
+    appliesTo: coupon?.appliesTo ?? 'ALL',
+    productIds: coupon?.products.map((p) => p.id) ?? [],
+    categoryIds: coupon?.categories.map((c) => c.id) ?? [],
+  });
+  const [targetError, setTargetError] = useState<string | undefined>();
   const form = useForm<CouponFormValues>({ defaultValues: defaults(coupon) });
   const type = useWatch({ control: form.control, name: 'type' });
   const editing = coupon !== null;
@@ -136,7 +147,17 @@ function CouponDialog({
       usageLimit: v.usageLimit ? Number(v.usageLimit) : null,
       perCustomerLimit: Number(v.perCustomerLimit),
       status: v.status,
+      firstOrderOnly: v.firstOrderOnly,
+      ...target,
     };
+    setTargetError(undefined);
+    if (
+      target.appliesTo !== 'ALL' &&
+      (target.appliesTo === 'PRODUCTS' ? target.productIds : target.categoryIds).length === 0
+    ) {
+      setTargetError('Choose at least one');
+      return;
+    }
     try {
       if (coupon) {
         const body = check(updateCouponSchema, common, setError);
@@ -167,7 +188,7 @@ function CouponDialog({
   });
 
   const text = (
-    name: Path<CouponFormValues>,
+    name: Exclude<Path<CouponFormValues>, 'firstOrderOnly'>,
     label: string,
     options: {
       type?: string;
@@ -186,6 +207,7 @@ function CouponDialog({
           <FormControl>
             <Input
               {...field}
+              value={String(field.value)}
               type={options.type ?? 'text'}
               inputMode={options.inputMode}
               disabled={options.disabled}
@@ -282,6 +304,16 @@ function CouponDialog({
                 </FormItem>
               )}
             />
+            <TargetPicker
+              value={target}
+              onChange={setTarget}
+              options={targets}
+              error={targetError}
+            />
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" {...form.register('firstOrderOnly')} />
+              First order only (customers with no earlier order)
+            </label>
             <div className="sm:col-span-2">
               <SubmitButton pending={mutations.pending}>
                 {editing ? 'Save' : 'Create coupon'}
@@ -300,7 +332,14 @@ function describeValue(c: CouponDto) {
     c.type === 'PERCENTAGE'
       ? `${Number(c.value)}% off${c.maxDiscount ? ` (up to ${formatMoney(c.maxDiscount)})` : ''}`
       : `${formatMoney(c.value)} off`;
-  return Number(c.minSpend) > 0 ? `${off}, min. ${formatMoney(c.minSpend)}` : off;
+  const base = Number(c.minSpend) > 0 ? `${off}, min. ${formatMoney(c.minSpend)}` : off;
+  const scope =
+    c.appliesTo === 'PRODUCTS'
+      ? ` · ${c.products.length} product(s)`
+      : c.appliesTo === 'CATEGORIES'
+        ? ` · ${c.categories.map((x) => x.name).join(', ')}`
+        : '';
+  return `${base}${scope}${c.firstOrderOnly ? ' · first order' : ''}`;
 }
 
 function couponPhase(c: CouponDto): {
@@ -330,6 +369,7 @@ export function CouponManager({
   fundedBy,
   showSeller = false,
   canEdit = () => true,
+  targets = {},
 }: {
   coupons: {
     data: { items: CouponDto[]; totalItems: number } | undefined;
@@ -347,6 +387,8 @@ export function CouponManager({
   showSeller?: boolean;
   /** Whether this user may edit the coupon (staff edit only marketplace coupons). */
   canEdit?: (coupon: CouponDto) => boolean;
+  /** Products / categories a coupon can be restricted to. */
+  targets?: TargetOptions;
 }) {
   const [editing, setEditing] = useState<CouponDto | 'new' | null>(null);
   const columns: DataTableColumn<CouponDto>[] = [
@@ -450,6 +492,7 @@ export function CouponManager({
           coupon={editing === 'new' ? null : editing}
           mutations={mutations}
           fundedBy={fundedBy}
+          targets={targets}
           onClose={() => setEditing(null)}
         />
       ) : null}

@@ -25,6 +25,14 @@ import {
   ReconcileOpenPaymentsHandler,
 } from './jobs/payment-reconciliation';
 import { SmsOtpHandler } from './jobs/sms-otp.handler';
+import { ExpireLoyaltyPointsHandler, LoyaltyExpiryScheduler } from './jobs/loyalty-expiry';
+import {
+  NotificationDispatcher,
+  NotificationDispatchHandler,
+  NotificationSweepHandler,
+  NotificationSweepScheduler,
+} from './notifications/notification-dispatcher';
+import { MockPushProvider, PushProvider } from './notifications/push-provider';
 import { ExpireUnpaidOrdersHandler, UnpaidOrderSweepScheduler } from './jobs/unpaid-order-sweep';
 import { TRANSACTIONAL_EMAIL_HANDLERS } from './jobs/transactional-email.handlers';
 import { MailerService } from './mail/mailer.service';
@@ -101,6 +109,13 @@ import { smsProvider } from './sms/sms.module';
     FulfilmentSweepScheduler,
     SettleSellersHandler,
     SettlementScheduler,
+    ExpireLoyaltyPointsHandler,
+    LoyaltyExpiryScheduler,
+    { provide: PushProvider, useClass: MockPushProvider },
+    NotificationDispatcher,
+    NotificationDispatchHandler,
+    NotificationSweepHandler,
+    NotificationSweepScheduler,
     ...DOMAIN_PROCESSORS,
   ],
 })

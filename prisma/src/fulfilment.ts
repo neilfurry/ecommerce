@@ -4,6 +4,7 @@ import {
   type OrderActor,
   type SellerOrderStatus,
 } from '@marketplace/shared-types';
+import { onSellerOrderStatusInTx } from './engagement';
 import { postSaleInTx, postShippingCreditIfDueInTx } from './ledger';
 import { type Prisma } from './generated/prisma/client';
 
@@ -110,6 +111,7 @@ export async function transitionSellerOrderInTx(
     },
   });
   const orderStatus = await syncOrderStatusInTx(tx, current.orderId, now);
+  await onSellerOrderStatusInTx(tx, { sellerOrderId: input.sellerOrderId, to: input.to, now });
   return {
     sellerOrderId: input.sellerOrderId,
     orderId: current.orderId,

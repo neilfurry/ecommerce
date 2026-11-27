@@ -34,6 +34,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2Icon, ImageIcon, MapPinIcon, StoreIcon, TagIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { currentAffiliateCode } from '../../lib/affiliate';
 import { AddressForm } from '../../components/shop/address-form';
 
 const newKey = () =>
@@ -74,8 +75,18 @@ function Totals({ quote }: { quote: CheckoutQuote }) {
           tone="save"
         />
       ) : null}
+      {Number(t.promotionDiscount) > 0 ? (
+        <Row label="Promotions" value={`−${formatMoney(t.promotionDiscount)}`} tone="save" />
+      ) : null}
       {Number(t.couponDiscount) > 0 ? (
         <Row label="Coupon discounts" value={`−${formatMoney(t.couponDiscount)}`} tone="save" />
+      ) : null}
+      {Number(t.pointsDiscount) > 0 ? (
+        <Row
+          label={`Points used (${quote.loyalty?.pointsApplied ?? 0})`}
+          value={`−${formatMoney(t.pointsDiscount)}`}
+          tone="save"
+        />
       ) : null}
       <Row label="Shipping" value={formatMoney(t.shippingFee)} />
       {Number(t.shippingDiscount) > 0 ? (
@@ -116,6 +127,8 @@ export function CheckoutPage() {
   const [shipping, setShipping] = useState<Record<string, ShippingMethod>>({});
   const [couponCodes, setCouponCodes] = useState<string[]>([]);
   const [couponInput, setCouponInput] = useState('');
+  const [points, setPoints] = useState(0);
+  const [affiliateCode] = useState(() => currentAffiliateCode());
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [notes, setNotes] = useState<Record<string, string>>({});
   const place = usePlaceOrder();
@@ -130,8 +143,19 @@ export function CheckoutPage() {
       shipping: Object.entries(shipping).map(([sellerId, method]) => ({ sellerId, method })),
       couponCodes,
       paymentMethod,
+      ...(points > 0 ? { pointsToRedeem: points } : {}),
+      ...(affiliateCode ? { affiliateCode } : {}),
     }),
-    [buyVariant, buyQuantity, chosenAddress, shipping, couponCodes, paymentMethod],
+    [
+      buyVariant,
+      buyQuantity,
+      chosenAddress,
+      shipping,
+      couponCodes,
+      paymentMethod,
+      points,
+      affiliateCode,
+    ],
   );
   const quote = useCheckoutQuote(body, !addresses.isPending);
   const q = quote.data;
@@ -153,6 +177,10 @@ export function CheckoutPage() {
       ),
       couponCodes: q.coupons.filter((c) => c.status === 'APPLIED').map((c) => c.code),
       paymentMethod,
+      ...(q.loyalty && q.loyalty.pointsApplied > 0
+        ? { pointsToRedeem: q.loyalty.pointsApplied }
+        : {}),
+      ...(q.affiliate?.applied ? { affiliateCode: q.affiliate.code } : {}),
       notes: Object.entries(notes)
         .filter(([, note]) => note.trim())
         .map(([sellerId, note]) => ({ sellerId, note })),
@@ -501,6 +529,59 @@ export function CheckoutPage() {
                     </li>
                   ))}
                 </ul>
+              ) : null}
+              {q.groups.some((g) => g.promotions.length > 0) ? (
+                <ul className="space-y-1 text-sm" aria-label="Promotions">
+                  {q.groups.flatMap((g) =>
+                    g.promotions.map((p) => (
+                      <li
+                        key={`${g.sellerId}-${p.campaignId}`}
+                        className="flex justify-between gap-2 text-emerald-700"
+                      >
+                        <span>
+                          {p.season ? `${p.season}: ` : ''}
+                          {p.name}
+                        </span>
+                        <span>
+                          −{formatMoney((Number(p.amount) + Number(p.shippingAmount)).toFixed(2))}
+                        </span>
+                      </li>
+                    )),
+                  )}
+                </ul>
+              ) : null}
+              {q.loyalty && q.loyalty.balance > 0 ? (
+                <div className="space-y-1 rounded-md border p-2 text-sm">
+                  <Label htmlFor="points">
+                    Use points (you have {q.loyalty.balance}; up to {q.loyalty.maxRedeemablePoints}{' '}
+                    on this order)
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="points"
+                      inputMode="numeric"
+                      value={points ? String(points) : ''}
+                      onChange={(e) =>
+                        setPoints(Math.max(0, Math.floor(Number(e.target.value) || 0)))
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setPoints(q.loyalty!.maxRedeemablePoints)}
+                    >
+                      Use most
+                    </Button>
+                  </div>
+                  {q.loyalty.message ? (
+                    <p className="text-xs text-muted-foreground">{q.loyalty.message}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {q.loyalty && q.loyalty.earnEstimate > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  You will earn about {q.loyalty.earnEstimate} points when this order is completed.
+                </p>
               ) : null}
               <Separator />
               <Totals quote={q} />

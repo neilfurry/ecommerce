@@ -657,3 +657,92 @@ posted ledger lines. Bank account numbers are never returned (only `••••
 
 The Phase 4 `PUT/DELETE /settings/commission-rules` now need `commission.manage` and create or
 end rule versions. `PUT /settings/checkout` no longer uses `vat` (taxes come from tax rules).
+
+## Phase 7: promotions, loyalty, referrals, affiliates, reviews, support, notifications, analytics
+
+Decisions: ADR 0030 (promotion engine and stacking), 0031 (loyalty points ledger), 0032
+(referrals and affiliates), 0033 (notification outbox), 0034 (support tickets), 0035 (analytics
+and exports). Every discount, point and commission is calculated by the server.
+
+### Checkout and orders
+
+- `POST /checkout/quote` and `POST /checkout/orders` also take `pointsToRedeem` (capped by the
+  balance and the redeem limit; the quote's `loyalty` says what applies) and `affiliateCode`
+  (the quote's `affiliate.applied` says whether it counts).
+- Quotes and orders add per line `promotion`, `promotionDiscount`, `pointsDiscount`; per seller
+  group / seller order `promotions[]`, `promotionDiscount`, `pointsDiscount`; totals
+  `promotionDiscount`, `couponDiscount` (coupons only), `pointsDiscount`; orders `pointsRedeemed`;
+  customer seller orders `sellerRated`.
+
+### Coupons and campaigns
+
+| Method      | Path                               | Access                                | Notes                                                                                                                                                                                                          |
+| ----------- | ---------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST, PATCH | `/coupons`, `/seller/coupons`      | `marketing.manage` / seller marketing | New fields `appliesTo` (`ALL`/`PRODUCTS`/`CATEGORIES`), `productIds`, `categoryIds`, `firstOrderOnly`; sellers may only target their own products                                                              |
+| GET, POST   | `/campaigns`                       | `marketing.manage`                    | Marketplace campaigns: `{ name, description?, season?, type, value, maxDiscount?, minQuantity, buyQuantity?, getQuantity?, minSpend, appliesTo, productIds, categoryIds, startsAt, endsAt, status, priority }` |
+| PATCH       | `/campaigns/{id}`                  | `marketing.manage`                    | Same fields except `type`                                                                                                                                                                                      |
+| GET, POST   | `/seller/campaigns`, PATCH `/{id}` | `seller.marketing.manage` (verified)  | Seller-funded campaigns on own products                                                                                                                                                                        |
+| GET         | `/storefront/campaigns?storeId`    | public                                | Running campaigns with a `headline`                                                                                                                                                                            |
+
+### Loyalty, referrals and affiliates
+
+| Method     | Path                                                        | Access              | Notes                                                                                                           |
+| ---------- | ----------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| GET        | `/account/loyalty`, `/account/loyalty/transactions`         | customer            | Balance, value, expiring in 30 days, points on the way; the ledger                                              |
+| GET        | `/account/referrals`                                        | customer            | Code (created on first use), invite link, referred friends                                                      |
+| POST       | `/auth/customers/sign-up`                                   | public              | Optional `referralCode` (422 if unknown)                                                                        |
+| POST/GET   | `/account/affiliate`, `/report`, `/conversions`, `/payouts` | customer            | Apply; account, link and totals; monthly report; attributed orders                                              |
+| POST       | `/storefront/affiliate-clicks`                              | public (throttled)  | `{ code, landingPath }`                                                                                         |
+| GET, PUT   | `/settings/loyalty`                                         | `loyalty.manage`    | Rules and referral bonuses                                                                                      |
+| GET        | `/loyalty/accounts`, `/{userId}`, `/{userId}/transactions`  | `loyalty.manage`    | Balances and ledger                                                                                             |
+| POST       | `/loyalty/accounts/{userId}/adjustments`                    | `loyalty.manage`    | `{ points, reason }`; 409 below zero; audited and posted to the ledger                                          |
+| GET, PUT   | `/settings/affiliates`                                      | `affiliates.manage` | Default rate, link window, minimum payout                                                                       |
+| GET, PATCH | `/affiliates`, `/affiliates/{id}`                           | `affiliates.manage` | Review `{ status, commissionRate?, note? }`                                                                     |
+| GET        | `/affiliates/{id}/report`, `/conversions`, `/payouts`       | `affiliates.manage` |                                                                                                                 |
+| POST       | `/affiliates/{id}/payouts`                                  | `affiliates.manage` | `{ method, externalReference?, note?, paidAt? }` pays everything payable; 409 when nothing or below the minimum |
+
+### Reviews and seller ratings
+
+| Method      | Path                                                     | Access                 | Notes                                                                                    |
+| ----------- | -------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| POST        | `/account/reviews/{id}/images` (multipart `images`)      | customer               | Up to 5 photos per review, re-encoded to WebP                                            |
+| DELETE      | `/account/reviews/{id}/images/{imageId}`                 | customer               |                                                                                          |
+| GET         | `/catalog/review-images/{fileId}`                        | public                 | Only while the review is published                                                       |
+| POST        | `/catalog/reviews/{id}/report`                           | customer               | `{ reason, details? }`; 409 twice or on one's own review                                 |
+| GET, POST   | `/reviews/{id}/reports`, `/reviews/{id}/reports/resolve` | `reviews.moderate`     | `{ action: UPHOLD\|DISMISS, note }` (UPHOLD hides; note required)                        |
+| GET         | `/reviews?reported=true`                                 | `reviews.moderate`     | Reviews with open reports first                                                          |
+| GET         | `/seller/reviews?replied&rating`                         | `seller.reviews.reply` |                                                                                          |
+| PUT, DELETE | `/seller/reviews/{id}/reply`                             | `seller.reviews.reply` | `{ body }`                                                                               |
+| PUT         | `/account/seller-orders/{id}/rating`                     | customer               | `{ productQuality, shippingSpeed, communication, comment? }` after delivery (422 before) |
+| GET         | `/catalog/stores/{storeId}/ratings`, `/seller/ratings`   | public / seller        | Averages from delivered orders                                                           |
+
+Review DTOs add `verifiedPurchase`, `images`, `sellerReply`; staff DTOs `openReports`.
+
+### Support
+
+`/account/support/tickets` (customers), `/seller/support/tickets` (`seller.support.manage`),
+`/support/tickets` (`support.read`; actions need `support.manage`): `GET` list (`open`,
+`status`, `category`, `search`), `GET /{id}`, `POST /{id}/messages` (multipart: `data` =
+`{ body, internal }`, up to 5 `attachments`), `POST /{id}/actions` (`RESOLVE`, `CLOSE`,
+`REOPEN`, `JOIN`, `TAKE_OVER`, `ASSIGN`, `PRIORITY`), `GET /{id}/attachments/{attachmentId}`.
+Customers create with `POST /account/support/tickets` (multipart `data` = `{ subject, category,
+sellerOrderId?, body }`). Tickets outside the caller's scope are 404.
+
+### Notifications
+
+| Method       | Path                                            | Access                 | Notes                                                      |
+| ------------ | ----------------------------------------------- | ---------------------- | ---------------------------------------------------------- |
+| GET          | `/notifications?unread`                         | signed in              | Inbox with `unread` count                                  |
+| POST         | `/notifications/read`                           | signed in              | `{ ids }` or `{ all: true }`                               |
+| GET, PUT     | `/notifications/preferences`                    | signed in              | Email, SMS, push on/off (in-app always on)                 |
+| POST, DELETE | `/notifications/push-subscriptions`             | signed in              | Web Push subscription                                      |
+| GET          | `/notification-templates`                       | `notifications.manage` | Templates and the event catalogue                          |
+| PUT          | `/notification-templates/{event}/{channel}`     | `notifications.manage` | `{ subject?, body, enabled }`; unknown `{{variables}}` 422 |
+| GET          | `/notification-deliveries?channel&status&event` | `notifications.manage` | Delivery log (destinations masked)                         |
+
+### Analytics
+
+`GET /reports/{sales|products|categories|sellers|customers|payments|refunds}?from&to&granularity=day|week|month|year&sellerId`
+(`reports.read`) and `GET /seller/reports/{sales|products|inventory|ratings|commissions|settlements}`
+(`seller.reports.read`) return `{ kpis, series, table }`; add `/export?format=csv|xlsx|pdf` to
+download. Defaults: the last 30 days, daily.

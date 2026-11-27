@@ -1,3 +1,4 @@
+import { emitNotificationInTx } from './engagement';
 import { Prisma } from './generated/prisma/client';
 import { postSellerEarningsInTx, transitionSellerOrderInTx } from './fulfilment';
 import { postPaymentFeeInTx, postPaymentReceivedInTx } from './ledger';
@@ -206,6 +207,20 @@ export async function applyPaymentSucceededInTx(
     await postSellerEarningsInTx(tx, so.id, now);
   }
   await postPaymentFeeInTx(tx, payment.id, now);
+  const paidOrder = await tx.order.findUniqueOrThrow({
+    where: { id: payment.order_id },
+    select: { orderNumber: true, customerId: true, customer: { select: { firstName: true } } },
+  });
+  await emitNotificationInTx(tx, {
+    event: 'PAYMENT_CONFIRMED',
+    userIds: [paidOrder.customerId],
+    data: {
+      firstName: paidOrder.customer.firstName,
+      orderNumber: paidOrder.orderNumber,
+      amount: amount.toFixed(2),
+    },
+    link: `/account/orders/${payment.order_id}`,
+  });
   return {
     result: 'PAID',
     ...base,

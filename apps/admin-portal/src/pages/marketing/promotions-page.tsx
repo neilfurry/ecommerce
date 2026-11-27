@@ -4,6 +4,7 @@ import {
   useAdminCoupons,
   useAdminFlashSaleMutations,
   useAdminFlashSales,
+  useAllCategories,
 } from '@marketplace/api-client';
 import { applyApiErrors, CouponManager, FormAlert, SubmitButton } from '@marketplace/auth-ui';
 import {
@@ -58,8 +59,15 @@ function MarketplaceCoupons() {
   const [page, setPage] = useState(1);
   const coupons = useAdminCoupons({ page, pageSize: PAGE_SIZE });
   const { create, update } = useAdminCouponMutations();
+  const categories = useAllCategories();
   return (
     <CouponManager
+      targets={{
+        categories: (categories.data?.categories ?? []).map((c) => ({
+          id: c.id,
+          name: c.path.join(' › '),
+        })),
+      }}
       coupons={coupons}
       page={page}
       pageSize={PAGE_SIZE}

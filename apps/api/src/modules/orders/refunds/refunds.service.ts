@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   lockOrderInTx,
+  onRefundSucceededInTx,
   postRefundInTx,
   Prisma,
   sellerOrderPosition,
@@ -580,6 +581,8 @@ export class RefundsService {
     });
     // Seller share, commission given back and the money out, in the double-entry ledger.
     await postRefundInTx(tx, refundId, now);
+    // Loyalty points and affiliate commission follow the refund; REFUND_APPROVED notification.
+    await onRefundSucceededInTx(tx, refundId, now);
     await tx.paymentEvent.create({
       data: {
         paymentId: row.paymentId,
@@ -640,11 +643,8 @@ export class RefundsService {
   private async notifyOutcome(refundId: string) {
     const r = await this.prisma.refund.findUnique({ where: { id: refundId } });
     if (r?.status !== 'SUCCEEDED') return;
-    await this.notifier.customer(
-      r.orderId,
-      'Refund sent',
-      `We refunded ₱${r.amount.toFixed(2)} (${r.reference}). Depending on your bank or e-wallet it can take a few days to appear.`,
-    );
+    // The REFUND_APPROVED notification event was written with the refund.
+    await this.notifier.kick();
   }
 
   /** Finance paid a manual refund out (bank transfer to the customer, e-wallet...). */

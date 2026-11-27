@@ -23,6 +23,15 @@ import { CategoriesPage } from '../pages/catalog/categories-page';
 import { ProductReviewPage } from '../pages/catalog/product-review-page';
 import { AdminProductsPage } from '../pages/catalog/products-page';
 import { InventoryOverviewPage } from '../pages/inventory/inventory-overview-page';
+import {
+  AffiliatesPage,
+  AnalyticsPage,
+  CampaignsPage,
+  LoyaltyPage,
+  NotificationsPage,
+  SupportTicketPage,
+  SupportTicketsPage,
+} from '../pages/engagement/engagement-pages';
 import { PromotionsPage } from '../pages/marketing/promotions-page';
 import { ReviewsPage } from '../pages/marketing/reviews-page';
 import { StorefrontContentPage } from '../pages/marketing/storefront-content-page';
@@ -221,6 +230,19 @@ export function buildRoutes(devToolsEnabled: boolean): RouteObject[] {
                   element: guarded('marketing.manage', <PromotionsPage />),
                 },
                 { path: 'reviews', element: guarded('reviews.moderate', <ReviewsPage />) },
+                { path: 'analytics', element: guarded('reports.read', <AnalyticsPage />) },
+                { path: 'campaigns', element: guarded('marketing.manage', <CampaignsPage />) },
+                { path: 'loyalty', element: guarded('loyalty.manage', <LoyaltyPage />) },
+                { path: 'affiliates', element: guarded('affiliates.manage', <AffiliatesPage />) },
+                { path: 'support', element: guarded('support.read', <SupportTicketsPage />) },
+                {
+                  path: 'support/:ticketId',
+                  element: guarded('support.read', <SupportTicketPage />),
+                },
+                {
+                  path: 'notifications',
+                  element: guarded('notifications.manage', <NotificationsPage />),
+                },
                 { path: 'settings', element: guarded('settings.manage', <SettingsPage />) },
                 { path: 'roles', element: guarded('roles.read', <RolesPage />) },
                 { path: 'permissions', element: guarded('roles.read', <PermissionsPage />) },

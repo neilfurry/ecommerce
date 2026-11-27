@@ -20,6 +20,13 @@ import { AdjustmentsPage } from '../pages/inventory/adjustments-page';
 import { HistoryPage } from '../pages/inventory/history-page';
 import { InventoryPage } from '../pages/inventory/inventory-page';
 import { WarehousesPage } from '../pages/inventory/warehouses-page';
+import {
+  SellerCampaignsPage,
+  SellerReportsPage,
+  SellerReviewsPage,
+  SellerSupportPage,
+  SellerTicketPage,
+} from '../pages/engagement/engagement-pages';
 import { SellerCouponsPage, SellerFlashSalesPage } from '../pages/marketing/marketing-pages';
 import { OrderPage, OrdersPage } from '../pages/orders/orders-page';
 import {
@@ -161,6 +168,32 @@ export const routes: RouteObject[] = [
                 element: (
                   <RequirePermission permission="seller.orders.read">
                     <ReturnPage />
+                  </RequirePermission>
+                ),
+              },
+              { path: 'marketing/campaigns', element: <SellerCampaignsPage /> },
+              { path: 'reviews', element: <SellerReviewsPage /> },
+              {
+                path: 'support',
+                element: (
+                  <RequirePermission permission="seller.support.manage">
+                    <SellerSupportPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'support/:ticketId',
+                element: (
+                  <RequirePermission permission="seller.support.manage">
+                    <SellerTicketPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'reports',
+                element: (
+                  <RequirePermission permission="seller.reports.read">
+                    <SellerReportsPage />
                   </RequirePermission>
                 ),
               },

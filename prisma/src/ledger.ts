@@ -44,6 +44,10 @@ export const ACCOUNT = {
   COD_FEES: '5020',
   VOUCHERS: '5030',
   TRANSFER_FEES: '5040',
+  LOYALTY_LIABILITY: '2410',
+  AFFILIATE_PAYABLE: '2420',
+  LOYALTY_EXPENSE: '5050',
+  AFFILIATE_EXPENSE: '5060',
 } as const;
 export type AccountCode = (typeof ACCOUNT)[keyof typeof ACCOUNT] | (string & {});
 
@@ -609,6 +613,7 @@ export async function postSaleInTx(tx: Tx, sellerOrderId: string, now = new Date
       number: true,
       total: true,
       platformDiscount: true,
+      pointsDiscount: true,
       shippingFee: true,
       sellerShippingDiscount: true,
       platformShippingDiscount: true,
@@ -633,10 +638,14 @@ export async function postSaleInTx(tx: Tx, sellerOrderId: string, now = new Date
     sourceId: so.id,
     lines: [
       dr(ACCOUNT.CLEARING, so.total, { ...seller, kind: 'SALE' }),
-      dr(ACCOUNT.VOUCHERS, so.platformDiscount.add(so.platformShippingDiscount), {
-        ...seller,
-        kind: 'VOUCHER',
-      }),
+      // Marketplace-funded vouchers and campaigns; the part paid with loyalty points uses
+      // up the points liability instead (ADR 0031).
+      dr(
+        ACCOUNT.VOUCHERS,
+        so.platformDiscount.sub(so.pointsDiscount).add(so.platformShippingDiscount),
+        { ...seller, kind: 'VOUCHER' },
+      ),
+      dr(ACCOUNT.LOYALTY_LIABILITY, so.pointsDiscount, { ...seller, kind: 'POINTS' }),
       cr(ACCOUNT.SELLER_PENDING, gross.add(taxOnTop), { ...seller, kind: 'SALE' }),
       cr(ACCOUNT.SHIPPING, so.shippingFee.sub(so.sellerShippingDiscount), {
         ...seller,
