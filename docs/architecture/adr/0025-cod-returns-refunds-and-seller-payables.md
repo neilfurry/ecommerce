@@ -1,6 +1,6 @@
 # ADR 0025: Cash on delivery, returns, refunds and the seller payables ledger
 
-- Status: Accepted
+- Status: Accepted (the seller payables ledger is superseded by the double-entry ledger, ADR 0027)
 - Date: 2026-11-26
 
 ## Context
