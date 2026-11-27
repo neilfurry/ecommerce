@@ -1,7 +1,7 @@
 # Phase 8 system audit: prioritized issue list
 
 Scope: the five applications, eight shared packages, the database schema and its 10
-migrations, 439 API routes, permissions, seller isolation, payments, inventory, order
+migrations, 429 API route handlers, permissions, seller isolation, payments, inventory, order
 workflows, the financial ledger and the background worker. Method: reading the code paths
 that move money or stock, an automated inventory of every route's protection, dependency
 audit (`pnpm audit --prod`), new concurrency tests against the real database, and starting
@@ -33,15 +33,15 @@ defence in depth or operability; **Low** = limitation or debt, documented.
 
 ## Medium — fixed
 
-| #   | Finding                                                                                                         | Fix                                                                                                                                                                                                   |
-| --- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1  | Nothing prevented a new route from being reachable by _any_ signed-in user (no `@Roles`/`@RequirePermissions`). | `route-access.e2e-spec.ts`: inventory of all 439 routes; public and "any signed-in user" routes must be on reviewed lists, and every admin/finance/payments/analytics route must be permission-gated. |
-| M2  | Public URLs could be `http://` in production (links in emails, provider callbacks).                             | Refused in production.                                                                                                                                                                                |
-| M3  | One-time tokens in e-mail links (`?token=`) could reach access logs and error reports.                          | Edge access logs drop the `token` query parameter, cookies and auth headers; Sentry events drop query strings, bodies, cookies and user data.                                                         |
-| M4  | Invalid-signature webhooks were only logged.                                                                    | Counter `marketplace_webhook_rejections_total` and alert `WebhookSignatureRejections`.                                                                                                                |
-| M5  | The finance reconciliation did not check stock or refund invariants.                                            | New checks: reserved stock = active reservations, refunds ≤ received and = refund rows, no order paid twice, order totals = seller orders.                                                            |
-| M6  | A crash between committing an outbox row and queueing its job, or a worker dying mid-job, was not tested.       | Worker integration tests: orphaned outbox event delivered by the sweep; a job whose process was killed (exit 137) is re-run exactly once by another worker.                                           |
-| M7  | The database pool size could not be configured (`connection_limit` was ignored by the pg adapter).              | `connection_limit` in `DATABASE_URL` sizes each process's pool (default 10).                                                                                                                          |
+| #   | Finding                                                                                                         | Fix                                                                                                                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1  | Nothing prevented a new route from being reachable by _any_ signed-in user (no `@Roles`/`@RequirePermissions`). | `route-access.e2e-spec.ts`: inventory of every route (over 400); public and "any signed-in user" routes must be on reviewed lists, and every admin/finance/payments/analytics route must be permission-gated. |
+| M2  | Public URLs could be `http://` in production (links in emails, provider callbacks).                             | Refused in production.                                                                                                                                                                                        |
+| M3  | One-time tokens in e-mail links (`?token=`) could reach access logs and error reports.                          | Edge access logs drop the `token` query parameter, cookies and auth headers; Sentry events drop query strings, bodies, cookies and user data.                                                                 |
+| M4  | Invalid-signature webhooks were only logged.                                                                    | Counter `marketplace_webhook_rejections_total` and alert `WebhookSignatureRejections`.                                                                                                                        |
+| M5  | The finance reconciliation did not check stock or refund invariants.                                            | New checks: reserved stock = active reservations, refunds ≤ received and = refund rows, no order paid twice, order totals = seller orders.                                                                    |
+| M6  | A crash between committing an outbox row and queueing its job, or a worker dying mid-job, was not tested.       | Worker integration tests: orphaned outbox event delivered by the sweep; a job whose process was killed (exit 137) is re-run exactly once by another worker.                                                   |
+| M7  | The database pool size could not be configured (`connection_limit` was ignored by the pg adapter).              | `connection_limit` in `DATABASE_URL` sizes each process's pool (default 10).                                                                                                                                  |
 
 ## Found by the load test and the production-stack CI jobs — fixed
 

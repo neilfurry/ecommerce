@@ -53,6 +53,17 @@ Outcomes:
   correctly refused.
 - **Webhooks:** 180 applied and 60 duplicates recognised. Every payment was received once.
 
+The final verification run (CI run 46043489394, commit `e012465`) repeated the test with
+the same outcome. All thresholds passed and every integrity check passed.
+
+| Scenario | browse | search | product_details | cart | checkout | contention | webhook_burst |
+| -------- | -----: | -----: | --------------: | ---: | -------: | ---------: | ------------: |
+| p95 ms   |    159 |     47 |               9 |   12 |       49 |      1,168 |           765 |
+| Errors   |     0% |     0% |              0% |   0% |       0% |         0% |            0% |
+
+In that run, notifications reached users p95 0.62 s after commit (2,210 events, none left
+pending).
+
 ### Integrity after the load (all passed)
 
 - The contended product sold exactly its stock (25 ordered, never more).

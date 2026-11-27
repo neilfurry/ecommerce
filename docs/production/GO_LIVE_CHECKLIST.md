@@ -92,5 +92,6 @@ server; **[Business]** need people, contracts or approvals outside the software.
 - [ ] Rollback rehearsed (`./deploy.sh --rollback` on staging) and the previous tag noted.
 
 The marketplace is ready for production when **every** box above is ticked. As of the Phase 8
-report, sections 1 (CI) are verified; sections 2–6 require the production server, the
-business's accounts and legal approvals.
+report, the **[CI]** items in section 1 are verified by CI run 46043489394 (commit `e012465`).
+The release tag and sections 2–6 require the production server, the business's accounts and
+legal approvals.

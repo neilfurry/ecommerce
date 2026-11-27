@@ -3,7 +3,7 @@
 The multi-vendor marketplace for the Philippines after Phases 1–8.
 
 **Verdict:** the software passed every check that can run without production credentials or
-a production server. That includes CI run **{{RUN}}** (commit `{{SHA}}`): every test suite,
+a production server. That includes CI run **46043489394** (commit `e012465`): every test suite,
 the production stack under `NODE_ENV=production`, a backup → destroy → restore test, and a
 load test whose integrity checks all passed. The marketplace is **not yet production-ready
 as a business service**. What remains needs the owner's accounts, a server, legal approval
@@ -32,7 +32,7 @@ Details: [SYSTEM_ARCHITECTURE.md](../architecture/SYSTEM_ARCHITECTURE.md),
 - **Frontends:** three React SPAs (Vite). The Storefront serves customers, the Seller Center
   serves sellers and the Admin Console serves staff. In production they are static files
   served by the Caddy edge.
-- **API:** a NestJS 12 modular monolith with 31 domain modules and 439 routes. It is
+- **API:** a NestJS 12 modular monolith with 31 domain modules and 429 route handlers. It is
   stateless, and two replicas sit behind the edge's least-connections load balancer.
 - **Worker:** NestJS + BullMQ with seven work queues plus a dead-letter queue. It handles email, SMS, notifications, image
   processing, payment events, order processing (expiries, settlement, loyalty) and reports.
@@ -154,9 +154,21 @@ checklist §5).
 
 ## 10. Test results
 
-CI run **{{RUN}}** on commit `{{SHA}}`. All counts are from that run.
+CI run **46043489394** on commit `e012465`. All counts are from that run.
 
-{{TEST_TABLE}}
+| Suite                                    | Result                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typecheck, lint, format, builds          | Pass                                                                                                                                                                                                                                                                                                                         |
+| Unit tests (all packages and apps)       | 521 passed                                                                                                                                                                                                                                                                                                                   |
+| API e2e                                  | 310 passed in 26 suites (new: `integrity.e2e-spec.ts`, `route-access.e2e-spec.ts`, `staff-mfa-required.e2e-spec.ts`)                                                                                                                                                                                                         |
+| Worker integration                       | 15 passed (new: crash between commit and enqueue, killed job re-run once, backlog drained in one run, metrics)                                                                                                                                                                                                               |
+| Playwright (desktop + mobile)            | 40 passed, 1 skipped (a mobile-only check on desktop), no flaky tests; includes the customer, seller and administrator journeys                                                                                                                                                                                              |
+| Migration drift (`prisma migrate diff`)  | No difference detected                                                                                                                                                                                                                                                                                                       |
+| PowerShell scripts                       | Pass                                                                                                                                                                                                                                                                                                                         |
+| Production stack (`NODE_ENV=production`) | Smoke test passed: TLS and security headers on the three apps, HTTP→HTTPS, health, Swagger/dev tools/metrics hidden, forged webhook refused, secure cookies, CSRF, 13 Prometheus targets up, 30 alert rules, Alertmanager/Grafana/Loki ready, logs in Loki                                                                   |
+| Backup and restore                       | Encrypted full backup → row written after it → volume destroyed → restored with WAL replay → all 115 tables and the money/stock checksum identical (on the CI database: reference data and 43,760 PSGC locations, 51 MB; application tables mostly empty), post-backup row present, application healthy, repository verified |
+| Load test                                | All thresholds met, all integrity checks passed ([LOAD_TEST_REPORT.md](LOAD_TEST_REPORT.md))                                                                                                                                                                                                                                 |
+| Dependency audit (`pnpm audit --prod`)   | No known vulnerabilities (run locally on 2026-11-28; not part of CI)                                                                                                                                                                                                                                                         |
 
 Data integrity coverage, with each case pointing to its test:
 
@@ -179,7 +191,23 @@ See [LOAD_TEST_REPORT.md](LOAD_TEST_REPORT.md). The results come from a CI runne
 16 GB) running the whole production stack, so they show **relative** capacity on similar
 hardware, not a guaranteed traffic level for a production server.
 
-{{LOAD_SUMMARY}}
+Run 46043489394 (the verification run), offered load per scenario. Every threshold
+passed and every integrity check passed:
+
+| Scenario        | Req/s | p95 ms | Errors |
+| --------------- | ----: | -----: | -----: |
+| browse          |  63.8 |    159 |     0% |
+| search          |  80.0 |     47 |     0% |
+| product_details | 120.0 |      9 |     0% |
+| cart            |  80.0 |     12 |     0% |
+| checkout        |  16.0 |     49 |     0% |
+| contention      |  ≥6.7 |  1,168 |     0% |
+| webhook_burst   |  ≥4.0 |    765 |     0% |
+
+The checkout scenario placed 960 orders. In the contention scenario, 25 of 200 attempts got
+the 25 units. Notifications reached users p95 0.62 s after commit. Two bottlenecks found by
+the first run were fixed: search went from p95 7 s to under 50 ms, and notifications from
+p95 71 s to under 1 s.
 
 ## 12. Known limitations
 
