@@ -13,6 +13,11 @@ export class AppConfig {
   readonly nodeEnv: ApiEnv['NODE_ENV'];
   readonly isProduction: boolean;
   readonly version: string;
+  readonly observability: {
+    metricsPort: number;
+    sentryDsn: string | undefined;
+    sentryEnvironment: string;
+  };
   readonly http: {
     port: number;
     corsOrigins: string[];
@@ -48,8 +53,11 @@ export class AppConfig {
     staffSessionHours: number;
     maxFailedSignIns: number;
     lockoutMinutes: number;
+    /** Credential requests per client address per minute (sign-in, sign-up, resets). */
+    signInLimitPerMinute: number;
     cookieSecure: boolean;
     cookieDomain: string | undefined;
+    staffMfaRequired: boolean;
   };
   readonly appUrls: { storefront: string; seller: string; admin: string };
   readonly storage: {
@@ -69,6 +77,11 @@ export class AppConfig {
     this.nodeEnv = env.NODE_ENV;
     this.isProduction = env.NODE_ENV === 'production';
     this.version = env.APP_VERSION ?? readPackageVersion();
+    this.observability = {
+      metricsPort: env.METRICS_PORT,
+      sentryDsn: env.SENTRY_DSN,
+      sentryEnvironment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,
+    };
     this.http = {
       port: env.API_PORT,
       corsOrigins: env.CORS_ORIGINS,
@@ -120,8 +133,10 @@ export class AppConfig {
       staffSessionHours: env.AUTH_STAFF_SESSION_HOURS,
       maxFailedSignIns: env.AUTH_MAX_FAILED_SIGN_INS,
       lockoutMinutes: env.AUTH_LOCKOUT_MINUTES,
+      signInLimitPerMinute: env.AUTH_SIGN_IN_LIMIT_PER_MINUTE,
       cookieSecure: env.COOKIE_SECURE,
       cookieDomain: env.COOKIE_DOMAIN || undefined,
+      staffMfaRequired: env.STAFF_MFA_REQUIRED,
     };
     this.appUrls = {
       storefront: env.STOREFRONT_URL.replace(/\/+$/, ''),

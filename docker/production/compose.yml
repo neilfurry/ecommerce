@@ -1,0 +1,307 @@
+# Production stack for one or more Linux VMs (Docker Engine 27+ with Compose v2).
+#
+#   cd docker/production
+#   cp .env.production.example .env.production      # fill in every value (see ENVIRONMENT_VARIABLES.md)
+#   docker compose --env-file .env.production pull
+#   docker compose --env-file .env.production run --rm migrate
+#   docker compose --env-file .env.production up -d
+#
+# docs/production/DEPLOYMENT_GUIDE.md covers first deployment, updates and rollbacks.
+# Only the edge (80/443) is published; everything else stays on the private networks.
+name: marketplace
+
+x-app-env: &app-env
+  env_file: .env.production
+  environment:
+    NODE_ENV: ${NODE_ENV:-production}
+    METRICS_PORT: '9464'
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '20m', max-file: '5' }
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: '20m', max-file: '5' }
+
+services:
+  # ---- Edge: HTTPS, load balancing, static frontends ---------------------------------------
+  edge:
+    image: ${IMAGE_REGISTRY:-ghcr.io/neilfurry/ecommerce}/edge:${IMAGE_TAG:?set IMAGE_TAG}
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [public, app]
+
+  # ---- Application ------------------------------------------------------------------------
+  api:
+    image: ${IMAGE_REGISTRY:-ghcr.io/neilfurry/ecommerce}/api:${IMAGE_TAG:?set IMAGE_TAG}
+    <<: *app-env
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      resources:
+        limits: { cpus: '${API_CPUS:-1.0}', memory: '${API_MEMORY:-768M}' }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [app, data]
+
+  worker:
+    image: ${IMAGE_REGISTRY:-ghcr.io/neilfurry/ecommerce}/worker:${IMAGE_TAG:?set IMAGE_TAG}
+    <<: *app-env
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+      resources:
+        limits: { cpus: '${WORKER_CPUS:-1.0}', memory: '${WORKER_MEMORY:-768M}' }
+    # SIGTERM lets active jobs finish; anything still running is retried by another worker.
+    stop_grace_period: 60s
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [app, data]
+
+  # One-off: database migrations (run before starting a new release). Also reference data,
+  # location import and the first super admin; see DEPLOYMENT_GUIDE.md.
+  migrate:
+    image: ${IMAGE_REGISTRY:-ghcr.io/neilfurry/ecommerce}/tools:${IMAGE_TAG:?set IMAGE_TAG}
+    profiles: [ops]
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+    command: ['pnpm', 'db:deploy']
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [data]
+
+  # ---- Data -------------------------------------------------------------------------------
+  postgres:
+    image: ${IMAGE_REGISTRY:-ghcr.io/neilfurry/ecommerce}/postgres:${IMAGE_TAG:?set IMAGE_TAG}
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    environment:
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    shm_size: 512m
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-socket:/var/run/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [data]
+
+  # Scheduled pgBackRest backups (encrypted, to S3) from the same data directory.
+  backup:
+    image: ${IMAGE_REGISTRY:-ghcr.io/neilfurry/ecommerce}/postgres:${IMAGE_TAG:?set IMAGE_TAG}
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    user: postgres
+    entrypoint: ['marketplace-backup']
+    command: ['schedule']
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-socket:/var/run/postgresql
+      - backup-metrics:/metrics
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [data]
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    <<: *logging
+    # BullMQ needs "noeviction"; AOF keeps queued jobs across restarts.
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec --maxmemory-policy noeviction --maxmemory $${REDIS_MAXMEMORY:-512mb}
+    env_file: .env.production
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+
+  # Optional self-hosted object storage (profile "storage"). Production normally uses a
+  # managed S3 service (AWS S3, Cloudflare R2, DigitalOcean Spaces); see DEPLOYMENT_GUIDE.md.
+  minio:
+    # MinIO no longer publishes images on Docker Hub; Chainguard's build is maintained.
+    image: cgr.dev/chainguard/minio:latest
+    profiles: [storage]
+    restart: unless-stopped
+    <<: *logging
+    command: ['server', '/data', '--console-address', ':9001']
+    env_file: .env.production
+    volumes:
+      - minio-data:/data
+    networks: [data]
+
+  # Copies the uploads bucket to a second (versioned) bucket every night (profile "storage-backup").
+  objects-backup:
+    image: rclone/rclone:1.71
+    profiles: [storage-backup]
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    entrypoint: ['/bin/sh', '/scripts/object-storage-backup.sh']
+    volumes:
+      - ./backup/object-storage-backup.sh:/scripts/object-storage-backup.sh:ro
+      - backup-metrics:/metrics
+    networks: [data, public]
+
+  # ---- Monitoring -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks: [app, data, monitoring]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    <<: *logging
+    entrypoint: ['/bin/sh', '/etc/alertmanager/render.sh']
+    env_file: .env.production
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    networks: [monitoring, public]
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN:-grafana.example.ph}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks: [app, monitoring]
+
+  loki:
+    image: grafana/loki:3.5.3
+    restart: unless-stopped
+    <<: *logging
+    command: ['-config.file=/etc/loki/loki.yml']
+    volumes:
+      - ./monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    networks: [monitoring]
+
+  # Ships every container's logs to Loki.
+  alloy:
+    image: grafana/alloy:v1.10.2
+    restart: unless-stopped
+    <<: *logging
+    command: ['run', '/etc/alloy/config.alloy', '--storage.path=/var/lib/alloy']
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy
+    networks: [monitoring]
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/metrics
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+      - backup-metrics:/metrics:ro
+    networks: [monitoring]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    restart: unless-stopped
+    <<: *logging
+    privileged: true
+    devices: ['/dev/kmsg']
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [monitoring]
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    environment:
+      DATA_SOURCE_URI: postgres:5432/${POSTGRES_DB:-marketplace}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER:-marketplace}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    command: ['--collector.stat_statements', '--collector.long_running_transactions']
+    networks: [data, monitoring]
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.75.0
+    restart: unless-stopped
+    <<: *logging
+    env_file: .env.production
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    networks: [data, monitoring]
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    <<: *logging
+    command: ['--config.file=/etc/blackbox/blackbox.yml']
+    volumes:
+      - ./monitoring/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [public, monitoring]
+
+# "data" is never published; it keeps outbound access because PostgreSQL ships WAL to the
+# backup bucket. "monitoring" has no outbound access at all.
+networks:
+  public: {}
+  app: {}
+  data: {}
+  monitoring: { internal: true }
+
+volumes:
+  caddy-data: {}
+  caddy-config: {}
+  postgres-data: {}
+  postgres-socket: {}
+  backup-metrics: {}
+  redis-data: {}
+  minio-data: {}
+  prometheus-data: {}
+  alertmanager-data: {}
+  grafana-data: {}
+  loki-data: {}
+  alloy-data: {}

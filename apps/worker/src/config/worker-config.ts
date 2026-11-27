@@ -27,6 +27,11 @@ export const workerEnvSchema = z
     /** Optional override of every queue's concurrency; unset = per-queue defaults. */
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).optional(),
     WORKER_HEARTBEAT_INTERVAL_SECONDS: envInteger(15, 1, 300),
+    /** Internal port serving Prometheus metrics at /metrics (0 = off). */
+    METRICS_PORT: envInteger(0, 0, 65535),
+    /** Sentry-compatible error tracking (Sentry or GlitchTip). Unset = off. */
+    SENTRY_DSN: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
+    SENTRY_ENVIRONMENT: z.string().optional(),
     DEV_TOOLS_ENABLED: envBoolean(false),
     SMTP_HOST: z.string().min(1).default('localhost'),
     SMTP_PORT: envInteger(1025, 1, 65535),
@@ -41,6 +46,8 @@ export const workerEnvSchema = z
     PAYMONGO_SECRET_KEY: z.string().optional(),
     PAYMONGO_WEBHOOK_SECRET: z.string().optional(),
     MOCK_WEBHOOK_SECRET: z.string().min(16).default('local-mock-webhook-secret-change-me'),
+    /** Staging only: allows PayMongo test keys with NODE_ENV=production (see the API). */
+    ALLOW_TEST_PAYMENTS: envBoolean(false),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.DEV_TOOLS_ENABLED) {
@@ -64,6 +71,29 @@ export const workerEnvSchema = z
         message: 'Required in production (stock reservations expire through the worker)',
       });
     }
+    if (env.NODE_ENV === 'production') {
+      if (env.SMTP_HOST === 'localhost' || /\.local>?$/.test(env.MAIL_FROM)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['SMTP_HOST'],
+          message: 'Development mail settings (Mailpit); configure a real SMTP relay and sender',
+        });
+      }
+      if (env.PAYMONGO_SECRET_KEY?.startsWith('sk_test_') && !env.ALLOW_TEST_PAYMENTS) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PAYMONGO_SECRET_KEY'],
+          message: 'PayMongo test key in production (ALLOW_TEST_PAYMENTS=true is for staging only)',
+        });
+      }
+      if (env.DATABASE_URL && /marketplace_dev_password/.test(env.DATABASE_URL)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['DATABASE_URL'],
+          message: 'Uses the development database password',
+        });
+      }
+    }
     if (env.SMS_PROVIDER === 'semaphore' && !env.SEMAPHORE_API_KEY) {
       ctx.addIssue({
         code: 'custom',
@@ -86,6 +116,11 @@ export class WorkerConfig {
   readonly adminPortalUrl: string;
   readonly concurrencyOverride: number | undefined;
   readonly heartbeatIntervalSeconds: number;
+  readonly observability: {
+    metricsPort: number;
+    sentryDsn: string | undefined;
+    sentryEnvironment: string;
+  };
   readonly devToolsEnabled: boolean;
   readonly smtp: {
     host: string;
@@ -116,6 +151,11 @@ export class WorkerConfig {
     this.adminPortalUrl = env.ADMIN_PORTAL_URL.replace(/\/$/, '');
     this.concurrencyOverride = env.WORKER_CONCURRENCY;
     this.heartbeatIntervalSeconds = env.WORKER_HEARTBEAT_INTERVAL_SECONDS;
+    this.observability = {
+      metricsPort: env.METRICS_PORT,
+      sentryDsn: env.SENTRY_DSN,
+      sentryEnvironment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,
+    };
     this.devToolsEnabled = env.DEV_TOOLS_ENABLED;
     this.smtp = {
       host: env.SMTP_HOST,

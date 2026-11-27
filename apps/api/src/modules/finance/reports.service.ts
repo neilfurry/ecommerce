@@ -495,6 +495,60 @@ export class ReportsService {
       unallocated.eq(shouldBe),
     );
 
+    // Operational integrity (Phase 8): stock holds, refunds and order totals agree with
+    // the records they summarise.
+    const holds = await db.$queryRaw<{ id: string; label: string }[]>`
+      SELECT s."id", s."id"::text AS "label" FROM "stock_levels" s
+      LEFT JOIN (SELECT "stock_level_id", SUM("quantity") AS "q" FROM "stock_reservations"
+                 WHERE "status" = 'ACTIVE' GROUP BY "stock_level_id") r ON r."stock_level_id" = s."id"
+      WHERE s."reserved_quantity" <> COALESCE(r."q", 0)`;
+    add(
+      'STOCK_HOLDS',
+      'Reserved stock matches the active reservations',
+      holds,
+      holds.length === 0
+        ? 'Every stock level reserves exactly what its active reservations hold.'
+        : `${holds.length} stock level(s) out of step with their reservations.`,
+    );
+
+    const refundTotals = await db.$queryRaw<{ id: string; reference: string }[]>`
+      SELECT p."id", p."reference" FROM "payments" p
+      WHERE p."refunded_amount" > p."amount_received"
+         OR p."refunded_amount" <> COALESCE((SELECT SUM(f."amount") FROM "refunds" f
+              WHERE f."payment_id" = p."id" AND f."status" <> 'FAILED'), 0)`;
+    add(
+      'REFUND_TOTALS',
+      'Refunds never exceed what was received',
+      refundTotals.map((r) => ({ id: r.id, label: r.reference })),
+      refundTotals.length === 0
+        ? 'Each payment’s refunded amount equals its refunds and is within the amount received.'
+        : `${refundTotals.length} payment(s) with refunds that do not add up.`,
+    );
+
+    const doublePaid = await db.$queryRaw<{ id: string; order_number: string }[]>`
+      SELECT o."id", o."order_number" FROM "orders" o
+      WHERE (SELECT COUNT(*) FROM "payments" p WHERE p."order_id" = o."id" AND p."status" = 'PAID') > 1`;
+    add(
+      'DOUBLE_PAID',
+      'No order is paid twice',
+      doublePaid.map((r) => ({ id: r.id, label: r.order_number })),
+      doublePaid.length === 0
+        ? 'Every order has at most one paid payment (extra money goes to finance review).'
+        : `${doublePaid.length} order(s) with more than one paid payment.`,
+    );
+
+    const totals = await db.$queryRaw<{ id: string; order_number: string }[]>`
+      SELECT o."id", o."order_number" FROM "orders" o
+      WHERE o."grand_total" <> (SELECT COALESCE(SUM(so."total"), 0) FROM "seller_orders" so WHERE so."order_id" = o."id")`;
+    add(
+      'ORDER_TOTALS',
+      'Order totals equal the sum of their seller orders',
+      totals.map((r) => ({ id: r.id, label: r.order_number })),
+      totals.length === 0
+        ? 'Every order total is the sum of its seller orders.'
+        : `${totals.length} order(s) whose total differs from their seller orders.`,
+    );
+
     return checks;
   }
 

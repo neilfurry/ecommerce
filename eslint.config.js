@@ -30,6 +30,13 @@ export default tseslint.config(
       eqeqeq: ['error', 'always'],
     },
   },
+  // k6 load-test scripts (k6's own JavaScript runtime and globals)
+  {
+    files: ['load/k6/**/*.js'],
+    languageOptions: {
+      globals: { __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly', open: 'readonly' },
+    },
+  },
   // Node: API, worker, scripts, configs
   {
     files: [

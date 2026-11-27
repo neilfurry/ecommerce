@@ -2,6 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplicationContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
+  BULLMQ_PREFIX,
   EMAIL_JOBS,
   NOTIFICATION_JOBS,
   QUEUE_NAMES,
@@ -11,14 +12,17 @@ import {
 } from '@marketplace/config';
 import type { WorkerHeartbeat } from '@marketplace/shared-types';
 import type { DeadLetterData } from '@marketplace/validation';
-import type { Job, Queue } from 'bullmq';
+import { spawn } from 'node:child_process';
+import { Queue as BullQueue, Worker as BullWorker, type Job, type Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { SMTPServer } from 'smtp-server';
 import { deadLetterJobId } from '../src/queues/dead-letter.service';
 import { WorkerDatabase } from '../src/database/database.provider';
+import { NotificationDispatcher } from '../src/notifications/notification-dispatcher';
 import { MockPushProvider, PushProvider } from '../src/notifications/push-provider';
 import { REDIS_CLIENT } from '../src/redis.provider';
 import { WorkerModule } from '../src/worker.module';
+import { registry, WorkerMetrics } from '../src/observability/metrics';
 
 async function waitFor<T>(
   probe: () => Promise<T | null | undefined>,
@@ -312,6 +316,55 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
       expect(push.sent.some((p) => p.endpoint.endsWith(suffix))).toBe(true);
     });
 
+    it('delivers an event left pending by a crash between commit and enqueue (Phase 8)', async () => {
+      const db = app.get(WorkerDatabase).client!;
+      // The API committed the outbox row, then died before queueing the dispatch job.
+      const orphan = await db.notificationEvent.create({
+        data: {
+          event: 'ORDER_SHIPPED',
+          userIds: [userId],
+          data: { firstName: 'Nina', orderNumber: `MP-${suffix}-crash`, storeName: 'Test Store' },
+          link: '/account/orders/test',
+        },
+      });
+      const sweep = await notificationsQueue.add(NOTIFICATION_JOBS.DISPATCH_PENDING, {});
+      expect(await waitForState(sweep, ['completed', 'failed'])).toBe('completed');
+      const row = await waitFor(async () => {
+        const r = await db.notificationEvent.findUnique({ where: { id: orphan.id } });
+        return r && r.status !== 'PENDING' ? r : null;
+      }, 20_000);
+      expect(row.status).toBe('PROCESSED');
+      expect(await db.notification.count({ where: { eventId: orphan.id } })).toBe(1);
+    });
+
+    it('drains a backlog larger than one batch in a single run (Phase 8 load test)', async () => {
+      const db = app.get(WorkerDatabase).client!;
+      const created = [];
+      for (let i = 0; i < 5; i += 1) {
+        created.push(
+          await db.notificationEvent.create({
+            data: {
+              event: 'ORDER_SHIPPED',
+              userIds: [userId],
+              data: {
+                firstName: 'Nina',
+                orderNumber: `MP-${suffix}-burst-${i}`,
+                storeName: 'Test Store',
+              },
+              link: '/account/orders/test',
+            },
+          }),
+        );
+      }
+      // Batches of 2: one run must still deliver all five.
+      await app.get(NotificationDispatcher).dispatchPending(2);
+      const statuses = await db.notificationEvent.findMany({
+        where: { id: { in: created.map((e) => e.id) } },
+        select: { status: true },
+      });
+      expect(statuses.map((r) => r.status)).toEqual(Array(5).fill('PROCESSED'));
+    });
+
     it('respects the customer’s channel choices and never delivers a channel twice', async () => {
       const db = app.get(WorkerDatabase).client!;
       await db.notificationPreference.create({ data: { userId, channel: 'SMS', enabled: false } });
@@ -325,4 +378,57 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
       expect(await db.notification.count({ where: { eventId: event.id } })).toBe(1);
     });
   });
+
+  it('exposes queue depth, job timings and database backlog as Prometheus metrics (Phase 8)', async () => {
+    const metrics = app.get(WorkerMetrics);
+    await metrics.collect();
+    const text = await registry.metrics();
+    expect(text).toMatch(
+      /marketplace_queue_jobs\{[^}]*queue="email"[^}]*state="waiting"[^}]*\} \d+/,
+    );
+    expect(text).toMatch(/marketplace_backlog\{[^}]*kind="payments_failed_15m"[^}]*\} \d+/);
+    expect(text).toMatch(/marketplace_backlog\{[^}]*kind="webhook_events_stuck"[^}]*\} \d+/);
+    // Jobs processed earlier in this suite were timed, and the dead-lettered ones counted.
+    expect(text).toMatch(/marketplace_job_duration_seconds_count\{[^}]*queue="system"/);
+    expect(text).toMatch(/marketplace_job_failures_total\{[^}]*final="true"/);
+  });
+
+  it('re-runs a job whose worker process crashed mid-run, exactly once (Phase 8)', async () => {
+    const queueName = `crash-recovery-${Date.now()}`;
+    const connection = { url: process.env.REDIS_URL ?? 'redis://localhost:6379' };
+    const queue = new BullQueue(queueName, { connection, prefix: BULLMQ_PREFIX });
+    const job = await queue.add('crash-test', { n: 1 });
+    // A separate process takes the job and dies without finishing it (like kill -9 or OOM).
+    const script = `
+      const { Worker } = require('bullmq');
+      const w = new Worker(${JSON.stringify(queueName)}, async () => { process.exit(137); },
+        { connection: ${JSON.stringify(connection)}, prefix: ${JSON.stringify(BULLMQ_PREFIX)}, lockDuration: 1000, stalledInterval: 500 });
+    `;
+    const code = await new Promise<number | null>((resolve) => {
+      const child = spawn(process.execPath, ['-e', script], { cwd: __dirname, stdio: 'ignore' });
+      child.on('exit', resolve);
+    });
+    expect(code).toBe(137);
+    expect(await job.getState()).toBe('active');
+
+    // A healthy worker notices the stalled job once its lock expires and runs it again
+    // (production: within lockDuration + 2 × stalledInterval, BullMQ's 30 s defaults).
+    const runs: number[] = [];
+    const recovering = new BullWorker(
+      queueName,
+      async (j) => {
+        runs.push(j.attemptsStarted);
+        return 'done';
+      },
+      { connection, prefix: BULLMQ_PREFIX, lockDuration: 1000, stalledInterval: 500 },
+    );
+    try {
+      await waitFor(async () => ((await job.getState()) === 'completed' ? true : null), 20_000);
+      expect(runs).toHaveLength(1);
+    } finally {
+      await recovering.close();
+      await queue.obliterate({ force: true });
+      await queue.close();
+    }
+  }, 40_000);
 });

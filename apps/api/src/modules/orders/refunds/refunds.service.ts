@@ -85,15 +85,16 @@ export class RefundsService {
 
   /** Inside the caller's transaction. Returns the existing refund for a repeated key. */
   async createInTx(tx: Tx, spec: RefundSpec): Promise<{ id: string; created: boolean }> {
-    const existing = await tx.refund.findUnique({ where: { idempotencyKey: spec.idempotencyKey } });
-    if (existing) return { id: existing.id, created: false };
-    const amount = spec.itemsAmount.add(spec.shippingAmount).add(spec.chargesAmount);
-    if (amount.lte(0)) throw conflict('There is nothing to refund.');
     const owner = await tx.payment.findUnique({
       where: { id: spec.paymentId },
       select: { orderId: true },
     });
     if (owner) await lockOrderInTx(tx, owner.orderId);
+    // Checked under the order lock, so a concurrent request with the same key sees its twin.
+    const existing = await tx.refund.findUnique({ where: { idempotencyKey: spec.idempotencyKey } });
+    if (existing) return { id: existing.id, created: false };
+    const amount = spec.itemsAmount.add(spec.shippingAmount).add(spec.chargesAmount);
+    if (amount.lte(0)) throw conflict('There is nothing to refund.');
     const [payment] = await tx.$queryRaw<
       {
         id: string;
@@ -318,6 +319,19 @@ export class RefundsService {
     let refundId: string;
     try {
       refundId = await this.prisma.$transaction(async (tx) => {
+        // Order lock first (as every order change does): the seller order's remaining amount
+        // below is then read after any concurrent refund committed, and lock order is the same
+        // as in payments and cancellations, so concurrent refunds cannot deadlock.
+        const target = input.sellerOrderId
+          ? await tx.sellerOrder.findUnique({
+              where: { id: input.sellerOrderId },
+              select: { orderId: true },
+            })
+          : await tx.payment.findUnique({
+              where: { id: input.paymentId! },
+              select: { orderId: true },
+            });
+        if (target) await lockOrderInTx(tx, target.orderId);
         const existing = await tx.refund.findUnique({ where: { idempotencyKey: key } });
         if (existing) return existing.id;
         const id = input.sellerOrderId

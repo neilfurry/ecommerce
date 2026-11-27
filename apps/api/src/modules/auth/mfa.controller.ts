@@ -17,7 +17,12 @@ import {
   mfaStatusSchema,
 } from '@marketplace/validation';
 import type { Response } from 'express';
-import { CurrentUser, ReqContext, type RequestContext } from '../../common/auth/auth.decorators';
+import {
+  AllowWithoutMfa,
+  CurrentUser,
+  ReqContext,
+  type RequestContext,
+} from '../../common/auth/auth.decorators';
 import { zodToOpenApi } from '../../common/openapi/zod-openapi';
 import { MfaDisableDto, MfaEnableDto, MfaRegenerateDto, MfaSetupDto } from './auth.dtos';
 import { MfaService } from './mfa.service';
@@ -31,6 +36,7 @@ export class MfaController {
   constructor(private readonly mfa: MfaService) {}
 
   @Get()
+  @AllowWithoutMfa()
   @ApiOperation({ summary: 'Whether two-step verification is on, and recovery codes left' })
   @ApiOkResponse({ schema: zodToOpenApi(mfaStatusSchema) })
   status(@CurrentUser() user: AuthenticatedUser): Promise<MfaStatus> {
@@ -38,6 +44,7 @@ export class MfaController {
   }
 
   @Post('totp/setup')
+  @AllowWithoutMfa()
   @HttpCode(HttpStatus.OK)
   @Throttle(MFA_LIMIT)
   @ApiOperation({ summary: 'Start set-up: confirm the password, get the secret and QR code URI' })
@@ -54,6 +61,7 @@ export class MfaController {
   }
 
   @Post('totp/enable')
+  @AllowWithoutMfa()
   @HttpCode(HttpStatus.OK)
   @Throttle(MFA_LIMIT)
   @ApiOperation({

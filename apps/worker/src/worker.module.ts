@@ -40,6 +40,7 @@ import { DeadLetterService } from './queues/dead-letter.service';
 import { DOMAIN_PROCESSORS } from './queues/processors';
 import { redisClientProvider, RedisShutdown } from './redis.provider';
 import { smsProvider } from './sms/sms.module';
+import { WorkerMetrics } from './observability/metrics';
 
 /**
  * Root module of the worker process: one processor per domain queue, job handlers,
@@ -117,6 +118,7 @@ import { smsProvider } from './sms/sms.module';
     NotificationSweepHandler,
     NotificationSweepScheduler,
     ...DOMAIN_PROCESSORS,
+    WorkerMetrics,
   ],
 })
 export class WorkerModule {}

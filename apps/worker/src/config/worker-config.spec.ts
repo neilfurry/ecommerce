@@ -84,4 +84,27 @@ describe('WorkerConfig.load', () => {
     );
     expect(config.databaseUrl).toBe('postgresql://u:p@localhost:5432/db');
   });
+
+  it('refuses development mail settings and PayMongo test keys in production', () => {
+    const production = {
+      REDIS_URL: 'redis://redis:6379',
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://u:p@db:5432/db',
+      SMS_PROVIDER: 'semaphore',
+      SEMAPHORE_API_KEY: 'k',
+      SMTP_HOST: 'smtp.example.ph',
+      MAIL_FROM: 'Marketplace <no-reply@example.ph>',
+      PAYMONGO_SECRET_KEY: 'sk_live_abc',
+      PAYMONGO_WEBHOOK_SECRET: 'whsk_abc',
+    };
+    expect(WorkerConfig.load(production, false).nodeEnv).toBe('production');
+    expect(() => WorkerConfig.load({ ...production, SMTP_HOST: 'localhost' }, false)).toThrow(
+      /SMTP_HOST/,
+    );
+    const testKey = { ...production, PAYMONGO_SECRET_KEY: 'sk_test_abc' };
+    expect(() => WorkerConfig.load(testKey, false)).toThrow(/PAYMONGO_SECRET_KEY/);
+    expect(WorkerConfig.load({ ...testKey, ALLOW_TEST_PAYMENTS: 'true' }, false).nodeEnv).toBe(
+      'production',
+    );
+  });
 });

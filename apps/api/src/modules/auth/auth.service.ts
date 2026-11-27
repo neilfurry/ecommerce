@@ -557,6 +557,8 @@ export class AuthService {
         permissions: principal?.permissions ?? [],
         wholesaleStatus: user.wholesaleApplication?.status ?? null,
         mfaEnabled: !!user.mfa?.enabledAt,
+        mfaEnrollmentRequired:
+          app === 'admin' && this.config.auth.staffMfaRequired && !user.mfa?.enabledAt,
         seller:
           principal?.seller && app === 'seller'
             ? {

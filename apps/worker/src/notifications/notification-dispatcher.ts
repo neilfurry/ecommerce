@@ -277,22 +277,38 @@ export class NotificationDispatcher {
     }
   }
 
-  /** Every pending event, oldest first (sweep). */
-  async dispatchPending(limit = 100): Promise<DispatchResult[]> {
+  /**
+   * Pending events, oldest first, in batches until none is left (or maxBatches is reached), so
+   * events committed while a run is in progress are delivered by that run instead of waiting
+   * for the next sweep, and a burst drains at full speed. Events another run holds are skipped.
+   */
+  async dispatchPending(limit = 100, maxBatches = 20): Promise<DispatchResult[]> {
     const db = this.database.client;
     if (!db) return [];
-    const rows = await db.notificationEvent.findMany({
-      where: { status: 'PENDING' },
-      orderBy: { createdAt: 'asc' },
-      take: limit,
-      select: { id: true },
-    });
     const results: DispatchResult[] = [];
-    for (const row of rows) {
-      try {
-        results.push(await this.dispatch(row.id, db));
-      } catch (error) {
-        this.logger.error(`Notification event ${row.id}: ${(error as Error).message}`);
+    const seen = new Set<string>();
+    for (let batch = 0; batch < maxBatches; batch += 1) {
+      const rows = await db.notificationEvent.findMany({
+        where: { status: 'PENDING', id: { notIn: [...seen] } },
+        orderBy: { createdAt: 'asc' },
+        take: limit,
+        select: { id: true },
+      });
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        seen.add(row.id);
+        try {
+          results.push(await this.dispatch(row.id, db));
+        } catch (error) {
+          this.logger.error(`Notification event ${row.id}: ${(error as Error).message}`);
+        }
+      }
+      if (rows.length < limit) {
+        // Anything new since this batch was read? One more look, then stop.
+        const more = await db.notificationEvent.count({
+          where: { status: 'PENDING', id: { notIn: [...seen] } },
+        });
+        if (more === 0) break;
       }
     }
     return results;

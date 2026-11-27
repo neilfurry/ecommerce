@@ -1,0 +1,25 @@
+# Load-test overrides (CI only): the same production images and configuration, but with the
+# mock payment provider (so payment webhooks can be signed and replayed by k6), mock shipping
+# and SMS, a raised global rate limit (every k6 request comes from one address) and one-hour
+# access tokens (the test outlasts the normal 15 minutes). Per-route limits such as sign-in
+# stay as in production.
+x-loadtest-env: &loadtest-env
+  NODE_ENV: test
+  PAYMENT_PROVIDER: mock
+  SHIPPING_PROVIDER: mock
+  SMS_PROVIDER: mock
+  RATE_LIMIT_MAX_REQUESTS: '1000000'
+  AUTH_ACCESS_TOKEN_TTL_SECONDS: '3600'
+  MOCK_WEBHOOK_SECRET: ${MOCK_WEBHOOK_SECRET:-ci-load-test-mock-webhook-secret}
+  METRICS_PORT: '9464'
+
+services:
+  api:
+    environment: *loadtest-env
+  worker:
+    environment: *loadtest-env
+  migrate:
+    environment:
+      NODE_ENV: test
+    volumes:
+      - ../../load:/repo/load

@@ -99,6 +99,9 @@ jobs:
       - run: pnpm test:e2e:ui
         env:
           CI: 'true'
+          # Every browser test signs in from 127.0.0.1, in parallel; the default 10 per minute
+          # per address is covered by the API tests (auth.e2e-spec.ts).
+          AUTH_SIGN_IN_LIMIT_PER_MINUTE: '60'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -161,3 +164,200 @@ jobs:
       - name: Compose logs on failure
         if: failure()
         run: docker compose --env-file .env -f docker/docker-compose.yml logs --tail 100
+
+  # Phase 8: the production images and Compose stack, started the way a server runs them.
+  production-stack:
+    name: Production images, stack smoke test, backup and restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: quality
+    defaults:
+      run:
+        working-directory: docker/production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: api
+          tags: local/api:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: worker
+          tags: local/worker:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build edge image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: edge
+          tags: local/edge:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build tools image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: tools
+          tags: local/tools:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build postgres image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/production
+          file: docker/production/postgres/Dockerfile
+          tags: local/postgres:ci
+          load: true
+          cache-from: type=gha,scope=marketplace-postgres
+          cache-to: type=gha,scope=marketplace-postgres,mode=max
+      - name: Environment, certificates and host names
+        run: |
+          ./ci/make-env.sh > .env.production
+          ./ci/certs.sh
+          echo "127.0.0.1 shop.marketplace.test seller.marketplace.test admin.marketplace.test api.marketplace.test grafana.marketplace.test" | sudo tee -a /etc/hosts
+          docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage config --quiet
+      - name: Validate monitoring and edge configuration
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
+          docker run --rm -v "$PWD/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" --env-file .env.production caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Start data services, migrate, reference data
+        run: |
+          DC="docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage"
+          $DC up -d --wait postgres redis minio minio-backup mailpit
+          $DC run --rm buckets
+          $DC run --rm migrate
+          $DC run --rm migrate pnpm db:seed
+      - name: Start the whole stack (NODE_ENV=production)
+        run: |
+          docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage up -d --wait --wait-timeout 180 \
+            edge api worker backup prometheus alertmanager grafana loki alloy node-exporter cadvisor postgres-exporter redis-exporter blackbox-exporter
+          docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage ps
+      - name: Smoke test
+        run: ./ci/smoke.sh
+      - name: Backup, destroy, restore, verify
+        run: ./ci/backup-restore.sh
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage logs --tail 150
+
+  load-test:
+    name: Load test (k6, production images)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    needs: quality
+    defaults:
+      run:
+        working-directory: docker/production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: api
+          tags: local/api:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: worker
+          tags: local/worker:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build edge image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: edge
+          tags: local/edge:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build tools image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: tools
+          tags: local/tools:ci
+          load: true
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+      - name: Build postgres image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/production
+          file: docker/production/postgres/Dockerfile
+          tags: local/postgres:ci
+          load: true
+          cache-from: type=gha,scope=marketplace-postgres
+          cache-to: type=gha,scope=marketplace-postgres,mode=max
+      - name: Environment, certificates and host names
+        run: |
+          ./ci/make-env.sh > .env.production
+          ./ci/certs.sh
+          echo "127.0.0.1 shop.marketplace.test seller.marketplace.test admin.marketplace.test api.marketplace.test grafana.marketplace.test" | sudo tee -a /etc/hosts
+          docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage config --quiet
+      - name: Start data services, migrate, reference data
+        run: |
+          DC="docker compose -f compose.yml -f compose.ci.yml -f compose.loadtest.yml --env-file .env.production --profile storage"
+          $DC up -d --wait postgres redis minio minio-backup mailpit
+          $DC run --rm buckets
+          $DC run --rm migrate
+          $DC run --rm migrate pnpm db:seed
+      - name: Start the stack with the load-test overrides
+        run: |
+          docker compose -f compose.yml -f compose.ci.yml -f compose.loadtest.yml --env-file .env.production --profile storage up -d --wait --wait-timeout 180 \
+            edge api worker prometheus postgres-exporter redis-exporter
+      - uses: grafana/setup-k6-action@v1
+      - name: Runner
+        run: nproc && free -h && docker version --format '{{.Server.Version}}'
+      - name: Load test
+        working-directory: load
+        run: ./run.sh
+      - name: Results
+        if: always()
+        working-directory: load
+        run: for f in results/*.md results/*.txt; do echo "::group::$f"; cat "$f"; echo "::endgroup::"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: load/results/
+          retention-days: 30
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f compose.yml -f compose.ci.yml -f compose.loadtest.yml --env-file .env.production --profile storage logs --tail 150

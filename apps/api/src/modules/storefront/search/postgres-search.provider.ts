@@ -54,9 +54,29 @@ export class PostgresSearchProvider extends SearchProvider {
       Prisma.sql`price."min_price" IS NOT NULL`,
     ];
     if (words.length > 0) {
-      filters.push(Prisma.sql`(
-        ${document} @@ to_tsquery('simple', ${prefixQuery})
-        OR lower(p."name" || ' ' || coalesce(b."name", '') || ' ' || c."name") LIKE ALL(${likes}::text[]))`);
+      // A product matches when the full-text query matches its name and description, or when
+      // every word appears in its name, brand or category. Written so each branch can use an
+      // index (GIN full-text, GIN trigram on the name, b-tree on brand and category): the
+      // first word must appear in the name, brand or category (a word has no spaces, so it
+      // cannot span two of them), which narrows the products before the exact check. A plain
+      // OR across the joined tables made PostgreSQL compute the text vector of every product
+      // on every search (Phase 8 load test: 850 ms per search with 5,000 products).
+      const first = likes[0]!;
+      filters.push(Prisma.sql`p."id" IN (
+        SELECT tp."id" FROM "products" tp
+         WHERE to_tsvector('simple'::regconfig, tp."name" || ' ' || coalesce(tp."description", ''))
+               @@ to_tsquery('simple', ${prefixQuery})
+        UNION
+        SELECT wp."id" FROM "products" wp
+          LEFT JOIN "brands" wb ON wb."id" = wp."brand_id"
+          JOIN "categories" wc ON wc."id" = wp."category_id"
+         WHERE wp."id" IN (
+                 SELECT "id" FROM "products" WHERE lower("name") LIKE ${first}
+                 UNION SELECT "id" FROM "products"
+                  WHERE "brand_id" IN (SELECT "id" FROM "brands" WHERE lower("name") LIKE ${first})
+                 UNION SELECT "id" FROM "products"
+                  WHERE "category_id" IN (SELECT "id" FROM "categories" WHERE lower("name") LIKE ${first}))
+           AND lower(wp."name" || ' ' || coalesce(wb."name", '') || ' ' || wc."name") LIKE ALL(${likes}::text[]))`);
     }
     if (request.categoryIds?.length)
       filters.push(Prisma.sql`p."category_id" = ANY(${request.categoryIds}::uuid[])`);

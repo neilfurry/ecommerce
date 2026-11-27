@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@marketplace/database';
 import { SHIPPING_METHOD_LABELS } from '@marketplace/shared-types';
+import { AppConfig } from '../../config/app-config';
 import { PlatformSettingsService } from '../settings/platform-settings.service';
 import {
   ShippingProvider,
@@ -50,18 +51,37 @@ const ETA: Record<Route, [number, number]> = {
   otherIslandGroup: [5, 8],
 };
 
+/** Carrier name customers see for each rate-table provider. */
+export const RATE_TABLE_CARRIERS = {
+  mock: 'Mock Express',
+  rate_table: 'Standard courier',
+} as const;
+
+/** Customer-facing carrier name for a stored shipping-group provider. */
+export function carrierLabel(provider: string): string {
+  return (RATE_TABLE_CARRIERS as Record<string, string>)[provider] ?? provider;
+}
+
 /**
- * Development shipping rates from the table in Admin Console > Settings (no carrier is
- * called). Fee = route base for the first kilogram + a rate per additional kilogram, on the
+ * Shipping rates from the table in Admin Console > Settings (no carrier API is called).
+ * SHIPPING_PROVIDER=mock labels them "Mock Express" (development); SHIPPING_PROVIDER=rate_table
+ * is the same table for production, where sellers hand parcels to a courier they arrange
+ * themselves and enter the tracking number. Fee = route base for the first kilogram + a rate per additional kilogram, on the
  * larger of actual and volumetric weight; express multiplies the fee; same-day is a flat fee
  * within the same city.
  */
 @Injectable()
 export class MockShippingProvider extends ShippingProvider {
-  readonly name = 'mock';
+  readonly name: 'mock' | 'rate_table';
+  private readonly carrier: string;
 
-  constructor(private readonly settings: PlatformSettingsService) {
+  constructor(
+    private readonly settings: PlatformSettingsService,
+    config: AppConfig,
+  ) {
     super();
+    this.name = config.shippingProvider;
+    this.carrier = RATE_TABLE_CARRIERS[this.name];
   }
 
   async quote(
@@ -80,7 +100,7 @@ export class MockShippingProvider extends ShippingProvider {
     const options: ShippingRate[] = [
       {
         method: 'STANDARD',
-        carrier: 'Mock Express',
+        carrier: this.carrier,
         serviceName: SHIPPING_METHOD_LABELS.STANDARD,
         fee: standard.toDecimalPlaces(2),
         chargeableWeightGrams,
@@ -89,7 +109,7 @@ export class MockShippingProvider extends ShippingProvider {
       },
       {
         method: 'EXPRESS',
-        carrier: 'Mock Express',
+        carrier: this.carrier,
         serviceName: SHIPPING_METHOD_LABELS.EXPRESS,
         fee: standard.times(rates.expressMultiplier).toDecimalPlaces(2),
         chargeableWeightGrams,
@@ -100,7 +120,7 @@ export class MockShippingProvider extends ShippingProvider {
     if (route === 'sameCity' && rates.sameDayFee !== null && chargeableWeightGrams <= 20_000) {
       options.push({
         method: 'SAME_DAY',
-        carrier: 'Mock Express',
+        carrier: this.carrier,
         serviceName: SHIPPING_METHOD_LABELS.SAME_DAY,
         fee: new Prisma.Decimal(rates.sameDayFee).toDecimalPlaces(2),
         chargeableWeightGrams,

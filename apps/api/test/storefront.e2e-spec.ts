@@ -202,6 +202,10 @@ describe('Storefront (e2e)', () => {
       expect(all.facets.priceRange).toEqual({ min: '150.00', max: '1200.00' });
       const partial = await search(`q=${word}%20tumb`);
       expect(partial.items.map((i) => i.id)).toEqual([ids.mid]);
+      // Words can come from the brand (or category) as well as the name, in any order.
+      const byBrand = await search(`q=brand%20${word}`);
+      expect(byBrand.items.map((i) => i.id)).toEqual([ids.mid]);
+      expect((await search(`q=steel%20brand%20${word}`)).items.map((i) => i.id)).toEqual([ids.mid]);
       const suggest = (await guest.get(`/api/v1/catalog/suggest?q=${word}`).expect(200)).body as {
         products: { id: string }[];
       };

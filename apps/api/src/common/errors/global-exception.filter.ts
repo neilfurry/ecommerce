@@ -9,6 +9,8 @@ import {
 import type { ApiErrorBody, ApiErrorCode, ApiFieldError } from '@marketplace/shared-types';
 import type { Request, Response } from 'express';
 import { ApiException } from './api.exception';
+import { reportError } from '../../infrastructure/observability/error-reporting';
+import { unhandledErrors } from '../../infrastructure/observability/metrics';
 
 const CODE_BY_STATUS: Record<number, ApiErrorCode> = {
   400: 'BAD_REQUEST',
@@ -65,6 +67,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         { err: exception, requestId, path: request.originalUrl },
         `Unhandled error on ${request.method} ${request.originalUrl}`,
       );
+      unhandledErrors.inc();
+      reportError(exception, { requestId, method: request.method, path: request.path });
     }
 
     const body: ApiErrorBody = {

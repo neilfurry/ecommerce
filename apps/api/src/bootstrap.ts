@@ -9,6 +9,7 @@ import { Logger } from 'nestjs-pino';
 import { GlobalExceptionFilter } from './common/errors/global-exception.filter';
 import { ZodGlobalValidationPipe } from './common/validation/zod-global-validation.pipe';
 import type { AppConfig } from './config/app-config';
+import { metricsMiddleware } from './infrastructure/observability/metrics';
 
 export const JSON_BODY_LIMIT = '1mb';
 export const SWAGGER_PATH = `${API_PREFIX}/docs`;
@@ -34,6 +35,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
       : apiHelmet(req, res, next),
   );
 
+  app.use(metricsMiddleware);
   app.use(cookieParser());
   app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: JSON_BODY_LIMIT, extended: false });

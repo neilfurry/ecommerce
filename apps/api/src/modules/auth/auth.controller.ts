@@ -26,6 +26,7 @@ import {
 } from '@marketplace/validation';
 import type { Request, Response } from 'express';
 import {
+  AllowWithoutMfa,
   CurrentUser,
   Public,
   ReqContext,
@@ -62,8 +63,13 @@ import { randomToken, sha256 } from './crypto';
 import { OtpService } from './otp.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
-/** Strict per-IP limits on credential endpoints, on top of the global limit. */
-const SIGN_IN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
+/**
+ * Strict per-IP limits on credential endpoints, on top of the global limit. The sign-in limit
+ * comes from AUTH_SIGN_IN_LIMIT_PER_MINUTE (default 10); the controller records it at start-up
+ * because decorators are evaluated before configuration is loaded.
+ */
+let signInLimitPerMinute = 10;
+const SIGN_IN_LIMIT = { default: { limit: () => signInLimitPerMinute, ttl: 60_000 } };
 const OTP_LIMIT = { default: { limit: 5, ttl: 60_000 } };
 
 function requireApp(context: RequestContext, allowed?: ClientApp[]): ClientApp {
@@ -89,7 +95,9 @@ export class AuthController {
     private readonly config: AppConfig,
     private readonly accessTokens: AccessTokenService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    signInLimitPerMinute = config.auth.signInLimitPerMinute;
+  }
 
   @Get('csrf')
   @Public()
@@ -299,6 +307,7 @@ export class AuthController {
   }
 
   @Post('sign-out')
+  @AllowWithoutMfa()
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -329,6 +338,7 @@ export class AuthController {
   }
 
   @Post('sign-out-everywhere')
+  @AllowWithoutMfa()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Sign out of every app on every device' })
   @ApiNoContentResponse()
@@ -342,6 +352,7 @@ export class AuthController {
   }
 
   @Get('session')
+  @AllowWithoutMfa()
   @ApiOperation({ summary: 'The signed-in user, roles, permissions and token expiry' })
   @ApiOkResponse({ schema: zodToOpenApi(sessionResponseSchema) })
   session(@CurrentUser() user: AuthenticatedUser): Promise<SessionResponse> {
@@ -405,6 +416,7 @@ export class AuthController {
   }
 
   @Post('password/change')
+  @AllowWithoutMfa()
   @Throttle(SIGN_IN_LIMIT)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Change password; other devices are signed out' })

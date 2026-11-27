@@ -1,0 +1,199 @@
+# Alert rules. Severity "critical" pages the on-call person; "warning" goes to the team channel.
+groups:
+  - name: availability
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: 'API replica {{ $labels.instance }} is not responding'
+      - alert: ApiAllReplicasDown
+        expr: absent(up{job="api"} == 1)
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: 'No API replica is up'
+      - alert: SiteUnreachable
+        expr: probe_success{job="blackbox"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: '{{ $labels.instance }} is unreachable from the monitoring probe'
+      - alert: TlsCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox"} - time() < 14 * 86400
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: 'TLS certificate of {{ $labels.instance }} expires in under 14 days'
+
+  - name: api
+    rules:
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(http_request_duration_seconds_count{job="api",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_request_duration_seconds_count{job="api"}[5m])), 1e-9) > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'More than 2% of API requests fail with 5xx'
+      - alert: ApiSlowResponses
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="api",route!="unmatched"}[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'API p95 latency above 1 s for 10 minutes'
+      - alert: ApiUnhandledErrors
+        expr: increase(marketplace_api_unhandled_errors_total[10m]) > 5
+        labels: { severity: warning }
+        annotations:
+          summary: 'Unexpected API errors (see error tracking)'
+
+  - name: payments
+    rules:
+      - alert: PaymentFailureSpike
+        expr: |
+          max(marketplace_backlog{kind="payments_failed_15m"}) >= 5
+          and max(marketplace_backlog{kind="payments_failed_15m"})
+            / clamp_min(max(marketplace_backlog{kind="payments_failed_15m"}) + max(marketplace_backlog{kind="payments_paid_15m"}), 1) > 0.3
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Over 30% of online payments failed in the last 15 minutes'
+      - alert: PaymentWebhooksFailing
+        expr: max(marketplace_backlog{kind="webhook_events_failed"}) > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Payment provider events failed to process (Admin Console > Payments > Provider events)'
+      - alert: PaymentWebhooksStuck
+        expr: max(marketplace_backlog{kind="webhook_events_stuck"}) > 0
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Provider events received but not processed for over 10 minutes'
+      - alert: WebhookSignatureRejections
+        expr: sum(increase(marketplace_webhook_rejections_total[15m])) > 20
+        labels: { severity: warning }
+        annotations:
+          summary: 'Many webhooks with invalid signatures (wrong secret or forged requests)'
+      - alert: PayoutsOrRefundsFailed
+        expr: max(marketplace_backlog{kind=~"payouts_failed_24h|refunds_failed_24h"}) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: '{{ $labels.kind }}: failed payouts or refunds need finance attention'
+
+  - name: worker
+    rules:
+      - alert: WorkerDown
+        expr: absent(up{job="worker"} == 1)
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: 'No worker is running (emails, notifications, stock expiry, settlements stop)'
+      - alert: JobsDeadLettered
+        expr: sum by (queue, job) (increase(marketplace_job_failures_total{final="true"}[15m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: 'Job {{ $labels.job }} on {{ $labels.queue }} exhausted its retries (Admin Console > Developer tools > Dead letters)'
+      - alert: QueueBacklog
+        expr: max by (queue) (marketplace_queue_jobs{state="waiting"}) > 1000
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Queue {{ $labels.queue }} has over 1,000 waiting jobs'
+      - alert: NotificationsDelayed
+        expr: max(marketplace_backlog{kind="notifications_pending_5m"}) > 100
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Notifications are not being delivered'
+      - alert: StockReservationsNotExpiring
+        expr: max(marketplace_backlog{kind="reservations_overdue"}) > 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Expired stock holds are not being released (reservation sweep)'
+
+  - name: data
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: 'PostgreSQL is down'
+      - alert: PostgresConnectionsHigh
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.8
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: 'PostgreSQL connections above 80% of max_connections'
+      - alert: PostgresDeadlocks
+        expr: increase(pg_stat_database_deadlocks{datname!~"template.*|postgres"}[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: 'Deadlocks in {{ $labels.datname }}'
+      - alert: PostgresWalArchiveFailing
+        expr: increase(pg_stat_archiver_failed_count[15m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: 'WAL archiving to the backup repository is failing (point-in-time recovery at risk)'
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Redis is down (queues, rate limits and sessions)'
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / clamp_min(redis_memory_max_bytes, 1) > 0.85
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Redis above 85% of maxmemory (noeviction: writes fail when full)'
+
+  - name: backups
+    rules:
+      - alert: DatabaseBackupFailed
+        expr: marketplace_backup_last_status{type=~"full|diff|incr"} == 0
+        labels: { severity: critical }
+        annotations:
+          summary: 'The last {{ $labels.type }} database backup failed'
+      - alert: DatabaseBackupOverdue
+        expr: time() - max(marketplace_backup_last_success_timestamp_seconds{type=~"full|diff|incr"}) > 26 * 3600
+        labels: { severity: critical }
+        annotations:
+          summary: 'No successful database backup in over 26 hours'
+      - alert: DatabaseBackupMetricsMissing
+        expr: absent(marketplace_backup_last_run_timestamp_seconds)
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: 'The backup service has not reported yet'
+      - alert: ObjectStorageBackupOverdue
+        expr: time() - marketplace_backup_last_success_timestamp_seconds{type="objects"} > 26 * 3600
+        labels: { severity: warning }
+        annotations:
+          summary: 'Uploaded files were not copied to the backup bucket in over 26 hours'
+
+  - name: host
+    rules:
+      - alert: HostDiskSpaceLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} < 0.15
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Less than 15% disk space on {{ $labels.mountpoint }}'
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Less than 10% memory available'
+      - alert: HostCpuSaturated
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: 'CPU above 90% for 15 minutes'

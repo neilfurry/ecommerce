@@ -16,6 +16,8 @@ export const API_ERROR_CODES = [
   'OTP_EXPIRED',
   'OTP_TOO_MANY_ATTEMPTS',
   'CSRF_FAILED',
+  /** Staff must turn on two-step verification before using the Admin Console. */
+  'MFA_ENROLLMENT_REQUIRED',
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',

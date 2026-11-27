@@ -136,3 +136,4 @@ export {
   TrendChart,
 } from './patterns/report-view';
 export { defaultRange, formatReportValue } from './patterns/report-format';
+export { initBrowserErrorReporting } from './lib/error-reporting';

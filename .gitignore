@@ -40,3 +40,10 @@ backups/
 Thumbs.db
 desktop.ini
 e2e/.auth/
+
+# Production environment templates are committed (values filled in on the server).
+!.env.*.example
+docker/production/ci/certs/
+docker/production/.env.production
+load/data.json
+load/results/

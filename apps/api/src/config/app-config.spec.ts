@@ -72,9 +72,18 @@ describe('AppConfig.load', () => {
       staffSessionHours: 12,
       maxFailedSignIns: 5,
       lockoutMinutes: 15,
+      signInLimitPerMinute: 10,
       cookieSecure: false,
     });
     expect(config.appUrls.storefront).toBe('http://localhost:5173');
+  });
+
+  it('accepts a sign-in limit between 3 and 100 per minute', () => {
+    const at = (value: string) =>
+      AppConfig.load({ ...validEnv, AUTH_SIGN_IN_LIMIT_PER_MINUTE: value }, false);
+    expect(at('30').auth.signInLimitPerMinute).toBe(30);
+    expect(() => at('1')).toThrow(/AUTH_SIGN_IN_LIMIT_PER_MINUTE/);
+    expect(() => at('500')).toThrow(/AUTH_SIGN_IN_LIMIT_PER_MINUTE/);
   });
 
   it('rejects weak or reused auth secrets', () => {
@@ -94,5 +103,73 @@ describe('AppConfig.load', () => {
 
   it('requires mandatory variables', () => {
     expect(() => AppConfig.load({}, false)).toThrow(/DATABASE_URL/);
+  });
+  describe('production', () => {
+    const productionEnv = {
+      ...validEnv,
+      NODE_ENV: 'production',
+      COOKIE_SECURE: 'true',
+      STAFF_MFA_REQUIRED: 'true',
+      SHIPPING_PROVIDER: 'rate_table',
+      PAYMENT_PROVIDER: 'paymongo',
+      PAYMONGO_SECRET_KEY: 'sk_live_abcdefghijklmnop',
+      PAYMONGO_WEBHOOK_SECRET: 'whsk_abcdefghijklmnop',
+      FINANCE_ENCRYPTION_KEY: 'f'.repeat(40),
+      API_PUBLIC_URL: 'https://api.example.ph',
+      STOREFRONT_URL: 'https://shop.example.ph',
+      SELLER_PORTAL_URL: 'https://seller.example.ph',
+      ADMIN_PORTAL_URL: 'https://admin.example.ph',
+    };
+
+    it('starts with live payments and the rate-table shipping provider', () => {
+      const config = AppConfig.load(productionEnv, false);
+      expect(config.isProduction).toBe(true);
+      expect(config.shippingProvider).toBe('rate_table');
+    });
+
+    it('refuses development secrets copied from .env.example', () => {
+      const attempt = () =>
+        AppConfig.load(
+          {
+            ...productionEnv,
+            AUTH_JWT_SECRET: 'dev-only-jwt-secret-change-me-0123456789abcdef',
+            FINANCE_ENCRYPTION_KEY: 'dev-only-finance-key-change-me-0123456789abcdef',
+            S3_SECRET_ACCESS_KEY: 'marketplace_dev_secret',
+            DATABASE_URL: 'postgresql://marketplace:marketplace_dev_password@db:5432/marketplace',
+          },
+          false,
+        );
+      for (const key of [
+        'AUTH_JWT_SECRET',
+        'FINANCE_ENCRYPTION_KEY',
+        'S3_SECRET_ACCESS_KEY',
+        'DATABASE_URL',
+      ]) {
+        expect(attempt).toThrow(new RegExp(key));
+      }
+    });
+
+    it('refuses PayMongo test keys unless explicitly allowed for staging', () => {
+      const test = { ...productionEnv, PAYMONGO_SECRET_KEY: 'sk_test_abcdefghijklmnop' };
+      expect(() => AppConfig.load(test, false)).toThrow(/PAYMONGO_SECRET_KEY/);
+      expect(AppConfig.load({ ...test, ALLOW_TEST_PAYMENTS: 'true' }, false).isProduction).toBe(
+        true,
+      );
+    });
+
+    it('requires two-step verification for staff', () => {
+      expect(() =>
+        AppConfig.load({ ...productionEnv, STAFF_MFA_REQUIRED: 'false' }, false),
+      ).toThrow(/STAFF_MFA_REQUIRED/);
+    });
+
+    it('refuses mock shipping and plain-http public URLs', () => {
+      expect(() => AppConfig.load({ ...productionEnv, SHIPPING_PROVIDER: 'mock' }, false)).toThrow(
+        /SHIPPING_PROVIDER/,
+      );
+      expect(() =>
+        AppConfig.load({ ...productionEnv, STOREFRONT_URL: 'http://shop.example.ph' }, false),
+      ).toThrow(/STOREFRONT_URL/);
+    });
   });
 });

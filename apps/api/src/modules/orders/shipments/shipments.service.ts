@@ -1,3 +1,4 @@
+import { webhookRejections } from '../../../infrastructure/observability/metrics';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   ConcurrentUpdateError,
@@ -483,6 +484,7 @@ export class ShipmentsService {
     } catch (error) {
       if (error instanceof CourierSignatureError) {
         this.logger.warn(`Courier webhook refused: ${error.message}`);
+        webhookRejections.inc({ provider: carrier });
         throw new ApiException(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Invalid signature.');
       }
       throw error;
