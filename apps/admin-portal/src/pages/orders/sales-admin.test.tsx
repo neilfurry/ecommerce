@@ -305,7 +305,10 @@ describe('Admin Console sales', () => {
   it('lists customer orders and seller suborders', async () => {
     const user = userEvent.setup();
     renderAt('/orders', fakeApi());
-    expect(await screen.findByRole('link', { name: 'MP261125ABC123' })).toBeInTheDocument();
+    // The first render of the file loads every route module (slower on CI runners).
+    expect(
+      await screen.findByRole('link', { name: 'MP261125ABC123' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText('₱33,598.00')).toBeInTheDocument();
     expect(screen.getByText('2 · 2 items')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Seller orders' }));
