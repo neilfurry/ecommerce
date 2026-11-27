@@ -44,10 +44,13 @@ write_metrics() {
 }
 
 ensure_stanza() {
-  # Idempotent: succeeds when the stanza already exists and matches this cluster.
-  pgbackrest --stanza=$STANZA stanza-create >/dev/null
+  # Idempotent: succeeds when the stanza already exists and matches this cluster. Its
+  # output stays visible (pgBackRest logs errors to stdout), and the marker that turns on
+  # WAL archiving is only written once it has succeeded. ("set -e" does not apply inside
+  # an "if" condition, so every step is checked explicitly.)
+  pgbackrest --stanza=$STANZA --log-level-console=warn stanza-create || return 1
   # From now on PostgreSQL archives WAL (see archive-wal.sh).
-  touch "${PGDATA:-/var/lib/postgresql/data}/.pgbackrest-stanza"
+  touch "${PGDATA:-/var/lib/postgresql/data}/.pgbackrest-stanza" || return 1
 }
 
 run_backup() {

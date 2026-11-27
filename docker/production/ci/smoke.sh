@@ -72,6 +72,8 @@ incurl 'http://prometheus:9090/api/v1/query?query=marketplace_queue_jobs' | jq -
 pass "application metrics (requests, queues, payment and backlog gauges) present"
 incurl http://alertmanager:9093/-/ready >/dev/null || fail "Alertmanager not ready"
 incurl http://grafana:3000/api/health | jq -e '.database == "ok"' >/dev/null || fail "Grafana not healthy"
+# Loki answers 503 on /ready for its first ~15 s while the ingester joins the ring.
+for i in $(seq 1 24); do incurl http://loki:3100/ready >/dev/null 2>&1 && break; sleep 5; done
 incurl http://loki:3100/ready >/dev/null || fail "Loki not ready"
 pass "Alertmanager, Grafana and Loki ready"
 for i in $(seq 1 24); do
