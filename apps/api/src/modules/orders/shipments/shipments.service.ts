@@ -785,19 +785,10 @@ export class ShipmentsService {
   }
 
   private async notifyStatus(n: NonNullable<AfterCommit['notify']>) {
+    // Shipped and delivered are ORDER_SHIPPED / ORDER_DELIVERED notification events, written
+    // with the status change (see onSellerOrderStatusInTx); kick their delivery.
+    await this.notifier.kick();
     const messages: Partial<Record<ShipmentStatus, [string, string]>> = {
-      PICKED_UP: [
-        'Your order has shipped',
-        'A parcel from your order is on its way. Track it from your order page.',
-      ],
-      IN_TRANSIT: [
-        'Your order has shipped',
-        'A parcel from your order is on its way. Track it from your order page.',
-      ],
-      DELIVERED: [
-        'Delivered',
-        'A parcel from your order was delivered. If something is wrong you can request a return from your order page.',
-      ],
       DELIVERY_FAILED: [
         'Delivery attempt failed',
         'The courier could not deliver a parcel from your order. They will try again or contact you.',

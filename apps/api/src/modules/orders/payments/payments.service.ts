@@ -617,11 +617,9 @@ export class PaymentsService {
         // Best effort: if it is paid anyway it arrives as DUPLICATE_PAYMENT for review.
       }
     }
-    await this.notifier.customer(
-      result.orderId,
-      'Payment received',
-      'We received your payment. The sellers will now prepare your items; we will email you when they ship.',
-    );
+    // The customer's "payment received" message is the PAYMENT_CONFIRMED notification event
+    // (written with the payment, delivered by the worker).
+    await this.notifier.kick();
     await this.notifier.sellersOf(
       result.orderId,
       'Order paid: ready to process',

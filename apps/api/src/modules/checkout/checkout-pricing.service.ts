@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
+  affiliateSettingsInTx,
   commissionAmount,
+  loyaltySettingsInTx,
+  maxRedeemablePoints,
+  pointsForAmount,
   type Prisma,
   type ResolvedCommission,
   type TaxRuleSnapshot,
@@ -14,6 +18,7 @@ import {
   type ShippingMethod,
 } from '@marketplace/shared-types';
 import type {
+  AppliedPromotion,
   CheckoutLine,
   CheckoutQuote,
   CheckoutRequestParsed,
@@ -33,6 +38,13 @@ import { TaxRulesService } from '../settings/tax-rules.service';
 import type { ShippingPlace, ShippingRate } from '../shipping/shipping-provider';
 import { type ShippingOrigin, ShippingService } from '../shipping/shipping.service';
 import { allocate, cents, D, type Decimal, includedVat, min, sum, ZERO } from './money';
+import {
+  chooseItemPromotions,
+  chooseShippingPromotion,
+  type EngineCampaign,
+  type EngineLine,
+  targets,
+} from './promotion-engine';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -61,6 +73,13 @@ export interface PlannedLine {
   lineSubtotal: Decimal;
   sellerDiscount: Decimal;
   platformDiscount: Decimal;
+  /** The campaign on this line and its discount (part of seller or platform discount). */
+  campaign: EngineCampaign | null;
+  promotionDiscount: Decimal;
+  /** Loyalty points value on this line (part of platform discount). */
+  pointsDiscount: Decimal;
+  /** The engine's view of the line (category path for category targets). */
+  engine: EngineLine;
   lineTotal: Decimal;
   vatAmount: Decimal;
   commission: ResolvedCommission & { base: Decimal; amount: Decimal };
@@ -92,6 +111,12 @@ export interface PlannedGroup {
   wholesaleSavings: Decimal;
   sellerDiscount: Decimal;
   platformDiscount: Decimal;
+  promotionDiscount: Decimal;
+  pointsDiscount: Decimal;
+  pointsRedeemed: number;
+  promotions: PlannedPromotion[];
+  /** Free shipping from a campaign (no free-shipping coupon on top). */
+  campaignFreeShipping: boolean;
   shippingFee: Decimal;
   sellerShippingDiscount: Decimal;
   platformShippingDiscount: Decimal;
@@ -101,6 +126,12 @@ export interface PlannedGroup {
   total: Decimal;
   commissionAmount: Decimal;
   note: string | null;
+}
+
+export interface PlannedPromotion {
+  campaign: EngineCampaign;
+  amount: Decimal;
+  shippingAmount: Decimal;
 }
 
 /** The full calculation: what the quote shows and what placing the order stores. */
@@ -116,6 +147,9 @@ export interface CheckoutPlan {
   grandTotal: Decimal;
   /** Cart lines being bought (removed from the cart when the order is placed). */
   cartItemIds: string[];
+  points: { redeemed: number; discount: Decimal; pointValue: string };
+  affiliate: { accountId: string; code: string; rate: Decimal } | null;
+  totals: { promotionDiscount: Decimal; couponDiscount: Decimal; pointsDiscount: Decimal };
 }
 
 interface Problem {
@@ -218,6 +252,7 @@ export class CheckoutPricingService {
       now,
       db,
     );
+    const categoryPathOf = await this.categoryPaths(db);
     const groupsBySeller = new Map<string, PlannedGroup>();
     requested.forEach((item, index) => {
       const variant = variants.find((v) => v.id === item.variantId);
@@ -257,6 +292,18 @@ export class CheckoutPricingService {
         lineSubtotal,
         sellerDiscount: ZERO,
         platformDiscount: ZERO,
+        campaign: null,
+        promotionDiscount: ZERO,
+        pointsDiscount: ZERO,
+        engine: {
+          productId: variant.productId,
+          categoryPath: categoryPathOf(variant.product.categoryId),
+          sellerId: variant.sellerId,
+          quantity: item.quantity,
+          unitPrice: D(priced.line.unitPrice),
+          regularPrice: D(priced.line.regularPrice),
+          isFlashSale: priced.line.source === 'FLASH_SALE' && priced.line.flashSale !== null,
+        },
         lineTotal: lineSubtotal,
         vatAmount: ZERO,
         commission: {
@@ -272,6 +319,15 @@ export class CheckoutPricingService {
       });
     });
     const groups = [...groupsBySeller.values()];
+
+    // 3b. Automatic promotions (campaigns) on items: one per item, the best of flash sale or
+    // campaign (ADR 0030). Must run before the subtotals.
+    const campaigns = await this.activeCampaigns(
+      groups.map((g) => g.sellerId),
+      now,
+      db,
+    );
+    this.applyItemPromotions(groups, campaigns);
 
     // 4. Shipping per seller: origin warehouse → delivery address.
     const origins = await this.shipping.origins(
@@ -328,6 +384,32 @@ export class CheckoutPricingService {
       group.shippingFee = group.shipping?.fee ?? ZERO;
     }
 
+    // 4b. Free-shipping campaigns per parcel.
+    for (const group of groups) {
+      const choice = chooseShippingPromotion(
+        group.sellerId,
+        group.lines.map((l) => ({
+          line: l.engine,
+          itemsAfterPromotions: l.lineSubtotal.minus(l.promotionDiscount),
+        })),
+        group.shippingFee,
+        campaigns,
+      );
+      if (!choice) continue;
+      if (choice.campaign.scope === 'SELLER')
+        group.sellerShippingDiscount = group.sellerShippingDiscount.plus(choice.discount);
+      else group.platformShippingDiscount = group.platformShippingDiscount.plus(choice.discount);
+      group.campaignFreeShipping = true;
+      const existing = group.promotions.find((p) => p.campaign.id === choice.campaign.id);
+      if (existing) existing.shippingAmount = existing.shippingAmount.plus(choice.discount);
+      else
+        group.promotions.push({
+          campaign: choice.campaign,
+          amount: ZERO,
+          shippingAmount: choice.discount,
+        });
+    }
+
     // 5. Coupons (one marketplace coupon, one per seller).
     const { results: couponResults, planned: coupons } = await this.applyCoupons(
       user.id,
@@ -336,6 +418,13 @@ export class CheckoutPricingService {
       now,
       db,
     );
+
+    // 5b. Loyalty points last (marketplace-funded, at most maxRedeemPercent of the items).
+    const loyalty = await this.applyPoints(user.id, input.pointsToRedeem ?? 0, groups, db);
+    if (loyalty.problem) problems.push({ path: 'pointsToRedeem', message: loyalty.problem });
+
+    // 5c. Affiliate attribution (an approved affiliate's code; never the customer's own).
+    const affiliate = await this.affiliateFor(user.id, input.affiliateCode ?? null, db);
 
     // 6. Charges, taxes and commission per seller order. The goods tax follows the seller's
     // registration (tax rules); a tax-exclusive rule adds the tax on top of the price.
@@ -393,10 +482,16 @@ export class CheckoutPricingService {
     const lineTaxes = groups.flatMap((g) => g.lines.map((l) => l.tax));
     const rates = [...new Set(lineTaxes.map((t) => D(t.ratePercent).dividedBy(100).toString()))];
 
+    const promotionDiscount = sum(groups.map((g) => g.promotionDiscount));
+    const pointsDiscount = sum(groups.map((g) => g.pointsDiscount));
     const totals = {
       itemsSubtotal: sum(groups.map((g) => g.itemsSubtotal)),
       wholesaleSavings: sum(groups.map((g) => g.wholesaleSavings)),
-      couponDiscount: sum(groups.map((g) => g.sellerDiscount.plus(g.platformDiscount))),
+      promotionDiscount,
+      pointsDiscount,
+      couponDiscount: sum(groups.map((g) => g.sellerDiscount.plus(g.platformDiscount)))
+        .minus(promotionDiscount)
+        .minus(pointsDiscount),
       shippingFee: sum(groups.map((g) => g.shippingFee)),
       shippingDiscount: sum(
         groups.map((g) => g.sellerShippingDiscount.plus(g.platformShippingDiscount)),
@@ -461,12 +556,17 @@ export class CheckoutPricingService {
         wholesaleSavings: money(g.wholesaleSavings),
         sellerDiscount: money(g.sellerDiscount),
         platformDiscount: money(g.platformDiscount),
+        promotionDiscount: money(g.promotionDiscount),
+        pointsDiscount: money(g.pointsDiscount),
+        promotions: g.promotions.map((p) => promotionDto(p)),
         charges: g.charges.map((c) => ({ code: c.code, label: c.label, amount: money(c.amount) })),
         vatAmount: money(g.vatAmount),
         total: money(g.total),
         note: g.note,
       })),
       coupons: couponResults,
+      loyalty: loyalty.quote,
+      affiliate: affiliate.quote,
       paymentMethod,
       paymentMethods: settings.paymentMethods.map((method) => ({
         method,
@@ -482,7 +582,9 @@ export class CheckoutPricingService {
       totals: {
         itemsSubtotal: money(totals.itemsSubtotal),
         wholesaleSavings: money(totals.wholesaleSavings),
+        promotionDiscount: money(totals.promotionDiscount),
         couponDiscount: money(totals.couponDiscount),
+        pointsDiscount: money(totals.pointsDiscount),
         shippingFee: money(totals.shippingFee),
         shippingDiscount: money(totals.shippingDiscount),
         chargesTotal: money(totals.chargesTotal),
@@ -507,6 +609,13 @@ export class CheckoutPricingService {
       paymentMethod,
       grandTotal: totals.grandTotal,
       cartItemIds: requested.flatMap((r) => (r.cartItemId ? [r.cartItemId] : [])),
+      points: {
+        redeemed: loyalty.quote?.pointsApplied ?? 0,
+        discount: pointsDiscount,
+        pointValue: loyalty.quote?.pointValue ?? '1',
+      },
+      affiliate: affiliate.planned,
+      totals: { promotionDiscount, couponDiscount: totals.couponDiscount, pointsDiscount },
     };
   }
 
@@ -573,6 +682,11 @@ export class CheckoutPricingService {
       wholesaleSavings: ZERO,
       sellerDiscount: ZERO,
       platformDiscount: ZERO,
+      promotionDiscount: ZERO,
+      pointsDiscount: ZERO,
+      pointsRedeemed: 0,
+      promotions: [],
+      campaignFreeShipping: false,
       shippingFee: ZERO,
       sellerShippingDiscount: ZERO,
       platformShippingDiscount: ZERO,
@@ -598,14 +712,217 @@ export class CheckoutPricingService {
       price: l.price,
       sellerDiscount: money(l.sellerDiscount),
       platformDiscount: money(l.platformDiscount),
+      promotionDiscount: money(l.promotionDiscount),
+      promotion: l.campaign
+        ? { campaignId: l.campaign.id, name: l.campaign.name, type: l.campaign.type }
+        : null,
+      pointsDiscount: money(l.pointsDiscount),
       lineTotal: money(l.lineSubtotal.minus(l.sellerDiscount).minus(l.platformDiscount)),
       vatAmount: money(l.vatAmount),
+    };
+  }
+
+  /** Category id → that category and its ancestors (category targets include subcategories). */
+  private async categoryPaths(db: Db): Promise<(categoryId: string) => string[]> {
+    const rows = await db.category.findMany({ select: { id: true, parentId: true } });
+    const parent = new Map(rows.map((r) => [r.id, r.parentId]));
+    return (categoryId: string) => {
+      const path: string[] = [];
+      let current: string | null | undefined = categoryId;
+      while (current && path.length < 20 && !path.includes(current)) {
+        path.push(current);
+        current = parent.get(current);
+      }
+      return path;
+    };
+  }
+
+  /** Running campaigns for the sellers in the order (and marketplace-wide ones). */
+  private async activeCampaigns(sellerIds: string[], now: Date, db: Db): Promise<EngineCampaign[]> {
+    if (sellerIds.length === 0) return [];
+    const rows = await db.campaign.findMany({
+      where: {
+        status: 'ACTIVE',
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+        OR: [{ scope: 'PLATFORM' }, { scope: 'SELLER', sellerId: { in: sellerIds } }],
+      },
+      include: {
+        products: { select: { productId: true } },
+        categories: { select: { categoryId: true } },
+      },
+    });
+    return rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      season: c.season,
+      scope: c.scope,
+      sellerId: c.sellerId,
+      type: c.type,
+      value: c.value,
+      maxDiscount: c.maxDiscount,
+      minQuantity: c.minQuantity,
+      buyQuantity: c.buyQuantity,
+      getQuantity: c.getQuantity,
+      minSpend: c.minSpend,
+      appliesTo: c.appliesTo,
+      productIds: c.products.map((p) => p.productId),
+      categoryIds: c.categories.map((p) => p.categoryId),
+      priority: c.priority,
+      createdAt: c.createdAt,
+    }));
+  }
+
+  /**
+   * Writes the chosen item promotions onto the lines. A campaign that beats a flash sale is
+   * priced from the regular price, and the flash sale unit is not taken.
+   */
+  private applyItemPromotions(groups: PlannedGroup[], campaigns: EngineCampaign[]) {
+    if (campaigns.length === 0) return;
+    const lines = groups.flatMap((g) => g.lines);
+    const choices = chooseItemPromotions(
+      lines.map((l) => l.engine),
+      campaigns,
+    );
+    lines.forEach((line, index) => {
+      const choice = choices[index]!;
+      if (!choice.campaign) return;
+      if (choice.dropsFlashSale) {
+        const regular = D(line.price.regularPrice);
+        line.price = {
+          ...line.price,
+          unitPrice: money(regular),
+          lineTotal: money(regular.times(line.quantity)),
+          source: 'REGULAR',
+          rule: null,
+          flashSale: null,
+        };
+        line.lineSubtotal = cents(regular.times(line.quantity));
+        line.engine = { ...line.engine, unitPrice: regular, isFlashSale: false };
+      }
+      const discount = min(choice.discount, line.lineSubtotal);
+      line.campaign = choice.campaign;
+      line.promotionDiscount = discount;
+      if (choice.campaign.scope === 'SELLER')
+        line.sellerDiscount = line.sellerDiscount.plus(discount);
+      else line.platformDiscount = line.platformDiscount.plus(discount);
+    });
+    for (const group of groups) {
+      for (const line of group.lines) {
+        if (!line.campaign || line.promotionDiscount.isZero()) continue;
+        group.promotionDiscount = group.promotionDiscount.plus(line.promotionDiscount);
+        if (line.campaign.scope === 'SELLER')
+          group.sellerDiscount = group.sellerDiscount.plus(line.promotionDiscount);
+        else group.platformDiscount = group.platformDiscount.plus(line.promotionDiscount);
+        const existing = group.promotions.find((p) => p.campaign.id === line.campaign!.id);
+        if (existing) existing.amount = existing.amount.plus(line.promotionDiscount);
+        else
+          group.promotions.push({
+            campaign: line.campaign,
+            amount: line.promotionDiscount,
+            shippingAmount: ZERO,
+          });
+      }
+    }
+  }
+
+  /** Loyalty points: capped by the balance and by maxRedeemPercent of what is left of the items. */
+  private async applyPoints(
+    userId: string,
+    requested: number,
+    groups: PlannedGroup[],
+    db: Db,
+  ): Promise<{ quote: CheckoutQuote['loyalty']; problem: string | null }> {
+    const settings = await loyaltySettingsInTx(db);
+    const account = await db.loyaltyAccount.findUnique({
+      where: { userId },
+      select: { balance: true },
+    });
+    const balance = account?.balance ?? 0;
+    const lines = groups.flatMap((g) => g.lines);
+    const left = (l: PlannedLine) =>
+      l.lineSubtotal.minus(l.sellerDiscount).minus(l.platformDiscount);
+    const itemsLeft = sum(lines.map(left));
+    const max = maxRedeemablePoints(balance, itemsLeft, settings);
+    let message: string | null = null;
+    let problem: string | null = null;
+    if (requested > 0 && !settings.enabled) problem = 'Loyalty points cannot be used right now.';
+    else if (requested > balance) problem = `You have ${balance} points.`;
+    else if (requested > max)
+      message = `At most ${max} points can be used on this order (${settings.maxRedeemPercent}% of the items).`;
+    const points = problem ? 0 : Math.min(requested, max);
+    const discount = cents(D(settings.pointValue).times(points));
+    if (discount.greaterThan(0)) {
+      const parts = allocate(discount, lines.map(left));
+      lines.forEach((line, i) => {
+        line.pointsDiscount = parts[i]!;
+        line.platformDiscount = line.platformDiscount.plus(parts[i]!);
+      });
+      // Points per seller order, in proportion to their share of the discount.
+      const groupDiscounts = groups.map((g) => sum(g.lines.map((l) => l.pointsDiscount)));
+      const groupPoints = allocate(D(points).dividedBy(100), groupDiscounts).map((p) =>
+        p.times(100).toNumber(),
+      );
+      groups.forEach((g, i) => {
+        g.pointsDiscount = groupDiscounts[i]!;
+        g.platformDiscount = g.platformDiscount.plus(groupDiscounts[i]!);
+        g.pointsRedeemed = groupPoints[i]!;
+      });
+    }
+    // Points this order would earn when completed (per seller order, whole points).
+    const earnEstimate = settings.enabled
+      ? groups.reduce((n, g) => n + pointsForAmount(sum(g.lines.map((l) => left(l))), settings), 0)
+      : 0;
+    return {
+      problem,
+      quote: {
+        balance,
+        pointValue: settings.pointValue,
+        maxRedeemablePoints: max,
+        pointsApplied: points,
+        discount: money(discount),
+        earnEstimate,
+        message,
+      },
+    };
+  }
+
+  private async affiliateFor(
+    userId: string,
+    code: string | null,
+    db: Db,
+  ): Promise<{
+    quote: CheckoutQuote['affiliate'];
+    planned: CheckoutPlan['affiliate'];
+  }> {
+    if (!code) return { quote: null, planned: null };
+    const normalized = code.toUpperCase();
+    const settings = await affiliateSettingsInTx(db);
+    const account = await db.affiliateAccount.findUnique({ where: { code: normalized } });
+    const reject = (message: string) => ({
+      quote: { code: normalized, applied: false, message },
+      planned: null,
+    });
+    if (!settings.enabled) return reject('Affiliate links are not active right now.');
+    if (!account || account.status !== 'APPROVED')
+      return reject('This affiliate link is not active.');
+    if (account.userId === userId)
+      return reject('Your own affiliate link does not apply to your orders.');
+    return {
+      quote: { code: normalized, applied: true, message: null },
+      planned: {
+        accountId: account.id,
+        code: normalized,
+        rate: account.commissionRate ?? D(settings.defaultCommissionRate),
+      },
     };
   }
 
   /**
    * Validates the codes and works out each coupon's discount, writing the amounts onto the
    * groups and lines. Seller coupons first (they lower what the marketplace coupon applies to).
+   * Restricted coupons discount (and count towards the minimum spend) only the items they
+   * cover; first-order coupons need a customer with no earlier order that was not cancelled.
    */
   private async applyCoupons(
     userId: string,
@@ -616,12 +933,21 @@ export class CheckoutPricingService {
   ): Promise<{ results: CouponResult[]; planned: PlannedCoupon[] }> {
     const unique = [...new Set(codes.map((c) => c.toUpperCase()))];
     if (unique.length === 0) return { results: [], planned: [] };
-    const rows = await db.coupon.findMany({ where: { code: { in: unique } } });
+    const rows = await db.coupon.findMany({
+      where: { code: { in: unique } },
+      include: {
+        products: { select: { productId: true } },
+        categories: { select: { categoryId: true } },
+      },
+    });
     const used = await db.couponRedemption.groupBy({
       by: ['couponId'],
       where: { userId, releasedAt: null, couponId: { in: rows.map((r) => r.id) } },
       _count: { _all: true },
     });
+    const earlierOrders = rows.some((r) => r.firstOrderOnly)
+      ? await db.order.count({ where: { customerId: userId, status: { not: 'CANCELLED' } } })
+      : 0;
     const results: CouponResult[] = [];
     const planned: PlannedCoupon[] = [];
     const reject = (code: string, message: string, row?: (typeof rows)[number]) =>
@@ -659,6 +985,10 @@ export class CheckoutPricingService {
         reject(code, 'You have already used this coupon.', row);
         continue;
       }
+      if (row.firstOrderOnly && earlierOrders > 0) {
+        reject(code, 'This coupon is for your first order only.', row);
+        continue;
+      }
       if (row.scope === 'SELLER' && !groups.some((g) => g.sellerId === row.sellerId)) {
         reject(code, 'This coupon is for a store that is not in your order.', row);
         continue;
@@ -679,32 +1009,52 @@ export class CheckoutPricingService {
     const ordered = [...accepted].sort(
       (a, b) => Number(a.scope === 'PLATFORM') - Number(b.scope === 'PLATFORM'),
     );
+    const left = (l: PlannedLine) =>
+      l.lineSubtotal.minus(l.sellerDiscount).minus(l.platformDiscount);
     for (const row of ordered) {
-      const targets =
+      const target = {
+        appliesTo: row.appliesTo,
+        productIds: row.products.map((p) => p.productId),
+        categoryIds: row.categories.map((c) => c.categoryId),
+      };
+      const scoped =
         row.scope === 'SELLER' ? groups.filter((g) => g.sellerId === row.sellerId) : groups;
-      const spend = sum(targets.map((g) => g.itemsSubtotal));
+      const eligible = scoped.flatMap((g) =>
+        g.lines.filter((l) => targets(target, l.engine)).map((line) => ({ group: g, line })),
+      );
+      if (eligible.length === 0) {
+        reject(row.code, 'None of the items in your order are covered by this coupon.', row);
+        continue;
+      }
+      // Minimum spend on the covered items, after automatic promotions.
+      const spend = sum(eligible.map((e) => e.line.lineSubtotal.minus(e.line.promotionDiscount)));
       if (spend.lessThan(row.minSpend)) {
         reject(row.code, `Spend at least ₱${row.minSpend.toFixed(2)} to use this coupon.`, row);
         continue;
       }
       const bySeller = new Map<string, Decimal>();
       if (row.type === 'FREE_SHIPPING') {
-        const remaining = targets.map((g) =>
+        const parcels = [...new Set(eligible.map((e) => e.group))].filter(
+          (g) => !g.campaignFreeShipping,
+        );
+        if (parcels.length === 0) {
+          reject(row.code, 'Shipping is already free with a promotion.', row);
+          continue;
+        }
+        const remaining = parcels.map((g) =>
           g.shippingFee.minus(g.sellerShippingDiscount).minus(g.platformShippingDiscount),
         );
         let total = sum(remaining);
         if (row.maxDiscount) total = min(total, row.maxDiscount);
         const parts = allocate(total, remaining);
-        targets.forEach((g, i) => {
+        parcels.forEach((g, i) => {
           if (row.scope === 'SELLER')
             g.sellerShippingDiscount = g.sellerShippingDiscount.plus(parts[i]!);
           else g.platformShippingDiscount = g.platformShippingDiscount.plus(parts[i]!);
           bySeller.set(g.sellerId, parts[i]!);
         });
       } else {
-        const bases = targets.map((g) =>
-          g.itemsSubtotal.minus(g.sellerDiscount).minus(g.platformDiscount),
-        );
+        const bases = eligible.map((e) => left(e.line));
         const base = sum(bases);
         let total =
           row.type === 'PERCENTAGE'
@@ -712,19 +1062,16 @@ export class CheckoutPricingService {
             : min(row.value, base);
         if (row.type === 'PERCENTAGE' && row.maxDiscount) total = min(total, row.maxDiscount);
         const parts = allocate(total, bases);
-        targets.forEach((g, i) => {
+        eligible.forEach(({ group, line }, i) => {
           const part = parts[i]!;
-          const lineParts = allocate(
-            part,
-            g.lines.map((l) => l.lineSubtotal.minus(l.sellerDiscount).minus(l.platformDiscount)),
-          );
-          g.lines.forEach((l, j) => {
-            if (row.scope === 'SELLER') l.sellerDiscount = l.sellerDiscount.plus(lineParts[j]!);
-            else l.platformDiscount = l.platformDiscount.plus(lineParts[j]!);
-          });
-          if (row.scope === 'SELLER') g.sellerDiscount = g.sellerDiscount.plus(part);
-          else g.platformDiscount = g.platformDiscount.plus(part);
-          bySeller.set(g.sellerId, part);
+          if (row.scope === 'SELLER') {
+            line.sellerDiscount = line.sellerDiscount.plus(part);
+            group.sellerDiscount = group.sellerDiscount.plus(part);
+          } else {
+            line.platformDiscount = line.platformDiscount.plus(part);
+            group.platformDiscount = group.platformDiscount.plus(part);
+          }
+          bySeller.set(group.sellerId, (bySeller.get(group.sellerId) ?? ZERO).plus(part));
         });
       }
       const amount = sum([...bySeller.values()]);
@@ -763,5 +1110,15 @@ export class CheckoutPricingService {
     return { results, planned };
   }
 }
+
+export const promotionDto = (p: PlannedPromotion): AppliedPromotion => ({
+  campaignId: p.campaign.id,
+  name: p.campaign.name,
+  type: p.campaign.type,
+  scope: p.campaign.scope,
+  season: p.campaign.season,
+  amount: money(p.amount),
+  shippingAmount: money(p.shippingAmount),
+});
 
 export type { ShippingMethod };

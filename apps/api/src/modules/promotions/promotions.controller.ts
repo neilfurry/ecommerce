@@ -2,6 +2,12 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { type AuthenticatedUser, SELLER_ROLES } from '@marketplace/shared-types';
 import {
+  activeCampaignListSchema,
+  campaignInputSchema,
+  campaignListQuerySchema,
+  campaignListSchema,
+  campaignSchema,
+  updateCampaignSchema,
   couponInputSchema,
   couponListQuerySchema,
   couponListSchema,
@@ -18,6 +24,7 @@ import {
 import { z } from 'zod';
 import {
   CurrentUser,
+  Public,
   ReqContext,
   type RequestContext,
   RequirePermissions,
@@ -26,6 +33,7 @@ import {
 import { zodToOpenApi } from '../../common/openapi/zod-openapi';
 import { createZodDto } from '../../common/validation/zod-dto';
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe';
+import { CampaignsService } from './campaigns.service';
 import { CouponsService } from './coupons.service';
 import { FlashSalesService } from './flash-sales.service';
 
@@ -36,6 +44,10 @@ class FlashSaleInputDto extends createZodDto(flashSaleInputSchema) {}
 class UpdateFlashSaleDto extends createZodDto(updateFlashSaleSchema) {}
 class FlashSaleItemInputDto extends createZodDto(flashSaleItemInputSchema) {}
 class ItemStatusDto extends createZodDto(z.object({ status: promotionStatusInputSchema })) {}
+class CampaignInputDto extends createZodDto(campaignInputSchema) {}
+class UpdateCampaignDto extends createZodDto(updateCampaignSchema) {}
+class CampaignListQueryDto extends createZodDto(campaignListQuerySchema) {}
+class ActiveCampaignQueryDto extends createZodDto(z.object({ storeId: z.uuid().optional() })) {}
 const Id = (name = 'id') => Param(name, new ZodValidationPipe(uuidSchema));
 
 /** Marketplace coupons and flash sale campaigns (staff). */
@@ -46,7 +58,41 @@ export class PromotionsController {
   constructor(
     private readonly coupons: CouponsService,
     private readonly flashSales: FlashSalesService,
+    private readonly campaigns: CampaignsService,
   ) {}
+
+  @Get('campaigns')
+  @ApiOperation({ summary: 'Every campaign (automatic promotions), with usage' })
+  @ApiOkResponse({ schema: zodToOpenApi(campaignListSchema) })
+  listCampaigns(@Query() query: CampaignListQueryDto) {
+    return this.campaigns.list(query);
+  }
+
+  @Post('campaigns')
+  @ApiOperation({
+    summary:
+      'Create a marketplace campaign: percent/amount off, bundle, buy X get Y, free shipping',
+  })
+  @ApiCreatedResponse({ schema: zodToOpenApi(campaignSchema) })
+  createCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: CampaignInputDto,
+    @ReqContext() context: RequestContext,
+  ) {
+    return this.campaigns.createPlatform(user, body, context);
+  }
+
+  @Patch('campaigns/:id')
+  @ApiOperation({ summary: 'Edit a marketplace campaign (the type stays)' })
+  @ApiOkResponse({ schema: zodToOpenApi(campaignSchema) })
+  updateCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Id() id: string,
+    @Body() body: UpdateCampaignDto,
+    @ReqContext() context: RequestContext,
+  ) {
+    return this.campaigns.update(user, id, body, context, false);
+  }
 
   @Get('coupons')
   @ApiOperation({ summary: 'Every coupon (filter by scope, status, code or name)' })
@@ -128,7 +174,41 @@ export class SellerPromotionsController {
   constructor(
     private readonly coupons: CouponsService,
     private readonly flashSales: FlashSalesService,
+    private readonly campaigns: CampaignsService,
   ) {}
+
+  @Get('campaigns')
+  @Roles(...SELLER_ROLES)
+  @ApiOperation({ summary: 'My campaigns' })
+  @ApiOkResponse({ schema: zodToOpenApi(campaignListSchema) })
+  listCampaigns(@CurrentUser() user: AuthenticatedUser, @Query() query: CampaignListQueryDto) {
+    return this.campaigns.list(query, user.seller?.id ?? '00000000-0000-0000-0000-000000000000');
+  }
+
+  @Post('campaigns')
+  @RequirePermissions('seller.marketing.manage')
+  @ApiOperation({ summary: 'Create a campaign for my products (I pay the discount)' })
+  @ApiCreatedResponse({ schema: zodToOpenApi(campaignSchema) })
+  createCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: CampaignInputDto,
+    @ReqContext() context: RequestContext,
+  ) {
+    return this.campaigns.createForSeller(user, body, context);
+  }
+
+  @Patch('campaigns/:id')
+  @RequirePermissions('seller.marketing.manage')
+  @ApiOperation({ summary: 'Edit one of my campaigns' })
+  @ApiOkResponse({ schema: zodToOpenApi(campaignSchema) })
+  updateCampaign(
+    @CurrentUser() user: AuthenticatedUser,
+    @Id() id: string,
+    @Body() body: UpdateCampaignDto,
+    @ReqContext() context: RequestContext,
+  ) {
+    return this.campaigns.update(user, id, body, context, true);
+  }
 
   @Get('coupons')
   @Roles(...SELLER_ROLES)
@@ -194,5 +274,22 @@ export class SellerPromotionsController {
     @ReqContext() context: RequestContext,
   ) {
     return this.flashSales.removeItem(user, itemId, context);
+  }
+}
+
+/** Storefront: running campaigns for banners and badges. */
+@ApiTags('Storefront')
+@Controller({ path: 'storefront', version: '1' })
+export class StorefrontCampaignsController {
+  constructor(private readonly campaigns: CampaignsService) {}
+
+  @Get('campaigns')
+  @Public()
+  @ApiOperation({
+    summary: 'Campaigns running now (marketplace-wide and, with storeId, the store’s)',
+  })
+  @ApiOkResponse({ schema: zodToOpenApi(activeCampaignListSchema) })
+  active(@Query() query: ActiveCampaignQueryDto) {
+    return this.campaigns.active(query.storeId);
   }
 }

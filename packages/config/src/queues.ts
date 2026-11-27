@@ -146,6 +146,15 @@ export const EMAIL_JOBS = {
 export const NOTIFICATION_JOBS = {
   /** One-time sign-in / sign-up code by SMS. Time-critical; never retried for long. */
   SMS_OTP: 'notifications.sms-otp',
+  /** Renders and delivers one notification event from the outbox (ADR 0033). */
+  DISPATCH: 'notifications.dispatch',
+  /** Periodic (and kicked by the API after commits): delivers pending outbox events. */
+  DISPATCH_PENDING: 'notifications.dispatch-pending',
+} as const;
+
+export const ENGAGEMENT_JOBS = {
+  /** Daily: loyalty points past their expiry date (FIFO lots). */
+  EXPIRE_LOYALTY_POINTS: 'order-processing.expire-loyalty-points',
 } as const;
 
 export const ORDER_JOBS = {
@@ -174,6 +183,11 @@ export const SETTLEMENT_SCHEDULER_ID = 'order-processing:settlement';
 export const SETTLEMENT_INTERVAL_SECONDS = 6 * 3600;
 export const PAYMENT_RECONCILIATION_SCHEDULER_ID = 'payment-events:reconcile-open-payments';
 export const PAYMENT_RECONCILIATION_INTERVAL_SECONDS = 300;
+
+export const NOTIFICATION_SWEEP_SCHEDULER_ID = 'notifications:dispatch-pending';
+export const NOTIFICATION_SWEEP_INTERVAL_SECONDS = 10;
+export const LOYALTY_EXPIRY_SCHEDULER_ID = 'order-processing:loyalty-expiry';
+export const LOYALTY_EXPIRY_INTERVAL_SECONDS = 24 * 3600;
 
 export const DEAD_LETTER_JOBS = {
   ENTRY: 'dead-letter.entry',

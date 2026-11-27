@@ -11,6 +11,8 @@ import {
   Prisma,
   reverseJournalInTx,
   sellerBalances,
+  emitNotificationInTx,
+  sellerRecipientIdsInTx,
 } from '@marketplace/database';
 import { GatewayError, PayMongoPayouts, type PayoutProvider } from '@marketplace/payments';
 import type { AuthenticatedUser } from '@marketplace/shared-types';
@@ -606,6 +608,20 @@ export class PayoutsService {
         dr(ACCOUNT.TRANSFER_FEES, fee, { kind: 'TRANSFER_FEE' }),
         cr(cash, fee, { kind: 'TRANSFER_FEE' }),
       ],
+    });
+    const seller = await tx.seller.findUniqueOrThrow({
+      where: { id: p.sellerId },
+      select: { businessName: true },
+    });
+    await emitNotificationInTx(tx, {
+      event: 'PAYOUT_PAID',
+      userIds: await sellerRecipientIdsInTx(tx, p.sellerId),
+      data: {
+        sellerName: seller.businessName,
+        reference: p.reference,
+        amount: p.amount.toFixed(2),
+      },
+      link: '/finance/payouts',
     });
   }
 

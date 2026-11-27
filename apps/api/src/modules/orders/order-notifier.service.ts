@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { emitNotificationInTx, sellerRecipientIdsInTx } from '@marketplace/database';
 import { AppConfig } from '../../config/app-config';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -21,9 +22,20 @@ export class OrderNotifier {
     try {
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
-        select: { orderNumber: true, customer: { select: { email: true, firstName: true } } },
+        select: {
+          orderNumber: true,
+          customerId: true,
+          customer: { select: { email: true, firstName: true } },
+        },
       });
       if (!order) return;
+      await emitNotificationInTx(this.prisma, {
+        event: 'ORDER_UPDATE',
+        userIds: [order.customerId],
+        data: { audience: 'customer', orderNumber: order.orderNumber, title, message },
+        link: `/account/orders/${orderId}`,
+      });
+      await this.notifications.kickDispatch();
       await this.notifications.sendOrderUpdate({
         to: order.customer.email,
         firstName: order.customer.firstName,
@@ -43,9 +55,20 @@ export class OrderNotifier {
     try {
       const so = await this.prisma.sellerOrder.findUnique({
         where: { id: sellerOrderId },
-        select: { number: true, seller: { select: { email: true, businessName: true } } },
+        select: {
+          number: true,
+          sellerId: true,
+          seller: { select: { email: true, businessName: true } },
+        },
       });
       if (!so) return;
+      await emitNotificationInTx(this.prisma, {
+        event: 'ORDER_UPDATE',
+        userIds: await sellerRecipientIdsInTx(this.prisma, so.sellerId),
+        data: { audience: 'seller', orderNumber: so.number, title, message },
+        link: `/orders/${sellerOrderId}`,
+      });
+      await this.notifications.kickDispatch();
       await this.notifications.sendOrderUpdate({
         to: so.seller.email,
         firstName: so.seller.businessName,
@@ -59,6 +82,11 @@ export class OrderNotifier {
         `Seller order ${sellerOrderId}: could not queue "${title}" (${(error as Error).message})`,
       );
     }
+  }
+
+  /** Deliver notification events written by a committed change now (instead of the sweep). */
+  kick(): Promise<void> {
+    return this.notifications.kickDispatch();
   }
 
   async sellersOf(orderId: string, title: string, message: string): Promise<void> {

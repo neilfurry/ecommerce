@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@marketplace/database';
+import { emitNotificationInTx, Prisma, sellerRecipientIdsInTx } from '@marketplace/database';
 import {
   type AuthenticatedUser,
   INVENTORY_MOVEMENT_LABELS,
@@ -702,7 +702,14 @@ export class InventoryService {
             link: `${this.config.appUrls.seller}/inventory?lowStock=true`,
           }),
         );
+        await emitNotificationInTx(this.prisma, {
+          event: 'LOW_STOCK',
+          userIds: await sellerRecipientIdsInTx(this.prisma, group[0]!.sellerId),
+          data: { count: group.length },
+          link: '/inventory?lowStock=true',
+        });
       }
+      if (bySeller.size > 0) await this.notifications.kickDispatch();
     } catch (error) {
       // A notice is never worth failing the stock change that already committed.
       this.logger.error(`Low-stock check failed: ${(error as Error).message}`);

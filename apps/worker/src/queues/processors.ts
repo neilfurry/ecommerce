@@ -9,6 +9,11 @@ import { ReleaseExpiredReservationsHandler } from '../jobs/reservation-sweep';
 import { CompleteDeliveredHandler, EscalateOverdueReturnsHandler } from '../jobs/fulfilment-sweep';
 import { ReconcileOpenPaymentsHandler } from '../jobs/payment-reconciliation';
 import { SettleSellersHandler } from '../jobs/settlement';
+import { ExpireLoyaltyPointsHandler } from '../jobs/loyalty-expiry';
+import {
+  NotificationDispatchHandler,
+  NotificationSweepHandler,
+} from '../notifications/notification-dispatcher';
 import { ExpireUnpaidOrdersHandler } from '../jobs/unpaid-order-sweep';
 import {
   LowStockEmailHandler,
@@ -90,8 +95,14 @@ export class EmailProcessor extends DomainProcessor {
 
 @Processor(QUEUE_NAMES.NOTIFICATIONS)
 export class NotificationsProcessor extends DomainProcessor {
-  constructor(config: WorkerConfig, deadLetters: DeadLetterService, smsOtp: SmsOtpHandler) {
-    super(QUEUE_NAMES.NOTIFICATIONS, [smsOtp], config, deadLetters);
+  constructor(
+    config: WorkerConfig,
+    deadLetters: DeadLetterService,
+    smsOtp: SmsOtpHandler,
+    dispatch: NotificationDispatchHandler,
+    sweep: NotificationSweepHandler,
+  ) {
+    super(QUEUE_NAMES.NOTIFICATIONS, [smsOtp, dispatch, sweep], config, deadLetters);
   }
 }
 
@@ -130,6 +141,7 @@ export class OrderProcessingProcessor extends DomainProcessor {
     completeDelivered: CompleteDeliveredHandler,
     escalateOverdueReturns: EscalateOverdueReturnsHandler,
     settleSellers: SettleSellersHandler,
+    expireLoyaltyPoints: ExpireLoyaltyPointsHandler,
   ) {
     super(
       QUEUE_NAMES.ORDER_PROCESSING,
@@ -139,6 +151,7 @@ export class OrderProcessingProcessor extends DomainProcessor {
         completeDelivered,
         escalateOverdueReturns,
         settleSellers,
+        expireLoyaltyPoints,
       ],
       config,
       deadLetters,

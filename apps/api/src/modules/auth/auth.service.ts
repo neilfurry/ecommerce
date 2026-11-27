@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   dummyPasswordHash,
+  emitNotificationInTx,
   hashPassword,
   passwordNeedsRehash,
   Prisma,
@@ -36,6 +37,8 @@ interface PendingSignUp {
   passwordHash: string;
   accountType: 'RETAIL' | 'WHOLESALE';
   business?: { businessName: string; tin: string; businessAddress: string };
+  /** Another customer's referral code. */
+  referralCode?: string;
 }
 
 export interface SignedIn {
@@ -74,7 +77,21 @@ export class AuthService {
     context: RequestContext,
   ): Promise<OtpChallengeResponse> {
     await this.assertEmailAndMobileAvailable(input.email, input.mobile);
+    if (input.referralCode) {
+      const referrer = await this.prisma.user.count({
+        where: { referralCode: input.referralCode, status: 'ACTIVE' },
+      });
+      if (!referrer) {
+        throw new ApiException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'VALIDATION_FAILED',
+          'This referral code is not valid.',
+          [{ path: 'referralCode', message: 'This referral code is not valid.' }],
+        );
+      }
+    }
     const pending: PendingSignUp = {
+      ...(input.referralCode ? { referralCode: input.referralCode } : {}),
       firstName: input.firstName,
       lastName: input.lastName,
       email: input.email,
@@ -149,6 +166,24 @@ export class AuthService {
           context,
           tx,
         );
+        if (pending.referralCode) {
+          // Rewarded with points after the new customer's first completed order (ADR 0032).
+          const referrer = await tx.user.findUnique({
+            where: { referralCode: pending.referralCode },
+            select: { id: true, status: true },
+          });
+          if (referrer && referrer.status === 'ACTIVE' && referrer.id !== user.id) {
+            await tx.referral.create({
+              data: { referrerId: referrer.id, refereeId: user.id, code: pending.referralCode },
+            });
+          }
+        }
+        await emitNotificationInTx(tx, {
+          event: 'CUSTOMER_REGISTERED',
+          userIds: [user.id],
+          data: { firstName: user.firstName },
+          link: '/account',
+        });
         const verificationToken = await this.tokens.issue(user.id, 'EMAIL_VERIFICATION', tx);
         const session = await this.sessions.start(user.id, 'storefront', context, tx);
         return { user, session, verificationToken };
@@ -165,6 +200,7 @@ export class AuthService {
       throw error;
     }
 
+    await this.notifications.kickDispatch();
     await this.notifications.safely('verification email', () =>
       this.notifications.sendVerifyEmail({
         to: created.user.email,

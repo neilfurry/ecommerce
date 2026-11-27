@@ -175,7 +175,31 @@ export const PERMISSION_CATALOG = {
     description:
       'Change checkout settings: charges, payment methods, shipping rates and order settings',
   },
-  'reviews.moderate': { scope: 'platform', description: 'Hide and restore product reviews' },
+  'reviews.moderate': {
+    scope: 'platform',
+    description: 'Hide and restore product reviews and decide on review reports',
+  },
+  'loyalty.manage': {
+    scope: 'platform',
+    description: 'Configure loyalty points and referrals, and adjust customer points',
+  },
+  'affiliates.manage': {
+    scope: 'platform',
+    description: 'Approve affiliates, set their commission and record affiliate payouts',
+  },
+  'support.read': { scope: 'platform', description: 'View every support ticket' },
+  'support.manage': {
+    scope: 'platform',
+    description: 'Answer, assign, join and take over support tickets',
+  },
+  'notifications.manage': {
+    scope: 'platform',
+    description: 'Edit notification templates and view delivery logs',
+  },
+  'reports.read': {
+    scope: 'platform',
+    description: 'View marketplace analytics and export reports',
+  },
   'orders.manage': {
     scope: 'platform',
     description: 'Cancel orders, change seller order statuses and add staff notes',
@@ -264,7 +288,19 @@ export const PERMISSION_CATALOG = {
   },
   'seller.marketing.manage': {
     scope: 'seller',
-    description: 'Create seller coupons and join flash sales',
+    description: 'Create seller coupons and campaigns and join flash sales',
+  },
+  'seller.reviews.reply': {
+    scope: 'seller',
+    description: 'Reply to product reviews of the seller’s products',
+  },
+  'seller.support.manage': {
+    scope: 'seller',
+    description: 'Answer customer support tickets about the seller’s orders',
+  },
+  'seller.reports.read': {
+    scope: 'seller',
+    description: 'View the seller’s sales analytics and export reports',
   },
   'seller.inventory.manage': {
     scope: 'seller',
@@ -346,6 +382,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'disputes.manage',
     'finance.read',
     'commission.manage',
+    'loyalty.manage',
+    'affiliates.manage',
+    'support.read',
+    'support.manage',
+    'notifications.manage',
+    'reports.read',
   ],
   FINANCE_ADMIN: [
     'users.read',
@@ -369,6 +411,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'settlements.manage',
     'payouts.approve',
     'payouts.process',
+    'affiliates.manage',
+    'reports.read',
   ],
   CUSTOMER_SUPPORT: [
     'users.read',
@@ -382,6 +426,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'orders.manage',
     'payments.read',
     'disputes.manage',
+    'support.read',
+    'support.manage',
   ],
   WAREHOUSE_STAFF: ['inventory.read'],
   DELIVERY_STAFF: ['orders.read', 'shipping.manage'],
@@ -398,6 +444,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'seller.orders.manage',
     'seller.returns.manage',
     'seller.finance.read',
+    'seller.reviews.reply',
+    'seller.support.manage',
+    'seller.reports.read',
   ],
   SELLER_ENCODER: ['seller.members.read', 'seller.products.manage'],
   SELLER_INVENTORY: ['seller.members.read', 'seller.inventory.manage'],
@@ -406,12 +455,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'seller.orders.read',
     'seller.orders.manage',
     'seller.returns.manage',
+    'seller.support.manage',
   ],
   SELLER_ACCOUNTING: [
     'seller.members.read',
     'seller.orders.read',
     'seller.finance.read',
     'seller.payouts.manage',
+    'seller.reports.read',
   ],
   CUSTOMER: [],
   WHOLESALE_CUSTOMER: [],

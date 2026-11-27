@@ -7,9 +7,12 @@ import { sellerScope } from '../../common/auth/seller-scope';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { checkTargets } from './promotion-targets';
 
 const include = {
   seller: { select: { id: true, businessName: true } },
+  products: { include: { product: { select: { id: true, name: true } } } },
+  categories: { include: { category: { select: { id: true, name: true } } } },
 } satisfies Prisma.CouponInclude;
 type CouponRow = Prisma.CouponGetPayload<{ include: typeof include }>;
 
@@ -30,6 +33,10 @@ export const couponDto = (c: CouponRow): CouponDto => ({
   perCustomerLimit: c.perCustomerLimit,
   usedCount: c.usedCount,
   status: c.status,
+  appliesTo: c.appliesTo,
+  products: c.products.map((p) => p.product),
+  categories: c.categories.map((x) => x.category),
+  firstOrderOnly: c.firstOrderOnly,
   createdAt: c.createdAt.toISOString(),
 });
 
@@ -126,6 +133,15 @@ export class CouponsService {
         'This code is already used by another coupon.',
       );
     const row = await this.prisma.$transaction(async (tx) => {
+      const scoped = await checkTargets(
+        tx,
+        {
+          appliesTo: input.appliesTo ?? 'ALL',
+          productIds: input.productIds ?? [],
+          categoryIds: input.categoryIds ?? [],
+        },
+        sellerId,
+      );
       const created = await tx.coupon.create({
         data: {
           code: input.code,
@@ -145,6 +161,10 @@ export class CouponsService {
               : Number(input.usageLimit),
           perCustomerLimit: Number(input.perCustomerLimit ?? 1),
           status: input.status ?? 'ACTIVE',
+          appliesTo: input.appliesTo ?? 'ALL',
+          firstOrderOnly: input.firstOrderOnly ?? false,
+          products: { create: scoped.productIds.map((productId) => ({ productId })) },
+          categories: { create: scoped.categoryIds.map((categoryId) => ({ categoryId })) },
           createdById: user.id,
         },
         include,
@@ -187,6 +207,32 @@ export class CouponsService {
       throw invalid('usageLimit', `Already used ${current.usedCount} times`);
     }
     const row = await this.prisma.$transaction(async (tx) => {
+      if (
+        input.appliesTo !== undefined ||
+        input.productIds !== undefined ||
+        input.categoryIds !== undefined
+      ) {
+        const existing = await tx.coupon.findUniqueOrThrow({ where: { id }, include });
+        const scoped = await checkTargets(
+          tx,
+          {
+            appliesTo: input.appliesTo ?? existing.appliesTo,
+            productIds: input.productIds ?? existing.products.map((p) => p.productId),
+            categoryIds: input.categoryIds ?? existing.categories.map((c) => c.categoryId),
+          },
+          current.sellerId,
+        );
+        await tx.couponProduct.deleteMany({ where: { couponId: id } });
+        await tx.couponCategory.deleteMany({ where: { couponId: id } });
+        await tx.coupon.update({
+          where: { id },
+          data: {
+            appliesTo: input.appliesTo ?? existing.appliesTo,
+            products: { create: scoped.productIds.map((productId) => ({ productId })) },
+            categories: { create: scoped.categoryIds.map((categoryId) => ({ categoryId })) },
+          },
+        });
+      }
       const updated = await tx.coupon.update({
         where: { id },
         data: {
@@ -200,6 +246,7 @@ export class CouponsService {
             ? { perCustomerLimit: Number(input.perCustomerLimit) }
             : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.firstOrderOnly !== undefined ? { firstOrderOnly: input.firstOrderOnly } : {}),
         },
         include,
       });

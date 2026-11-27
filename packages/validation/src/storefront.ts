@@ -273,6 +273,10 @@ export const reviewSchema = z.object({
   /** First name and last initial, e.g. "Juan D." */
   authorName: z.string(),
   variantTitle: z.string(),
+  /** Bought on the marketplace (every review comes from a delivered order item). */
+  verifiedPurchase: z.boolean().default(true),
+  images: z.array(z.object({ id: z.uuid(), url: z.string() })).default([]),
+  sellerReply: z.object({ body: z.string(), repliedAt: z.iso.datetime() }).nullable().default(null),
   createdAt: z.iso.datetime(),
 });
 export type ReviewDto = z.infer<typeof reviewSchema>;
@@ -323,12 +327,14 @@ export const adminReviewSchema = reviewSchema.extend({
   product: z.object({ id: z.uuid(), name: z.string() }),
   store: z.object({ id: z.uuid(), name: z.string() }),
   customerEmail: z.string(),
+  openReports: z.number().int().default(0),
 });
 export type AdminReviewDto = z.infer<typeof adminReviewSchema>;
 export const adminReviewListSchema = paginatedSchema(adminReviewSchema);
 export type AdminReviewList = z.infer<typeof adminReviewListSchema>;
 export const adminReviewListQuerySchema = paginationQuerySchema.extend({
   status: reviewStatusSchema.optional(),
+  reported: z.enum(['true', 'false']).optional(),
   rating: z.coerce.number().int().min(1).max(5).optional(),
   search: z.string().trim().max(100).optional(),
 });

@@ -1,6 +1,12 @@
 import { randomInt } from 'node:crypto';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@marketplace/database';
+import {
+  emitNotificationInTx,
+  InsufficientPointsError,
+  Prisma,
+  postLoyaltyInTx,
+  sellerRecipientIdsInTx,
+} from '@marketplace/database';
 import {
   type AuthenticatedUser,
   ONLINE_PAYMENT_METHODS,
@@ -189,7 +195,11 @@ export class CheckoutService {
         ).email,
         itemsSubtotal: D(t.itemsSubtotal),
         wholesaleSavings: D(t.wholesaleSavings),
-        couponDiscount: D(t.couponDiscount),
+        couponDiscount: plan.totals.couponDiscount,
+        promotionDiscount: plan.totals.promotionDiscount,
+        pointsRedeemed: plan.points.redeemed,
+        pointsDiscount: plan.totals.pointsDiscount,
+        affiliateAccountId: plan.affiliate?.accountId ?? null,
         shippingFee: D(t.shippingFee),
         shippingDiscount: D(t.shippingDiscount),
         chargesTotal: D(t.chargesTotal),
@@ -229,6 +239,9 @@ export class CheckoutService {
           wholesaleSavings: group.wholesaleSavings,
           sellerDiscount: group.sellerDiscount,
           platformDiscount: group.platformDiscount,
+          promotionDiscount: group.promotionDiscount,
+          pointsDiscount: group.pointsDiscount,
+          pointsRedeemed: group.pointsRedeemed,
           shippingFee: group.shippingFee,
           sellerShippingDiscount: group.sellerShippingDiscount,
           platformShippingDiscount: group.platformShippingDiscount,
@@ -284,6 +297,9 @@ export class CheckoutService {
             lineSubtotal: line.lineSubtotal,
             sellerDiscount: line.sellerDiscount,
             platformDiscount: line.platformDiscount,
+            campaignId: line.campaign?.id ?? null,
+            promotionDiscount: line.promotionDiscount,
+            pointsDiscount: line.pointsDiscount,
             lineTotal: line.lineTotal,
             vatAmount: line.vatAmount,
             pricingSnapshot: line.price as unknown as Prisma.InputJsonValue,
@@ -311,6 +327,37 @@ export class CheckoutService {
           if (taken !== 1)
             throw changed(`The flash sale price for ${line.variant.product.name} has sold out.`);
         }
+      }
+      for (const promotion of group.promotions) {
+        await tx.orderPromotion.create({
+          data: {
+            orderId: order.id,
+            sellerOrderId: sellerOrder.id,
+            campaignId: promotion.campaign.id,
+            name: promotion.campaign.name,
+            type: promotion.campaign.type,
+            scope: promotion.campaign.scope,
+            amount: promotion.amount,
+            shippingAmount: promotion.shippingAmount,
+          },
+        });
+      }
+      // Affiliate commission, frozen now and earned when the seller order completes.
+      if (plan.affiliate) {
+        const base = group.lines.reduce((s, l) => s.plus(l.lineTotal), ZERO);
+        await tx.affiliateConversion.create({
+          data: {
+            affiliateAccountId: plan.affiliate.accountId,
+            orderId: order.id,
+            sellerOrderId: sellerOrder.id,
+            baseAmount: base,
+            rate: plan.affiliate.rate,
+            commissionAmount: base
+              .times(plan.affiliate.rate)
+              .dividedBy(100)
+              .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
+          },
+        });
       }
       const coupon = plan.coupons.find(
         (c) => c.scope === 'SELLER' && c.sellerId === group.sellerId,
@@ -354,6 +401,47 @@ export class CheckoutService {
           userId: user.id,
           amount: coupon.amount,
         },
+      });
+    }
+
+    // Loyalty points spent: taken now (given back if the order is cancelled). The ledger
+    // recognises their value when the sale is posted (ADR 0031).
+    if (plan.points.redeemed > 0) {
+      try {
+        await postLoyaltyInTx(tx, {
+          userId: user.id,
+          type: 'REDEEM',
+          points: -plan.points.redeemed,
+          description: `Used on order ${orderNumber}`,
+          idempotencyKey: `redeem:${order.id}`,
+          orderId: order.id,
+          pointValue: plan.points.pointValue,
+          posting: null,
+          now,
+        });
+      } catch (error) {
+        if (error instanceof InsufficientPointsError)
+          throw changed(`Your points balance changed: ${error.message}`);
+        throw error;
+      }
+    }
+
+    const buyer = await tx.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { firstName: true },
+    });
+    await emitNotificationInTx(tx, {
+      event: 'ORDER_PLACED',
+      userIds: [user.id],
+      data: { firstName: buyer.firstName, orderNumber, total: plan.grandTotal.toFixed(2) },
+      link: `/account/orders/${order.id}`,
+    });
+    for (const [index, group] of plan.groups.entries()) {
+      await emitNotificationInTx(tx, {
+        event: 'SELLER_NEW_ORDER',
+        userIds: await sellerRecipientIdsInTx(tx, group.sellerId),
+        data: { orderNumber: `${orderNumber}-${index + 1}`, storeName: group.store.name },
+        link: `/orders/${sellerOrders[index]!.id}`,
       });
     }
 

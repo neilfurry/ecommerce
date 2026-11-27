@@ -46,3 +46,4 @@ export {
   type SettleResult,
 } from './settlement';
 export { backfillLedger } from './ledger-backfill';
+export * from './engagement';

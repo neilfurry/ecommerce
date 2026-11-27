@@ -87,6 +87,14 @@ export const customerSignUpSchema = z
     password: passwordSchema,
     accountType: z.enum(['RETAIL', 'WHOLESALE']).default('RETAIL'),
     business: wholesaleBusinessSchema.optional(),
+    /** Another customer's referral code (both get bonus points after the first order). */
+    referralCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{4,16}$/, 'Enter a valid referral code')
+      .optional()
+      .or(z.literal('').transform(() => undefined)),
   })
   .superRefine((value, ctx) => {
     if (value.accountType === 'WHOLESALE' && !value.business) {
