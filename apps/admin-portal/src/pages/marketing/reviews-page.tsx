@@ -1,4 +1,9 @@
-import { toDisplayError, useAdminReviews, useModerateReview } from '@marketplace/api-client';
+import {
+  toDisplayError,
+  useAdminReviews,
+  useEngagementAction,
+  useModerateReview,
+} from '@marketplace/api-client';
 import { REVIEW_STATUSES, type ReviewStatus } from '@marketplace/shared-types';
 import {
   Badge,
@@ -39,11 +44,14 @@ export function ReviewsPage() {
   const [rating, setRating] = useState('ALL');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [reported, setReported] = useState(false);
+  const resolve = useEngagementAction();
   const deferred = useDeferredValue(search.trim());
   const reviews = useAdminReviews({
     status: status === 'ALL' ? undefined : status,
     rating: rating === 'ALL' ? undefined : Number(rating),
     search: deferred || undefined,
+    ...(reported ? { reported: 'true' } : {}),
     page,
     pageSize: PAGE_SIZE,
   });
@@ -58,6 +66,55 @@ export function ReviewsPage() {
           <Stars rating={r.rating} />
           {r.title ? <p className="font-medium">{r.title}</p> : null}
           {r.body ? <p className="text-sm whitespace-pre-line">{r.body}</p> : null}
+          {r.images.length > 0 ? (
+            <div className="flex gap-1">
+              {r.images.map((i) => (
+                <img
+                  key={i.id}
+                  src={i.url}
+                  alt="Customer photo"
+                  className="size-12 rounded object-cover"
+                />
+              ))}
+            </div>
+          ) : null}
+          {r.sellerReply ? (
+            <p className="rounded bg-muted p-2 text-xs">Seller reply: {r.sellerReply.body}</p>
+          ) : null}
+          {r.openReports > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="warning">{r.openReports} open report(s)</Badge>
+              <ReasonDialog
+                trigger={
+                  <Button size="sm" variant="outline">
+                    Uphold
+                  </Button>
+                }
+                title="Uphold the reports?"
+                description="The review is hidden and its open reports are closed."
+                label="Reason (kept for staff)"
+                submitLabel="Hide review"
+                onSubmit={async (note) => {
+                  await resolve.mutateAsync((e) =>
+                    e.admin.resolveReviewReports(r.id, { action: 'UPHOLD', note }),
+                  );
+                  toast.success('Reports upheld; review hidden');
+                }}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  resolve.mutate((e) => e.admin.resolveReviewReports(r.id, { action: 'DISMISS' }), {
+                    onSuccess: () => toast.success('Reports dismissed'),
+                    onError: (error) => showError('Could not dismiss the reports', error),
+                  })
+                }
+              >
+                Dismiss
+              </Button>
+            </div>
+          ) : null}
           {r.moderationNote ? (
             <p className="text-xs text-muted-foreground">Moderator note: {r.moderationNote}</p>
           ) : null}
@@ -144,7 +201,18 @@ export function ReviewsPage() {
         title="Reviews"
         description="Reviews from customers who received the product. Hidden reviews do not count toward ratings."
       />
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={reported}
+            onChange={(e) => {
+              setReported(e.target.checked);
+              setPage(1);
+            }}
+          />
+          Reported only
+        </label>
         <Input
           type="search"
           aria-label="Search reviews"

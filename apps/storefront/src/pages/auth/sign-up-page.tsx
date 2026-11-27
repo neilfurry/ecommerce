@@ -59,6 +59,7 @@ export function SignUpPage() {
       password: '',
       accountType: 'RETAIL',
       business: { businessName: '', tin: '', businessAddress: '' },
+      referralCode: new URLSearchParams(window.location.search).get('ref')?.toUpperCase() ?? '',
     },
   });
   const accountType = useWatch({ control: form.control, name: 'accountType' });
@@ -205,6 +206,22 @@ export function SignUpPage() {
                   <PasswordInput autoComplete="new-password" {...field} />
                 </FormControl>
                 <FormDescription>{PASSWORD_HINT}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="referralCode"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Referral code (optional)</FormLabel>
+                <FormControl>
+                  <Input autoCapitalize="characters" {...field} value={field.value ?? ''} />
+                </FormControl>
+                <FormDescription>
+                  From a friend: you both get bonus points after your first order.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

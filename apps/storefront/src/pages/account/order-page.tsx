@@ -41,6 +41,7 @@ import {
 import { CheckCircle2Icon, ImageIcon, StoreIcon, TruckIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
+import { SellerRatingForm } from '../../components/engagement/seller-rating-form';
 import {
   OrderMessages,
   PackageActions,
@@ -297,6 +298,22 @@ export function OrderPage() {
                 ))}
                 {so.refunds.length > 0 ? <RefundList refunds={so.refunds} /> : null}
                 <PackageActions order={o} so={so} />
+                {Number(so.promotionDiscount) > 0 || so.promotions.length > 0 ? (
+                  <p className="text-sm text-emerald-700">
+                    Promotions: {so.promotions.map((p) => p.name).join(', ')}
+                  </p>
+                ) : null}
+                {so.deliveredAt &&
+                ['DELIVERED', 'COMPLETED'].includes(so.status) &&
+                !so.sellerRated ? (
+                  <SellerRatingForm sellerOrderId={so.id} storeName={so.store.name} />
+                ) : null}
+                <Link
+                  to={`/account/support?sellerOrder=${so.id}&subject=${encodeURIComponent(`About order ${so.number}`)}`}
+                  className="inline-block text-sm underline"
+                >
+                  Ask {so.store.name} a question
+                </Link>
               </CardContent>
             </Card>
           ))}

@@ -31,3 +31,5 @@ export * from './fulfilment-react';
 export type { FulfilmentListQuery } from './fulfilment';
 export * from './finance-react';
 export type { FinanceQuery } from './finance';
+export * from './engagement-react';
+export type { EngagementQuery } from './engagement';

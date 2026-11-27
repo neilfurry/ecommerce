@@ -4,6 +4,7 @@ import { Button, ErrorState, Skeleton } from '@marketplace/ui';
 import { ChevronLeftIcon, ChevronRightIcon, StoreIcon, ZapIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { CampaignStrip } from '../components/engagement/campaign-strip';
 import { Countdown } from '../components/shop/countdown';
 import { ProductRail } from '../components/shop/product-card';
 
@@ -201,6 +202,7 @@ export function HomePage() {
   const data = home.data;
   return (
     <div className="pb-4">
+      <CampaignStrip />
       <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
         {data.heroBanners.length > 0 ? (
           <>

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { ReportReviewButton, ReviewExtras } from '../../components/engagement/review-extras';
 import { Countdown } from '../../components/shop/countdown';
 import { QuantityInput } from '../../components/shop/quantity-input';
 import { RatingSummary, Stars } from '../../components/shop/rating';
@@ -255,6 +256,8 @@ function Reviews({ product }: { product: StorefrontProduct }) {
                     </div>
                     {r.title ? <p className="font-medium">{r.title}</p> : null}
                     {r.body ? <p className="text-sm whitespace-pre-line">{r.body}</p> : null}
+                    <ReviewExtras review={r} />
+                    <ReportReviewButton reviewId={r.id} />
                   </li>
                 ))}
               </ul>

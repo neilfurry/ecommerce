@@ -24,6 +24,7 @@ import {
 import { ImageIcon, StarIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { ReviewExtras, ReviewPhotoUpload } from '../../components/engagement/review-extras';
 import { productPath } from '../../lib/paths';
 import { StarInput, Stars } from '../../components/shop/rating';
 
@@ -180,6 +181,10 @@ export function ReviewsPage() {
               <Stars value={r.rating} className="mt-1" />
               {r.title ? <p className="mt-1 font-medium">{r.title}</p> : null}
               {r.body ? <p className="text-muted-foreground">{r.body}</p> : null}
+              <div className="mt-2 space-y-2">
+                <ReviewExtras review={r} />
+                <ReviewPhotoUpload reviewId={r.id} count={r.images.length} />
+              </div>
             </li>
           ))}
         </ul>

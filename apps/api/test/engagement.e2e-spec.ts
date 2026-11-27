@@ -312,7 +312,7 @@ describe('Engagement (e2e)', () => {
       const item = await listed(seller, admin, categoryId, { price: '1000.00', stock: 50 });
       const sale = await admin
         .post('/api/v1/flash-sales')
-        .send({ title: 'Engage flash', startsAt: hourAgo(), endsAt: inADay() })
+        .send({ title: 'Engagement flash sale', startsAt: hourAgo(), endsAt: inADay() })
         .expect(201);
       await seller.client
         .post(`/api/v1/seller/flash-sales/${sale.body.id}/items`)

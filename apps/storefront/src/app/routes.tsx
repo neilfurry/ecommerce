@@ -10,6 +10,13 @@ import { StoreBrand } from '../components/store-brand';
 import { StoreLayout } from '../layouts/store-layout';
 import { AccountLayout } from '../pages/account/account-layout';
 import { AddressesPage } from '../pages/account/addresses-page';
+import {
+  AffiliatePage,
+  NotificationsPage,
+  RewardsPage,
+  SupportPage,
+  TicketPage,
+} from '../pages/account/engagement-pages';
 import { OrderPage } from '../pages/account/order-page';
 import { OrdersPage } from '../pages/account/orders-page';
 import { AccountOverviewPage } from '../pages/account/overview-page';
@@ -82,6 +89,12 @@ export const routes: RouteObject[] = [
                   { path: 'wishlist', element: <WishlistPage /> },
                   { path: 'reviews', element: <ReviewsPage /> },
                   { path: 'settings', element: <AccountSettingsPage /> },
+                  { path: 'rewards', element: <RewardsPage /> },
+                  { path: 'loyalty', element: <RewardsPage /> },
+                  { path: 'affiliate', element: <AffiliatePage /> },
+                  { path: 'support', element: <SupportPage /> },
+                  { path: 'support/:ticketId', element: <TicketPage /> },
+                  { path: 'notifications', element: <NotificationsPage /> },
                 ],
               },
             ],

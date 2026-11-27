@@ -2,6 +2,12 @@ import type { Permission } from '@marketplace/shared-types';
 import type { SidebarNavItem, SidebarNavSection } from '@marketplace/ui';
 import {
   ActivityIcon,
+  BellRingIcon,
+  CoinsIcon,
+  HandshakeIcon,
+  LifeBuoyIcon,
+  MegaphoneIcon,
+  TrendingUpIcon,
   BookOpenIcon,
   CalendarCheckIcon,
   ChartColumnIcon,
@@ -88,6 +94,37 @@ export function buildNavSections(
           permission: 'marketing.manage',
         },
         { to: '/reviews', label: 'Reviews', icon: StarIcon, permission: 'reviews.moderate' },
+      ],
+    },
+    {
+      title: 'Engagement',
+      items: [
+        { to: '/analytics', label: 'Analytics', icon: TrendingUpIcon, permission: 'reports.read' },
+        {
+          to: '/campaigns',
+          label: 'Campaigns',
+          icon: MegaphoneIcon,
+          permission: 'marketing.manage',
+        },
+        { to: '/loyalty', label: 'Loyalty points', icon: CoinsIcon, permission: 'loyalty.manage' },
+        {
+          to: '/affiliates',
+          label: 'Affiliates',
+          icon: HandshakeIcon,
+          permission: 'affiliates.manage',
+        },
+        {
+          to: '/support',
+          label: 'Support tickets',
+          icon: LifeBuoyIcon,
+          permission: 'support.read',
+        },
+        {
+          to: '/notifications',
+          label: 'Notifications',
+          icon: BellRingIcon,
+          permission: 'notifications.manage',
+        },
       ],
     },
     {

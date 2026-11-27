@@ -1,6 +1,10 @@
 import { cn } from '@marketplace/ui';
 import {
+  BellIcon,
+  CoinsIcon,
+  HandshakeIcon,
   HeartIcon,
+  LifeBuoyIcon,
   LayoutDashboardIcon,
   MapPinIcon,
   PackageIcon,
@@ -17,6 +21,10 @@ const LINKS = [
   { to: '/account/addresses', label: 'Addresses', icon: MapPinIcon },
   { to: '/account/wishlist', label: 'Wishlist', icon: HeartIcon },
   { to: '/account/reviews', label: 'Reviews', icon: StarIcon },
+  { to: '/account/rewards', label: 'Rewards', icon: CoinsIcon },
+  { to: '/account/support', label: 'Help center', icon: LifeBuoyIcon },
+  { to: '/account/notifications', label: 'Notifications', icon: BellIcon },
+  { to: '/account/affiliate', label: 'Affiliate', icon: HandshakeIcon },
   { to: '/account/settings', label: 'Profile and security', icon: ShieldIcon },
 ];
 

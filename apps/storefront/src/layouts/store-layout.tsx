@@ -1,5 +1,5 @@
 import { APP_NAME } from '@marketplace/config';
-import { useSession } from '@marketplace/api-client';
+import { useApiClient, useEngagement, useSession } from '@marketplace/api-client';
 import { UserMenu } from '@marketplace/auth-ui';
 import {
   BrandMark,
@@ -10,10 +10,18 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@marketplace/ui';
-import { HeartIcon, MenuIcon, PackageIcon, ShoppingCartIcon, UserIcon } from 'lucide-react';
-import { useState } from 'react';
+import {
+  BellIcon,
+  HeartIcon,
+  MenuIcon,
+  PackageIcon,
+  ShoppingCartIcon,
+  UserIcon,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router';
 import { CategoryMenu } from '../components/shop/category-menu';
+import { captureAffiliate } from '../lib/affiliate';
 import { useCategoryTree } from '../hooks/use-category-tree';
 import { SearchBox } from '../components/shop/search-box';
 import { useShoppingCart } from '../hooks/use-shopping-cart';
@@ -41,6 +49,52 @@ function CartButton() {
   );
 }
 
+/** The in-app inbox, with the unread count (refreshed every minute). */
+function NotificationsButton() {
+  const session = useSession();
+  const inbox = useEngagement(
+    ['account', 'notifications', 'unread'],
+    (e, s) => e.notifications.list({ page: 1, pageSize: 1 }, s),
+    {
+      refetchInterval: 60_000,
+      enabled: !!session.data,
+    },
+  );
+  if (!session.data) return null;
+  const unread = inbox.data?.unread ?? 0;
+  return (
+    <Button asChild variant="ghost" size="sm" className="relative">
+      <Link
+        to="/account/notifications"
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+      >
+        <BellIcon aria-hidden="true" />
+        {unread > 0 ? (
+          <span
+            aria-hidden="true"
+            className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground"
+          >
+            {unread > 99 ? '99+' : unread}
+          </span>
+        ) : null}
+      </Link>
+    </Button>
+  );
+}
+
+/** Remembers an affiliate link's code and records the visit (once per landing). */
+function useAffiliateLinks() {
+  const location = useLocation();
+  const client = useApiClient();
+  useEffect(() => {
+    const code = captureAffiliate(location.search);
+    if (code)
+      void client.engagement.storefront
+        .affiliateClick(code, location.pathname)
+        .catch(() => undefined);
+  }, [location.search, location.pathname, client]);
+}
+
 /** Sign-in links for visitors; account link and menu for signed-in customers. */
 function AccountActions() {
   const session = useSession();
@@ -48,6 +102,7 @@ function AccountActions() {
   if (session.data) {
     return (
       <div className="flex items-center gap-1">
+        <NotificationsButton />
         <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
           <Link to="/account">
             <UserIcon aria-hidden="true" /> <span className="hidden lg:inline">My account</span>
@@ -228,6 +283,7 @@ function Footer() {
 export function StoreLayout() {
   const location = useLocation();
   const checkout = location.pathname.startsWith('/checkout');
+  useAffiliateLinks();
   return (
     <div className="flex min-h-svh flex-col">
       <a
