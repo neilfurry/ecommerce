@@ -2,7 +2,7 @@
 
 - Branch: `phase-7-engagement` (PR #7, based on `phase-6-finance`)
 - Date: 2026-11-27
-- Verified on: see §7
+- Verified on: GitHub Actions run `45950467158`, commit `369a59d` (all three jobs green, nothing flaky)
 - Status: **Complete, awaiting review and approval.** Phase 8 will not start until you approve
   this phase and send its details.
 
@@ -255,7 +255,22 @@ pnpm install
 
 ## 7. Test results
 
-See the PR for the CI run of the final commit; results are recorded below once CI has finished.
+All of these were executed. Earlier tests changed only where behaviour changed on purpose: the
+seller manager's permission list gained the three new seller permissions, and the first Admin
+Console sales test waits up to 5 seconds for its first render (route modules load on a cold CI
+runner).
+
+| Suite                                   | Result (CI run `45950467158`)                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typecheck, lint, format                 | Pass                                                                                                                                                    |
+| Unit tests (all packages and apps)      | 511 passed (new: promotion engine, report ranges and exports, loyalty rules, notification templates, analytics screen)                                  |
+| API e2e                                 | 290 passed in 23 suites (new `engagement.e2e-spec.ts`: 18)                                                                                              |
+| Worker integration                      | 11 passed (new: outbox delivery on all four channels; opted-out channel skipped; never delivered twice)                                                 |
+| Playwright                              | 37 passed, 1 skipped, no flaky tests (new: welcome notification via the worker and Mailpit, support conversation, analytics, campaigns, seller reports) |
+| Migration drift (`prisma migrate diff`) | Clean                                                                                                                                                   |
+| PowerShell scripts                      | Pass                                                                                                                                                    |
+
+How each §11 requirement is proven is listed in `docs/testing/TESTING_GUIDE.md` › Phase 7.
 
 ## 8. Assumptions
 
