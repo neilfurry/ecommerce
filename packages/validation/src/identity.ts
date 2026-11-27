@@ -167,6 +167,8 @@ export const sessionUserSchema = z.object({
   wholesaleStatus: wholesaleStatusSchema.nullable(),
   /** Whether two-step verification (authenticator app) is on. */
   mfaEnabled: z.boolean(),
+  /** Two-step verification is required here and not on yet: only enrolment is allowed. */
+  mfaEnrollmentRequired: z.boolean().default(false),
   /** The seller this user works for (active membership), or null. */
   seller: z
     .object({

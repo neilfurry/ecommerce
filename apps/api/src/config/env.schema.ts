@@ -110,6 +110,11 @@ const apiEnvObject = z.object({
   AUTH_LOCKOUT_MINUTES: envInteger(15, 1, 1440),
   /** Secure-only cookies. Defaults to true in production; local http needs false. */
   COOKIE_SECURE: envBoolean(false),
+  /**
+   * Admin Console staff must turn on two-step verification (an authenticator app) before
+   * they can do anything else. Required in production.
+   */
+  STAFF_MFA_REQUIRED: envBoolean(false),
   /** Optional parent domain for cookies, e.g. ".marketplace.ph". Unset = API host only. */
   COOKIE_DOMAIN: z.string().optional(),
 
@@ -125,6 +130,13 @@ export const apiEnvSchema = apiEnvObject.superRefine((env, ctx) => {
       code: 'custom',
       path: ['S3_AUTO_CREATE_BUCKET'],
       message: 'Must be false in production; provision buckets explicitly',
+    });
+  }
+  if (env.NODE_ENV === 'production' && !env.STAFF_MFA_REQUIRED) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['STAFF_MFA_REQUIRED'],
+      message: 'Must be true in production (staff accounts handle payouts, refunds and user data)',
     });
   }
   if (env.NODE_ENV === 'production' && !env.COOKIE_SECURE) {

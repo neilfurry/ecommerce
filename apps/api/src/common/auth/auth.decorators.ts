@@ -13,6 +13,7 @@ export const IS_PUBLIC_KEY = 'auth:isPublic';
 export const ROLES_KEY = 'auth:roles';
 export const PERMISSIONS_KEY = 'auth:permissions';
 export const SKIP_CSRF_KEY = 'auth:skipCsrf';
+export const ALLOW_WITHOUT_MFA_KEY = 'auth:allowWithoutMfa';
 
 /**
  * Marks a route (or controller) as reachable without authentication.
@@ -32,6 +33,12 @@ export const RequirePermissions = (...permissions: Permission[]) =>
  * browser cookies, such as payment-provider webhooks with their own signatures.
  */
 export const SkipCsrf = () => SetMetadata(SKIP_CSRF_KEY, true);
+
+/**
+ * Reachable by Admin Console staff who still have to turn on two-step verification
+ * (STAFF_MFA_REQUIRED): their session, the enrolment steps and signing out.
+ */
+export const AllowWithoutMfa = () => SetMetadata(ALLOW_WITHOUT_MFA_KEY, true);
 
 export type AuthenticatedRequest = Request & { user?: AuthenticatedUser; id?: string | number };
 

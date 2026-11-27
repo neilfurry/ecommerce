@@ -93,6 +93,8 @@ export interface AuthenticatedUser {
   permissions: Permission[];
   /** ISO time the current access token expires (the client refreshes before then). */
   accessTokenExpiresAt: string;
+  /** Admin Console staff who must turn on two-step verification before anything else. */
+  mfaEnrollmentRequired?: boolean;
   /**
    * The seller this user works for (active membership only). Every seller-scoped query
    * filters by it; seller-scope permissions are only ever granted through it.

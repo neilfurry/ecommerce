@@ -55,6 +55,7 @@ export class AppConfig {
     lockoutMinutes: number;
     cookieSecure: boolean;
     cookieDomain: string | undefined;
+    staffMfaRequired: boolean;
   };
   readonly appUrls: { storefront: string; seller: string; admin: string };
   readonly storage: {
@@ -132,6 +133,7 @@ export class AppConfig {
       lockoutMinutes: env.AUTH_LOCKOUT_MINUTES,
       cookieSecure: env.COOKIE_SECURE,
       cookieDomain: env.COOKIE_DOMAIN || undefined,
+      staffMfaRequired: env.STAFF_MFA_REQUIRED,
     };
     this.appUrls = {
       storefront: env.STOREFRONT_URL.replace(/\/+$/, ''),

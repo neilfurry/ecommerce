@@ -16,6 +16,8 @@ import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 export interface Principal {
   userId: string;
   status: UserStatus;
+  /** Two-step verification is on. */
+  mfaEnabled: boolean;
   roles: UserRole[];
   permissions: Permission[];
   /** Active seller membership, if any. Seller roles and permissions exist only through it. */
@@ -53,6 +55,7 @@ export class PrincipalService {
       select: {
         id: true,
         status: true,
+        mfa: { select: { enabledAt: true } },
         roles: {
           select: {
             role: {
@@ -96,6 +99,7 @@ export class PrincipalService {
     const principal: Principal = {
       userId: user.id,
       status: user.status,
+      mfaEnabled: !!user.mfa?.enabledAt,
       roles: roles.map((r) => r.role.code as UserRole).sort(),
       permissions: [...new Set([...fromRoles, ...extra])].sort(),
       seller: activeMembership

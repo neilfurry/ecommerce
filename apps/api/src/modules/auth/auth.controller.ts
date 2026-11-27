@@ -26,6 +26,7 @@ import {
 } from '@marketplace/validation';
 import type { Request, Response } from 'express';
 import {
+  AllowWithoutMfa,
   CurrentUser,
   Public,
   ReqContext,
@@ -299,6 +300,7 @@ export class AuthController {
   }
 
   @Post('sign-out')
+  @AllowWithoutMfa()
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -329,6 +331,7 @@ export class AuthController {
   }
 
   @Post('sign-out-everywhere')
+  @AllowWithoutMfa()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Sign out of every app on every device' })
   @ApiNoContentResponse()
@@ -342,6 +345,7 @@ export class AuthController {
   }
 
   @Get('session')
+  @AllowWithoutMfa()
   @ApiOperation({ summary: 'The signed-in user, roles, permissions and token expiry' })
   @ApiOkResponse({ schema: zodToOpenApi(sessionResponseSchema) })
   session(@CurrentUser() user: AuthenticatedUser): Promise<SessionResponse> {
@@ -405,6 +409,7 @@ export class AuthController {
   }
 
   @Post('password/change')
+  @AllowWithoutMfa()
   @Throttle(SIGN_IN_LIMIT)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Change password; other devices are signed out' })

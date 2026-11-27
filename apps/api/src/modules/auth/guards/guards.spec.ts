@@ -1,7 +1,12 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { AuthenticatedUser, ClientApp } from '@marketplace/shared-types';
-import { Public, RequirePermissions, SkipCsrf } from '../../../common/auth/auth.decorators';
+import {
+  AllowWithoutMfa,
+  Public,
+  RequirePermissions,
+  SkipCsrf,
+} from '../../../common/auth/auth.decorators';
 import { ApiException } from '../../../common/errors/api.exception';
 import type { AppConfig } from '../../../config/app-config';
 import { AccessTokenService } from '../access-token.service';
@@ -21,6 +26,9 @@ class TestController {
   open() {}
 
   closed() {}
+
+  @AllowWithoutMfa()
+  enrol() {}
 
   @RequirePermissions('users.read', 'users.update')
   editUsers() {}
@@ -59,7 +67,11 @@ async function expectApiError(fn: () => unknown, status: number, code: string) {
 }
 
 const config = {
-  auth: { jwtSecret: 'unit-test-jwt-secret-with-enough-length', accessTokenTtlSeconds: 900 },
+  auth: {
+    jwtSecret: 'unit-test-jwt-secret-with-enough-length',
+    accessTokenTtlSeconds: 900,
+    staffMfaRequired: false,
+  },
 } as AppConfig;
 
 describe('AuthenticationGuard', () => {
@@ -73,13 +85,14 @@ describe('AuthenticationGuard', () => {
     principal = {
       userId: 'u1',
       status: 'ACTIVE',
+      mfaEnabled: false,
       roles: ['ADMIN'],
       permissions: ['users.read'],
       seller: null,
     };
     const sessions = { isRevoked: jest.fn(async () => revoked) } as unknown as SessionsService;
     const principals = { load: jest.fn(async () => principal) } as unknown as PrincipalService;
-    guard = new AuthenticationGuard(new Reflector(), tokens, sessions, principals);
+    guard = new AuthenticationGuard(new Reflector(), tokens, sessions, principals, config);
   });
 
   const request = (app: ClientApp, token?: string): FakeRequest => ({
@@ -91,6 +104,37 @@ describe('AuthenticationGuard', () => {
 
   it('lets public routes through without a session', async () => {
     await expect(guard.canActivate(context(proto.open, request('storefront')))).resolves.toBe(true);
+  });
+
+  describe('STAFF_MFA_REQUIRED', () => {
+    beforeEach(() => {
+      config.auth.staffMfaRequired = true;
+    });
+    afterEach(() => {
+      config.auth.staffMfaRequired = false;
+    });
+
+    it('lets Admin Console staff without two-step verification reach only the enrolment routes', async () => {
+      const req = request('admin', adminToken());
+      await expectApiError(
+        () => guard.canActivate(context(proto.closed, req)),
+        403,
+        'MFA_ENROLLMENT_REQUIRED',
+      );
+      await expect(
+        guard.canActivate(context(proto.enrol, request('admin', adminToken()))),
+      ).resolves.toBe(true);
+      await expect(
+        guard.canActivate(context(proto.open, request('admin', adminToken()))),
+      ).resolves.toBe(true);
+    });
+
+    it('lets staff with two-step verification through', async () => {
+      principal = { ...principal!, mfaEnabled: true };
+      const req = request('admin', adminToken());
+      await expect(guard.canActivate(context(proto.closed, req))).resolves.toBe(true);
+      expect(req.user?.mfaEnrollmentRequired).toBeUndefined();
+    });
   });
 
   it('rejects protected routes without a session (secure by default)', async () => {

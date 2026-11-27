@@ -11,6 +11,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 import { AuditService } from '../audit/audit.service';
 import { randomToken, sha256 } from './crypto';
+import { PrincipalService } from './principal.service';
 import {
   decryptSecret,
   encryptSecret,
@@ -48,6 +49,7 @@ export class MfaService {
     private readonly config: AppConfig,
     private readonly audit: AuditService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly principals: PrincipalService,
   ) {}
 
   async isEnabled(userId: string): Promise<boolean> {
@@ -133,6 +135,8 @@ export class MfaService {
         tx,
       );
     });
+    // The Admin Console stops asking for enrolment at once (STAFF_MFA_REQUIRED).
+    await this.principals.invalidateUser(userId);
     return codes;
   }
 
@@ -292,6 +296,7 @@ export class MfaService {
       this.prisma.userMfa.deleteMany({ where: { userId } }),
       this.prisma.mfaRecoveryCode.deleteMany({ where: { userId } }),
     ]);
+    await this.principals.invalidateUser(userId);
     return removed.count > 0;
   }
 

@@ -2,10 +2,12 @@ import { type CanActivate, type ExecutionContext, HttpStatus, Injectable } from 
 import { Reflector } from '@nestjs/core';
 import type { AuthenticatedUser } from '@marketplace/shared-types';
 import {
+  ALLOW_WITHOUT_MFA_KEY,
   type AuthenticatedRequest,
   clientAppFrom,
   IS_PUBLIC_KEY,
 } from '../../../common/auth/auth.decorators';
+import { AppConfig } from '../../../config/app-config';
 import { ApiException } from '../../../common/errors/api.exception';
 import { AccessTokenService } from '../access-token.service';
 import { accessCookieName, readCookie } from '../auth-cookies';
@@ -30,6 +32,7 @@ export class AuthenticationGuard implements CanActivate {
     private readonly accessTokens: AccessTokenService,
     private readonly sessions: SessionsService,
     private readonly principals: PrincipalService,
+    private readonly config: AppConfig,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -41,6 +44,19 @@ export class AuthenticationGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    if (request.user?.mfaEnrollmentRequired && !isPublic) {
+      const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
+      if (!allowed) {
+        throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          'MFA_ENROLLMENT_REQUIRED',
+          'Turn on two-step verification to use the Admin Console.',
+        );
+      }
+    }
     if (isPublic || request.user) return true;
     if (resolution === 'expired') {
       throw new ApiException(
@@ -74,6 +90,9 @@ export class AuthenticationGuard implements CanActivate {
       roles: principal.roles,
       permissions: principal.permissions,
       accessTokenExpiresAt: new Date(exp * 1000).toISOString(),
+      ...(app === 'admin' && this.config.auth.staffMfaRequired && !principal.mfaEnabled
+        ? { mfaEnrollmentRequired: true }
+        : {}),
       // Seller scope applies only in the Seller Center.
       ...(app === 'seller' && principal.seller
         ? {

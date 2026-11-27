@@ -100,6 +100,7 @@ describe('AppConfig.load', () => {
       ...validEnv,
       NODE_ENV: 'production',
       COOKIE_SECURE: 'true',
+      STAFF_MFA_REQUIRED: 'true',
       SHIPPING_PROVIDER: 'rate_table',
       PAYMENT_PROVIDER: 'paymongo',
       PAYMONGO_SECRET_KEY: 'sk_live_abcdefghijklmnop',
@@ -145,6 +146,12 @@ describe('AppConfig.load', () => {
       expect(AppConfig.load({ ...test, ALLOW_TEST_PAYMENTS: 'true' }, false).isProduction).toBe(
         true,
       );
+    });
+
+    it('requires two-step verification for staff', () => {
+      expect(() =>
+        AppConfig.load({ ...productionEnv, STAFF_MFA_REQUIRED: 'false' }, false),
+      ).toThrow(/STAFF_MFA_REQUIRED/);
     });
 
     it('refuses mock shipping and plain-http public URLs', () => {
