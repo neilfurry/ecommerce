@@ -297,6 +297,10 @@ All of these were executed. Earlier tests changed only where behaviour changed o
 | Migration drift (`prisma migrate diff`) | Clean (first run caught a column type in the hand-written migration; fixed in `3e95fd7`)                                        |
 | PowerShell scripts                      | Pass                                                                                                                            |
 
+On the report commit (`cc93526`, documentation only) the Phase 2 SMS sign-up browser test flaked
+once on the mobile project (passed on retry and on the rerun, run `45921121720`). This is the
+intermittent test noted in the Phase 5 report; it is unrelated to Phase 6.
+
 How each §10 requirement is proven is listed in `docs/testing/TESTING_GUIDE.md` › Phase 6.
 Locally, every reconciliation check passed on the accumulated development data after the
 backfill.
