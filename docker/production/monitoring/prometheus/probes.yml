@@ -1,0 +1,7 @@
+# Public URLs probed every 15 s. Replace the example domains with the real ones
+# (the same values as STOREFRONT_DOMAIN, SELLER_DOMAIN, ADMIN_DOMAIN and API_DOMAIN).
+- targets:
+    - https://shop.example.ph/
+    - https://seller.example.ph/
+    - https://admin.example.ph/
+    - https://api.example.ph/api/v1/health

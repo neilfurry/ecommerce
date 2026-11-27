@@ -38,7 +38,7 @@ const apiEnvObject = z.object({
   /** Internal port serving Prometheus metrics at /metrics (0 = off). Never expose publicly. */
   METRICS_PORT: envInteger(0, 0, 65535),
   /** Sentry-compatible error tracking (Sentry or GlitchTip). Unset = off. */
-  SENTRY_DSN: z.url().optional(),
+  SENTRY_DSN: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
   SENTRY_ENVIRONMENT: z.string().optional(),
 
   DATABASE_URL: postgresUrlSchema,

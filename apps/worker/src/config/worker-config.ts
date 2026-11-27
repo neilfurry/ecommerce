@@ -30,7 +30,7 @@ export const workerEnvSchema = z
     /** Internal port serving Prometheus metrics at /metrics (0 = off). */
     METRICS_PORT: envInteger(0, 0, 65535),
     /** Sentry-compatible error tracking (Sentry or GlitchTip). Unset = off. */
-    SENTRY_DSN: z.url().optional(),
+    SENTRY_DSN: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
     SENTRY_ENVIRONMENT: z.string().optional(),
     DEV_TOOLS_ENABLED: envBoolean(false),
     SMTP_HOST: z.string().min(1).default('localhost'),

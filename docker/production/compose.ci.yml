@@ -1,0 +1,33 @@
+# CI-only additions to compose.yml (never used on a server): Mailpit as the SMTP relay, a
+# second MinIO with TLS as the backup repository, and bucket creation. Uploads use the
+# optional "minio" service (start with --profile storage).
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27
+    networks: [app, data, public]
+
+  minio-backup:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: ['server', '/data']
+    environment:
+      MINIO_ROOT_USER: ${BACKUP_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${BACKUP_MINIO_ROOT_PASSWORD}
+    volumes:
+      # pgBackRest only talks HTTPS: a self-signed certificate made by ci/certs.sh.
+      - ./ci/certs:/root/.minio/certs:ro
+    networks: [data]
+
+  buckets:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on: [minio, minio-backup]
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        until mc alias set up http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 1; done
+        until mc --insecure alias set bk https://minio-backup:9000 "$$BACKUP_MINIO_ROOT_USER" "$$BACKUP_MINIO_ROOT_PASSWORD"; do sleep 1; done
+        mc mb --ignore-existing up/$$S3_BUCKET
+        mc --insecure mb --ignore-existing bk/$$BACKUP_S3_BUCKET
+        echo buckets ready
+    env_file: .env.production
+    networks: [data]

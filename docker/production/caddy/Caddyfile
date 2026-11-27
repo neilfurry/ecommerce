@@ -1,0 +1,134 @@
+# Edge server: HTTPS (automatic Let's Encrypt certificates), security headers, the three
+# frontends as static files, and /api load-balanced across the API containers.
+#
+# Every value comes from the environment (docker/production/.env.production):
+#   STOREFRONT_DOMAIN  SELLER_DOMAIN  ADMIN_DOMAIN  API_DOMAIN   public host names
+#   ACME_EMAIL         contact address for Let's Encrypt
+#   TLS_MODE           "{$ACME_EMAIL}" in production; "internal" for a local or CI stack
+#   CDN_TRUSTED_PROXIES  CIDR ranges of a CDN in front of this server (or "private_ranges")
+#   ASSET_ORIGINS      extra origins allowed for images/connections (S3 public endpoint, Sentry)
+
+{
+	email {$ACME_EMAIL}
+	# Prometheus metrics on the admin endpoint (internal network only, scraped by Prometheus).
+	admin :2019
+	metrics
+	servers {
+		# Client IPs from X-Forwarded-For are only believed from these proxies (a CDN).
+		trusted_proxies static {$CDN_TRUSTED_PROXIES:private_ranges}
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+(tls) {
+	tls {$TLS_MODE}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+	# JSON access logs to stdout (collected by Loki). Query strings are dropped: links in emails
+	# carry one-time tokens (?token=...), which must never reach log storage.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete token
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}
+
+(api) {
+	# Every API container (Docker DNS returns one address per replica).
+	handle /api/* {
+		reverse_proxy {
+			dynamic a {
+				name api
+				port 3000
+				refresh 10s
+			}
+			lb_policy least_conn
+			health_uri /api/v1/health/live
+			health_interval 10s
+			health_timeout 3s
+			fail_duration 30s
+			# Uploads are limited by the API (UPLOAD_MAX_BYTES); a hard ceiling here as well.
+			transport http {
+				read_timeout 60s
+				write_timeout 60s
+			}
+		}
+	}
+	request_body /api/* {
+		max_size 25MB
+	}
+}
+
+(spa) {
+	# A single-page app: real files are served (hashed assets cached for a year), every other
+	# path gets index.html, which is never cached so a new release is picked up at once.
+	handle {
+		root * /srv/{args[0]}
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@html not path /assets/*
+		header @html Cache-Control "no-cache"
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: {$ASSET_ORIGINS:}; font-src 'self' data:; connect-src 'self' {$ASSET_ORIGINS:}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+			X-Frame-Options DENY
+		}
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+{$STOREFRONT_DOMAIN} {
+	import tls
+	import common
+	import api
+	import spa storefront
+}
+
+{$SELLER_DOMAIN} {
+	import tls
+	import common
+	import api
+	import spa seller
+}
+
+{$ADMIN_DOMAIN} {
+	import tls
+	import common
+	import api
+	import spa admin
+}
+
+# Direct API host: payment and courier webhooks, health checks, integrations.
+{$API_DOMAIN} {
+	import tls
+	import common
+	import api
+	handle {
+		respond "Not found" 404
+	}
+}
+
+# Grafana (its own sign-in; Prometheus and Alertmanager are not exposed at all).
+{$GRAFANA_DOMAIN} {
+	import tls
+	import common
+	reverse_proxy grafana:3000
+}

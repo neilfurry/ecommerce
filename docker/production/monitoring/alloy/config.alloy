@@ -1,0 +1,44 @@
+// Collects the logs of every container in this Compose project and sends them to Loki,
+// labelled by service. Application logs are JSON (pino); secrets are redacted at the source.
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=marketplace"]
+  }
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.json.receiver]
+}
+
+loki.process "json" {
+  stage.json {
+    expressions = { level = "level", req_id = "req.id" }
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

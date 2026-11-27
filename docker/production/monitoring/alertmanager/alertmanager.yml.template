@@ -1,0 +1,32 @@
+# Rendered by render.sh from the environment (ALERT_* variables in .env.production).
+global:
+  smtp_smarthost: '${ALERT_SMTP_HOST}'
+  smtp_from: '${ALERT_EMAIL_FROM}'
+  smtp_auth_username: '${ALERT_SMTP_USER}'
+  smtp_auth_password: '${ALERT_SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+route:
+  receiver: team
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: on-call
+      repeat_interval: 1h
+
+receivers:
+  - name: team
+    email_configs:
+      - to: '${ALERT_EMAIL_TEAM}'
+        send_resolved: true
+  - name: on-call
+    email_configs:
+      - to: '${ALERT_EMAIL_ONCALL}'
+        send_resolved: true
+    webhook_configs:
+      # Slack-compatible or paging service webhook; leave ALERT_WEBHOOK_URL empty to disable.
+      - url: '${ALERT_WEBHOOK_URL}'
+        send_resolved: true
