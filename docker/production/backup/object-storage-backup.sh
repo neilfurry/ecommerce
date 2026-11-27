@@ -4,6 +4,10 @@
 # deleted or changed in the source is moved to deleted/<date>/ first, and that folder is
 # pruned after OBJECT_BACKUP_RETENTION_DAYS. Turn on versioning on the backup bucket as well.
 #
+#   object-storage-backup.sh            nightly loop (the service)
+#   object-storage-backup.sh once       one copy now
+#   object-storage-backup.sh restore <key-or-prefix> | restore-all
+#
 # Remotes come from the environment (rclone's RCLONE_CONFIG_<NAME>_* convention):
 #   source: the application bucket (S3_* settings);  dest: OBJECT_BACKUP_* settings.
 set -eu
@@ -40,7 +44,12 @@ run() {
   fi
 }
 
-[ "${1:-}" = "once" ] && { run; exit 0; }
+case "${1:-}" in
+  once) run; exit 0 ;;
+  # Copy files back from the backup bucket: one key/prefix, or everything.
+  restore) rclone copy "dst:${BUCKET}/current/${2:?key or prefix}" "src:${S3_BUCKET}/$(dirname "$2")" --log-level INFO; exit 0 ;;
+  restore-all) rclone copy "dst:${BUCKET}/current" "src:${S3_BUCKET}" --log-level INFO; exit 0 ;;
+esac
 while true; do
   now=$(date -u +%s)
   next=$(date -u -d "$(date -u +%Y-%m-%d) ${HOUR}:00:00" +%s 2>/dev/null || echo $((now + 86400)))

@@ -1,0 +1,140 @@
+name: Release
+
+# Builds the production images for a version tag (or on demand), pushes them to GitHub
+# Container Registry and, once someone approves the "production" environment, deploys them
+# to the server over SSH. docs/production/DEPLOYMENT_GUIDE.md describes the one-time set-up:
+# repository variables DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH and the secret DEPLOY_SSH_KEY.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to build and deploy (defaults to the commit SHA)'
+        required: false
+      deploy:
+        description: 'Deploy after building'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository }}
+
+jobs:
+  images:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: |
+          tag="${{ inputs.tag }}"
+          if [ -z "$tag" ] && [ "${GITHUB_REF_TYPE}" = tag ]; then tag="${GITHUB_REF_NAME}"; fi
+          [ -n "$tag" ] || tag="${GITHUB_SHA::12}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: api
+          push: true
+          tags: ${{ env.REGISTRY }}/api:${{ steps.tag.outputs.tag }}
+          build-args: APP_VERSION=${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=marketplace
+          cache-to: type=gha,scope=marketplace,mode=max
+          provenance: true
+          sbom: true
+      - name: worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: worker
+          push: true
+          tags: ${{ env.REGISTRY }}/worker:${{ steps.tag.outputs.tag }}
+          build-args: APP_VERSION=${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=marketplace
+          provenance: true
+          sbom: true
+      - name: edge (frontends)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: edge
+          push: true
+          tags: ${{ env.REGISTRY }}/edge:${{ steps.tag.outputs.tag }}
+          # Public build-time settings of the browser apps (repository variables, not secrets).
+          build-args: |
+            APP_VERSION=${{ steps.tag.outputs.tag }}
+            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
+            VITE_SENTRY_ENVIRONMENT=production
+          cache-from: type=gha,scope=marketplace
+          provenance: true
+          sbom: true
+      - name: tools
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: tools
+          push: true
+          tags: ${{ env.REGISTRY }}/tools:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=marketplace
+      - name: postgres
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/production
+          file: docker/production/postgres/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/postgres:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=marketplace-postgres
+          provenance: true
+          sbom: true
+
+  deploy:
+    name: Deploy to production
+    needs: images
+    if: (github.ref_type == 'tag' || inputs.deploy) && vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Protection rules on this environment (required reviewers) make every deployment wait
+    # for an explicit approval.
+    environment:
+      name: production
+      url: https://${{ vars.STOREFRONT_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ vars.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+      - name: Copy the stack definition (never the .env.production on the server)
+        run: |
+          rsync -az --delete --exclude .env.production --exclude ci/ \
+            docker/production/ "${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}:${{ vars.DEPLOY_PATH }}/"
+      - name: Deploy (backup, migrate, roll out, verify; roll back on failure)
+        run: |
+          ssh "${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}" \
+            "cd '${{ vars.DEPLOY_PATH }}' && ./deploy.sh '${{ needs.images.outputs.tag }}'"

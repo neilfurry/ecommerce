@@ -53,7 +53,9 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
     VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT} \
     VITE_APP_VERSION=${APP_VERSION} \
     VITE_DEV_TOOLS_ENABLED=false
-RUN pnpm run build
+# prisma.config.ts needs a DATABASE_URL to generate the client; nothing connects to it.
+ARG BUILD_DATABASE_URL=postgresql://build:build@localhost:5432/build
+RUN DATABASE_URL=${BUILD_DATABASE_URL} pnpm run build
 # Self-contained production installs of the two Node services (workspace packages included).
 RUN pnpm --filter @marketplace/api deploy --prod --legacy /out/api \
  && pnpm --filter @marketplace/worker deploy --prod --legacy /out/worker
@@ -92,7 +94,8 @@ FROM build AS tools
 ENV NODE_ENV=production
 WORKDIR /repo
 # Migrations need Prisma's schema engine, downloaded here at build time.
-RUN pnpm --filter @marketplace/database exec prisma --version
+ARG BUILD_DATABASE_URL=postgresql://build:build@localhost:5432/build
+RUN DATABASE_URL=${BUILD_DATABASE_URL} pnpm --filter @marketplace/database exec prisma --version
 CMD ["pnpm", "db:deploy"]
 
 # ---- Edge: Caddy with the three frontends -----------------------------------------------------

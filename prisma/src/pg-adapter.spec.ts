@@ -11,4 +11,11 @@ describe('createPgAdapter', () => {
     const adapter = createPgAdapter('postgresql://u:p@localhost:5432/db');
     expect(adapter.provider).toBe('postgres');
   });
+
+  it('accepts a connection_limit parameter (pool size)', () => {
+    const adapter = createPgAdapter(
+      'postgresql://u:p@localhost:5432/db?schema=public&connection_limit=20',
+    );
+    expect(adapter.provider).toBe('postgres');
+  });
 });

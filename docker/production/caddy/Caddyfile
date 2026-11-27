@@ -61,6 +61,9 @@
 				refresh 10s
 			}
 			lb_policy least_conn
+			# During a deploy or a crash, wait for a healthy replica instead of failing.
+			lb_try_duration 15s
+			lb_try_interval 250ms
 			health_uri /api/v1/health/live
 			health_interval 10s
 			health_timeout 3s
