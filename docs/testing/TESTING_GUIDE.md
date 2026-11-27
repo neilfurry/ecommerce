@@ -179,6 +179,19 @@ SMS outbox and Mailpit, like a developer would. Playwright signs in to the staff
 Locally without Mailpit, run the browser tests with `E2E_NO_MAILPIT=1` to skip only the email
 check (CI always runs it).
 
+### Phase 8 (quality assurance, security and production)
+
+| Requirement                         | Proven by                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer, seller and admin journeys | Playwright `journeys.spec.ts`: register → browse → cart → checkout → pay → track → review; register → verify → store → product → order → ship → settlement; sign in → approve seller → approve product → monitor order → resolve dispute → approve payout                                                      |
+| Data integrity                      | `integrity.e2e-spec.ts` (duplicate/concurrent webhooks, concurrent refunds, multi-seller refund cap, COD remittance once, checkout rollback, seller isolation matrix, whole-database reconciliation); earlier suites for duplicate orders, oversell and reservation expiry (see FINAL_TECHNICAL_REPORT.md §10) |
+| Route protection                    | `route-access.e2e-spec.ts` (inventory of every route)                                                                                                                                                                                                                                                          |
+| Worker crash recovery               | `worker.integration-spec.ts` (orphaned outbox event; killed job re-run once; backlog drained in one run)                                                                                                                                                                                                       |
+| Production configuration            | `app-config.spec.ts`, `worker-config.spec.ts` (development secrets, test keys, mocks, http URLs refused)                                                                                                                                                                                                       |
+| Production stack                    | CI job "Production images…": `docker/production/ci/smoke.sh` (TLS, headers, redirects, health, Swagger/dev tools/metrics hidden, forged webhook refused, cookies, CSRF, every Prometheus target, Grafana, Alertmanager, Loki)                                                                                  |
+| Backups restorable                  | `docker/production/ci/backup-restore.sh` (encrypted backup, write after backup, volume destroyed, restore, every table and a checksum identical, app healthy)                                                                                                                                                  |
+| Load and integrity under load       | CI job "Load test": `load/run.sh` with k6; thresholds p95 < 2 s and < 1% errors per scenario; `load/verify.sql` (see LOAD_TEST_REPORT.md)                                                                                                                                                                      |
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request:
@@ -189,8 +202,12 @@ check (CI always runs it).
 3. **Scripts:** the PowerShell scripts (`setup`, `test -Suite integration`, `backup`, `restore`,
    `reset`, `start -InfraOnly`, `stop -RemoveData`) run with PowerShell 7 against the real
    `docker/docker-compose.yml`.
+4. **Production stack:** builds the five production images, starts `docker/production` with
+   `NODE_ENV=production`, runs the smoke test and the backup → destroy → restore test.
+5. **Load test:** the same images with the load-test overrides, k6, integrity checks and a
+   database analysis.
 
-A phase is complete only when all three jobs are green.
+A phase is complete only when all jobs are green.
 
 ## Writing tests
 

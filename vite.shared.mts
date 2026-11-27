@@ -51,6 +51,8 @@ export function createAppConfig({ port, mode }: { port: number; mode: string }):
       environment: 'jsdom',
       globals: true,
       setupFiles: [path.join(repoRoot, 'vitest.setup.ts')],
+      // Room for the 5 s async waits in vitest.setup.ts.
+      testTimeout: 15_000,
       css: false,
     },
   };
