@@ -264,7 +264,7 @@ CREATE TABLE "expenses" (
     "input_vat" DECIMAL(19,4) NOT NULL DEFAULT 0,
     "total" DECIMAL(19,4) NOT NULL,
     "invoice_number" VARCHAR(60),
-    "incurred_on" TIMESTAMP(3) NOT NULL,
+    "incurred_on" DATE NOT NULL,
     "status" "expense_status" NOT NULL DEFAULT 'UNPAID',
     "paid_at" TIMESTAMPTZ(3),
     "payment_reference" VARCHAR(120),
