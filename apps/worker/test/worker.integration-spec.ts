@@ -18,6 +18,7 @@ import type { Redis } from 'ioredis';
 import { SMTPServer } from 'smtp-server';
 import { deadLetterJobId } from '../src/queues/dead-letter.service';
 import { WorkerDatabase } from '../src/database/database.provider';
+import { NotificationDispatcher } from '../src/notifications/notification-dispatcher';
 import { MockPushProvider, PushProvider } from '../src/notifications/push-provider';
 import { REDIS_CLIENT } from '../src/redis.provider';
 import { WorkerModule } from '../src/worker.module';
@@ -334,6 +335,34 @@ describe('Worker (integration, real Redis + BullMQ)', () => {
       }, 20_000);
       expect(row.status).toBe('PROCESSED');
       expect(await db.notification.count({ where: { eventId: orphan.id } })).toBe(1);
+    });
+
+    it('drains a backlog larger than one batch in a single run (Phase 8 load test)', async () => {
+      const db = app.get(WorkerDatabase).client!;
+      const created = [];
+      for (let i = 0; i < 5; i += 1) {
+        created.push(
+          await db.notificationEvent.create({
+            data: {
+              event: 'ORDER_SHIPPED',
+              userIds: [userId],
+              data: {
+                firstName: 'Nina',
+                orderNumber: `MP-${suffix}-burst-${i}`,
+                storeName: 'Test Store',
+              },
+              link: '/account/orders/test',
+            },
+          }),
+        );
+      }
+      // Batches of 2: one run must still deliver all five.
+      await app.get(NotificationDispatcher).dispatchPending(2);
+      const statuses = await db.notificationEvent.findMany({
+        where: { id: { in: created.map((e) => e.id) } },
+        select: { status: true },
+      });
+      expect(statuses.map((r) => r.status)).toEqual(Array(5).fill('PROCESSED'));
     });
 
     it('respects the customer’s channel choices and never delivers a channel twice', async () => {

@@ -494,6 +494,9 @@ export class CheckoutService {
         quantity: i.quantity,
         lineTotal: i.lineTotal,
       }));
+    // The order's notification events were written with it; deliver them now rather than
+    // at the next sweep (found by the Phase 8 load test: up to 70 s late under load).
+    await this.notifications.kickDispatch();
     const customer = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     await this.notifications.sendOrderPlaced({
       to: customer.email,

@@ -21,7 +21,7 @@ snapshot() {
             WHERE s.nspname = 'public' AND c.relkind = 'r') x"
   psqlc "SELECT md5(string_agg(x::text, '|' ORDER BY x::text)) FROM (
            SELECT id::text, status::text, amount::text FROM payments UNION ALL
-           SELECT id::text, status::text, debit::text || '/' || credit::text FROM journal_entries UNION ALL
+           SELECT id::text, account_id::text, debit::text || '/' || credit::text FROM journal_entries UNION ALL
            SELECT id::text, quantity_on_hand::text, reserved_quantity::text FROM stock_levels) x"
 }
 
