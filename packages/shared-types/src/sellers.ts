@@ -41,6 +41,7 @@ export const BUSINESS_TYPE_LABELS: Record<BusinessType, { label: string; registr
 export const SELLER_DOCUMENT_TYPES = [
   'BUSINESS_REGISTRATION',
   'BIR_REGISTRATION',
+  'SWORN_DECLARATION',
   'MAYORS_PERMIT',
   'OWNER_ID',
   'OTHER',
@@ -49,6 +50,7 @@ export type SellerDocumentType = (typeof SELLER_DOCUMENT_TYPES)[number];
 export const SELLER_DOCUMENT_LABELS: Record<SellerDocumentType, string> = {
   BUSINESS_REGISTRATION: 'DTI / SEC / CDA registration certificate',
   BIR_REGISTRATION: 'BIR Certificate of Registration (Form 2303)',
+  SWORN_DECLARATION: 'Sworn declaration for the withholding tax exemption (BIR-received)',
   MAYORS_PERMIT: "Mayor's or business permit",
   OWNER_ID: "Owner's government-issued ID",
   OTHER: 'Other supporting document',

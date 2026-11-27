@@ -74,11 +74,20 @@ describe('Payments (e2e)', () => {
     expect(paid.payment.attempts[0]).toMatchObject({ status: 'PAID', checkoutUrl: null });
     expect(paid.payment.amountReceived).toBe(paid.grandTotal);
 
-    // The seller's earnings and commission are posted once.
-    const ledger = await prisma.sellerLedgerEntry.findMany({
-      where: { sellerOrderId: paid.sellerOrders[0]!.id },
+    // The receipt and the sale (seller earnings and commission) are posted once (Phase 6
+    // double-entry ledger).
+    const soId = paid.sellerOrders[0]!.id;
+    const sale = await prisma.journalTransaction.findUniqueOrThrow({
+      where: { idempotencyKey: `sale:${soId}` },
+      include: { entries: true },
     });
-    expect(ledger.map((e) => e.type).sort()).toEqual(['COMMISSION', 'ORDER_EARNING']);
+    expect(sale.status).toBe('POSTED');
+    expect(sale.entries.filter((e) => e.sellerOrderId === soId).map((e) => e.kind)).toEqual(
+      expect.arrayContaining(['SALE', 'COMMISSION']),
+    );
+    await expect(
+      prisma.journalTransaction.count({ where: { idempotencyKey: `receipt:${attempt.id}` } }),
+    ).resolves.toBe(1);
   });
 
   it('processes a duplicated (and concurrently retried) webhook once', async () => {
@@ -116,10 +125,10 @@ describe('Payments (e2e)', () => {
     const rows = await prisma.webhookEvent.findMany({ where: { eventId: event.id } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ status: 'PROCESSED' });
-    const ledger = await prisma.sellerLedgerEntry.count({
-      where: { sellerOrderId: placed.sellerOrders[0]!.id },
+    const sales = await prisma.journalTransaction.count({
+      where: { idempotencyKey: `sale:${placed.sellerOrders[0]!.id}` },
     });
-    expect(ledger).toBe(2);
+    expect(sales).toBe(1);
   });
 
   it('refuses events with an invalid or missing signature and stores nothing', async () => {

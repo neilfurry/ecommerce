@@ -117,7 +117,17 @@ export class SellersService {
         changedLegal.map((path) => ({ path, message: 'Locked' })),
       );
     }
-    const data = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+    const data: Record<string, unknown> = Object.fromEntries(
+      Object.entries(input).filter(([, v]) => v !== undefined),
+    );
+    // A new TIN or VAT registration must be checked by finance again (Phase 6 tax profile).
+    if (
+      (input.tin !== undefined && input.tin !== seller.tin) ||
+      (input.vatRegistered !== undefined && input.vatRegistered !== seller.vatRegistered)
+    ) {
+      data.taxVerifiedAt = null;
+      data.taxVerifiedById = null;
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.seller.update({ where: { id: sellerId }, data });
       await this.audit.record(

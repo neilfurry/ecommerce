@@ -549,7 +549,14 @@ export class OrdersService {
         ...sellerOrderInclude,
         coupons: true,
         events: { orderBy: { createdAt: 'asc' } },
-        ledgerEntries: { orderBy: { createdAt: 'asc' } },
+        journalEntries: {
+          where: { account: { sellerSubledger: true }, transaction: { status: 'POSTED' } },
+          include: {
+            transaction: { select: { description: true, sourceType: true, sourceId: true } },
+          },
+          orderBy: [{ createdAt: 'asc' }, { lineNo: 'asc' }],
+        },
+        settlementLine: { select: { settlement: { select: { id: true, reference: true } } } },
         order: {
           include: {
             customer: { select: { firstName: true, lastName: true, email: true } },
@@ -579,7 +586,10 @@ export class OrdersService {
         items: so.items.map((i) => ({
           orderItemId: i.id,
           ruleId: i.commissionRuleId,
+          scope: i.commissionScope,
+          type: i.commissionType,
           ratePercent: i.commissionRate.toFixed(2),
+          fixedAmount: i.commissionFixed?.toFixed(2) ?? null,
           base: i.commissionBase.toFixed(2),
           amount: i.commissionAmount.toFixed(2),
         })),
@@ -591,15 +601,32 @@ export class OrdersService {
         amount: c.amount.toFixed(2),
       })),
       events: events.map(eventDto),
-      ledger: so.ledgerEntries.map((e) => ({
-        id: e.id,
-        type: e.type,
-        amount: e.amount.toFixed(2),
-        description: e.description,
-        sellerOrderId: e.sellerOrderId,
-        refundId: e.refundId,
-        createdAt: e.createdAt.toISOString(),
+      taxes: so.items.map((i) => ({
+        orderItemId: i.id,
+        ratePercent: i.taxRate.toString(),
+        inclusive: i.taxInclusive,
+        amount: i.vatAmount.toFixed(2),
       })),
+      sellerInvoice:
+        so.sellerInvoiceNumber && so.sellerInvoiceDate
+          ? {
+              number: so.sellerInvoiceNumber,
+              date: so.sellerInvoiceDate.toISOString().slice(0, 10),
+            }
+          : null,
+      settlement: so.settlementLine?.settlement ?? null,
+      ledger: so.journalEntries
+        // Moving money between the seller's own balances (settlement) nets to zero; not shown.
+        .filter((e) => e.kind !== 'SETTLEMENT')
+        .map((e) => ({
+          id: e.id,
+          type: e.kind ?? 'ADJUSTMENT',
+          amount: e.credit.sub(e.debit).toFixed(2),
+          description: e.description ?? e.transaction.description,
+          sellerOrderId: e.sellerOrderId,
+          refundId: e.transaction.sourceType === 'REFUND' ? e.transaction.sourceId : null,
+          createdAt: e.createdAt.toISOString(),
+        })),
       placedAt: so.order.placedAt.toISOString(),
     };
   }

@@ -18,6 +18,7 @@ import {
   EscalateOverdueReturnsHandler,
   FulfilmentSweepScheduler,
 } from './jobs/fulfilment-sweep';
+import { SettlementScheduler, SettleSellersHandler } from './jobs/settlement';
 import {
   PaymentReconciler,
   PaymentReconciliationScheduler,
@@ -98,6 +99,8 @@ import { smsProvider } from './sms/sms.module';
     CompleteDeliveredHandler,
     EscalateOverdueReturnsHandler,
     FulfilmentSweepScheduler,
+    SettleSellersHandler,
+    SettlementScheduler,
     ...DOMAIN_PROCESSORS,
   ],
 })

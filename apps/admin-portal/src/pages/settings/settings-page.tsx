@@ -53,6 +53,7 @@ import {
 } from '@marketplace/validation';
 import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { type FieldValues, type Path, useFieldArray, useForm } from 'react-hook-form';
 import type { ZodType } from 'zod';
 import { showError } from '../../lib/errors';
@@ -84,7 +85,6 @@ function SaveButton({ pending }: { pending: boolean }) {
 // ---- Checkout -----------------------------------------------------------------------------
 
 interface CheckoutValues {
-  vatPercent: string;
   paymentWindowMinutes: string;
   paymentMethods: PaymentMethod[];
   charges: {
@@ -96,14 +96,11 @@ interface CheckoutValues {
   }[];
 }
 
-const trimZeros = (n: number) => String(Number(n.toFixed(4)));
-
 function CheckoutForm({ settings }: { settings: CheckoutSettings }) {
   const { checkout } = useSettingsMutations();
   const [formError, setFormError] = useState<string | null>(null);
   const form = useForm<CheckoutValues>({
     defaultValues: {
-      vatPercent: trimZeros(Number(settings.vat.rate) * 100),
       paymentWindowMinutes: String(settings.paymentWindowMinutes),
       paymentMethods: settings.paymentMethods,
       charges: settings.charges,
@@ -114,21 +111,15 @@ function CheckoutForm({ settings }: { settings: CheckoutSettings }) {
   const submit = form.handleSubmit(async (v) => {
     setFormError(null);
     form.clearErrors();
-    const pct = Number(v.vatPercent);
-    if (!v.vatPercent.trim() || Number.isNaN(pct) || pct < 0 || pct >= 100) {
-      form.setError('vatPercent', { message: 'Between 0 and 99.99' });
-      return;
-    }
     const body = validate<CheckoutSettings, CheckoutValues>(
       checkoutSettingsSchema,
       {
-        vat: { rate: (pct / 100).toFixed(4), pricesIncludeVat: true },
         charges: v.charges.map((c) => ({ ...c, code: c.code.trim().toUpperCase() })),
         paymentWindowMinutes: v.paymentWindowMinutes,
         paymentMethods: v.paymentMethods,
       },
       (path, message) => form.setError(path, { message }),
-      (p) => (p.startsWith('vat') ? 'vatPercent' : p),
+      (p) => p,
     );
     if (!body) return;
     try {
@@ -147,24 +138,14 @@ function CheckoutForm({ settings }: { settings: CheckoutSettings }) {
           <CardHeader>
             <CardTitle className="text-base">Tax</CardTitle>
             <CardDescription>
-              Listed prices already include VAT; receipts show the VAT part of each total.
+              Taxes come from versioned tax rules by seller registration (VAT-registered or not),
+              managed in{' '}
+              <Link className="underline" to="/finance/taxes">
+                Finance › Taxes
+              </Link>
+              . Listed prices include the tax when the rule says so.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:max-w-xs">
-            <FormField
-              control={form.control}
-              name="vatPercent"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>VAT rate (%)</FormLabel>
-                  <FormControl>
-                    <Input inputMode="decimal" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </CardContent>
         </Card>
 
         <Card>
@@ -508,7 +489,12 @@ function Commission({ rules }: { rules: CommissionRuleDto[] }) {
         <CardDescription>
           Charged on each item’s price after store discounts. A category’s rate applies to its
           subcategories unless they have their own; otherwise the default rate applies. Orders keep
-          the rate in force when they were placed.
+          the rate in force when they were placed. Seller, product and fixed-amount rules,
+          exemptions and scheduled changes are in{' '}
+          <Link className="underline" to="/finance/commission">
+            Finance › Commission
+          </Link>
+          .
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

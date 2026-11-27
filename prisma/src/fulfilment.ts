@@ -4,7 +4,8 @@ import {
   type OrderActor,
   type SellerOrderStatus,
 } from '@marketplace/shared-types';
-import { Prisma } from './generated/prisma/client';
+import { postSaleInTx, postShippingCreditIfDueInTx } from './ledger';
+import { type Prisma } from './generated/prisma/client';
 
 type Tx = Prisma.TransactionClient;
 type EventType = Prisma.OrderEventCreateInput['type'];
@@ -242,88 +243,15 @@ async function releaseSellerOrderHoldsInTx(
 // ---- Seller payables -------------------------------------------------------------------------
 
 /**
- * The seller earned this seller order: its items minus the seller's own discount (marketplace
- * discounts are paid by the marketplace), and owes the commission. Posted once (unique index)
- * when the money is financially received: online payment, bank transfer approval, or the
- * cash-on-delivery remittance.
+ * The seller earned this seller order, posted once in the double-entry ledger (Phase 6) when
+ * the money is financially received: online payment, bank transfer approval, or the
+ * cash-on-delivery remittance. See `postSaleInTx`.
  */
 export async function postSellerEarningsInTx(tx: Tx, sellerOrderId: string, now = new Date()) {
-  const so = await tx.sellerOrder.findUniqueOrThrow({
-    where: { id: sellerOrderId },
-    select: {
-      sellerId: true,
-      number: true,
-      commissionAmount: true,
-      items: { select: { lineSubtotal: true, sellerDiscount: true } },
-    },
-  });
-  const earning = so.items.reduce(
-    (sum, i) => sum.add(i.lineSubtotal).sub(i.sellerDiscount),
-    new Prisma.Decimal(0),
-  );
-  await tx.sellerLedgerEntry.createMany({
-    data: [
-      {
-        sellerId: so.sellerId,
-        sellerOrderId,
-        type: 'ORDER_EARNING',
-        amount: earning,
-        description: `Sale ${so.number}`,
-        createdAt: now,
-      },
-      {
-        sellerId: so.sellerId,
-        sellerOrderId,
-        type: 'COMMISSION',
-        amount: so.commissionAmount.neg(),
-        description: `Commission on ${so.number}`,
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-  await postShippingCreditIfDueInTx(tx, sellerOrderId, now);
+  await postSaleInTx(tx, sellerOrderId, now);
 }
 
-/**
- * A seller who arranged the delivery themselves keeps the shipping fee the customer paid
- * (less their own shipping discount; marketplace shipping discounts are reimbursed). Posted
- * once, when both the money is received and a self-arranged shipment exists.
- */
-export async function postShippingCreditIfDueInTx(tx: Tx, sellerOrderId: string, now = new Date()) {
-  const [earned, selfShipment, so] = await Promise.all([
-    tx.sellerLedgerEntry.count({ where: { sellerOrderId, type: 'ORDER_EARNING', refundId: null } }),
-    tx.shipment.count({
-      where: {
-        sellerOrderId,
-        carrier: 'SELF',
-        direction: 'FORWARD',
-        returnRequestId: null,
-        status: { not: 'CANCELLED' },
-      },
-    }),
-    tx.sellerOrder.findUniqueOrThrow({
-      where: { id: sellerOrderId },
-      select: { sellerId: true, number: true, shippingFee: true, sellerShippingDiscount: true },
-    }),
-  ]);
-  if (earned === 0 || selfShipment === 0) return;
-  const credit = so.shippingFee.sub(so.sellerShippingDiscount);
-  if (credit.lte(0)) return;
-  await tx.sellerLedgerEntry.createMany({
-    data: [
-      {
-        sellerId: so.sellerId,
-        sellerOrderId,
-        type: 'SHIPPING_CREDIT',
-        amount: credit,
-        description: `Shipping fee for ${so.number} (self-arranged delivery)`,
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-}
+export { postShippingCreditIfDueInTx };
 
 // ---- Periodic jobs ---------------------------------------------------------------------------
 

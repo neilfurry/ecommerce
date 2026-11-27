@@ -22,3 +22,13 @@ export {
 } from './paymongo';
 export { MayaBusinessGateway, XenditGateway } from './prepared';
 export { fromCentavos, toCentavos } from './util';
+export {
+  PayMongoPayouts,
+  transferStatus,
+  type CreateTransferInput,
+  type PayMongoPayoutsConfig,
+  type PayoutProvider,
+  type PayoutRail,
+  type ProviderTransfer,
+  type ProviderTransferStatus,
+} from './payouts';

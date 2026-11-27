@@ -48,6 +48,7 @@ model Currency {
   orders   Order[]
   coupons  Coupon[]
   payments Payment[] @relation("PaymentCurrency")
+  journals JournalTransaction[] @relation("JournalCurrency")
 
   @@map("currencies")
 }
@@ -215,6 +216,19 @@ model User {
   decidedReturns       ReturnRequest[]        @relation("ReturnDecider")
   requestedRefunds     Refund[]               @relation("RefundRequester")
   processedRefunds     Refund[]               @relation("RefundProcessor")
+  commissionRulesCreated CommissionRule[]     @relation("CommissionRuleCreator")
+  commissionRulesEnded   CommissionRule[]     @relation("CommissionRuleEnder")
+  taxRulesCreated        TaxRule[]            @relation("TaxRuleCreator")
+  taxRulesEnded          TaxRule[]            @relation("TaxRuleEnder")
+  sellerTaxVerifications Seller[]             @relation("SellerTaxVerifier")
+  journalsCreated        JournalTransaction[] @relation("JournalCreator")
+  journalsPosted         JournalTransaction[] @relation("JournalPoster")
+  settlementsCreated     Settlement[]         @relation("SettlementCreator")
+  bankAccountsReviewed   SellerBankAccount[]  @relation("BankAccountReviewer")
+  bankAccountsAdded      SellerBankAccount[]  @relation("BankAccountCreator")
+  payoutsRequested       Payout[]             @relation("PayoutRequester")
+  payoutEvents           PayoutEvent[]
+  expensesCreated        Expense[]            @relation("ExpenseCreator")
 
   @@index([status, createdAt])
   @@map("users")
@@ -544,6 +558,14 @@ model Seller {
   /// BIR TIN, digits only (9 + optional 3–5 branch digits).
   tin                String?      @db.VarChar(14)
   vatRegistered      Boolean      @default(false) @map("vat_registered")
+  /// Registered name on the BIR Certificate of Registration.
+  taxRegisteredName  String?      @map("tax_registered_name") @db.VarChar(200)
+  /// Finance checked the TIN, registration and CoR.
+  taxVerifiedAt      DateTime?    @map("tax_verified_at") @db.Timestamptz(3)
+  taxVerifiedById    String?      @map("tax_verified_by_id") @db.Uuid
+  /// Withholding on remittances does not apply until this date (sworn declaration accepted).
+  withholdingExemptUntil DateTime? @map("withholding_exempt_until") @db.Date
+  withholdingExemptNote  String?   @map("withholding_exempt_note") @db.VarChar(500)
   /// The latest message for the seller: rejection reason, information requested or suspension reason.
   statusNote         String?      @map("status_note") @db.VarChar(1000)
   submittedAt        DateTime?    @map("submitted_at") @db.Timestamptz(3)
@@ -577,15 +599,25 @@ model Seller {
   reviews            ProductReview[]
   returnRequests     ReturnRequest[]     @relation("SellerReturns")
   ledgerEntries      SellerLedgerEntry[] @relation("SellerLedger")
+  taxVerifiedBy      User?               @relation("SellerTaxVerifier", fields: [taxVerifiedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  commissionRules    CommissionRule[]    @relation("SellerCommissionRules")
+  journalEntries     JournalEntry[]
+  settlements        Settlement[]
+  bankAccounts       SellerBankAccount[]
+  payouts            Payout[]
+  financeDocuments   FinanceDocument[]
 
   @@index([status, submittedAt])
   @@index([reviewedById])
+  @@index([taxVerifiedById])
   @@map("sellers")
 }
 
 enum SellerDocumentType {
   BUSINESS_REGISTRATION
   BIR_REGISTRATION
+  /// Sworn declaration for the withholding exemption (gross remittances under the threshold).
+  SWORN_DECLARATION
   MAYORS_PERMIT
   OWNER_ID
   OTHER
@@ -973,6 +1005,7 @@ model Product {
   customerPrices CustomerPrice[]
   wishlistItems  WishlistItem[]
   reviews        ProductReview[]
+  commissionRules CommissionRule[] @relation("ProductCommissionRules")
   featured       FeaturedProduct?
   flashSaleItems FlashSaleItem[]
   orderItems     OrderItem[]
@@ -1831,19 +1864,65 @@ model PlatformSetting {
   @@map("platform_settings")
 }
 
-/// Marketplace commission rate: the default (no category) or for a category and its
-/// subcategories. Order items keep the rule and rate used (the finance phase settles them).
-model CommissionRule {
-  id          String   @id @default(uuid(7)) @db.Uuid
-  /// Null: the default rate (exactly one, partial unique index).
-  categoryId  String?  @unique @map("category_id") @db.Uuid
-  ratePercent Decimal  @map("rate_percent") @db.Decimal(5, 2)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+/// Which products a commission rule covers. Precedence (ADR 0026): an exemption that matches
+/// wins; otherwise PRODUCT > SELLER_CATEGORY > SELLER > CATEGORY (nearest ancestor) > DEFAULT.
+enum CommissionScope {
+  DEFAULT
+  CATEGORY
+  SELLER
+  SELLER_CATEGORY
+  PRODUCT
 
-  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  @@map("commission_scope")
+}
+
+enum CommissionType {
+  /// rate_percent of the commission base.
+  PERCENTAGE
+  /// fixed_amount per unit sold (never more than the base).
+  FIXED
+  /// No commission (authorised exemption, reason required).
+  EXEMPT
+
+  @@map("commission_type")
+}
+
+/// A versioned commission rule. Rows are never edited or deleted (trigger): a change ends the
+/// current version (effective_to) and starts a new one. Order items keep the rule, type and
+/// rate used at the time of the order, so later changes never alter historical commissions.
+model CommissionRule {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  scope         CommissionScope @default(DEFAULT)
+  type          CommissionType  @default(PERCENTAGE)
+  categoryId    String?         @map("category_id") @db.Uuid
+  sellerId      String?         @map("seller_id") @db.Uuid
+  productId     String?         @map("product_id") @db.Uuid
+  ratePercent   Decimal         @default(0) @map("rate_percent") @db.Decimal(5, 2)
+  /// FIXED: amount per unit.
+  fixedAmount   Decimal?        @map("fixed_amount") @db.Decimal(19, 4)
+  effectiveFrom DateTime        @default(now()) @map("effective_from") @db.Timestamptz(3)
+  /// Exclusive end; null while the rule applies.
+  effectiveTo   DateTime?       @map("effective_to") @db.Timestamptz(3)
+  /// Why the rule exists (required for exemptions).
+  reason        String?         @db.VarChar(500)
+  createdById   String?         @map("created_by_id") @db.Uuid
+  endedById     String?         @map("ended_by_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  seller     Seller?     @relation("SellerCommissionRules", fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product    Product?    @relation("ProductCommissionRules", fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy  User?       @relation("CommissionRuleCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  endedBy    User?       @relation("CommissionRuleEnder", fields: [endedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
   orderItems OrderItem[]
 
+  @@index([scope, effectiveFrom])
+  @@index([categoryId])
+  @@index([sellerId])
+  @@index([productId])
+  @@index([createdById])
+  @@index([endedById])
   @@map("commission_rules")
 }
 
@@ -2050,6 +2129,9 @@ model SellerOrder {
   commissionAmount         Decimal           @map("commission_amount") @db.Decimal(19, 4)
   /// Applied charges: [{ code, label, amount }].
   charges                  Json              @default("[]")
+  /// The seller's own sales invoice for this order (the seller is the seller of record).
+  sellerInvoiceNumber      String?           @map("seller_invoice_number") @db.VarChar(40)
+  sellerInvoiceDate        DateTime?         @map("seller_invoice_date") @db.Date
   customerNote             String?           @map("customer_note") @db.VarChar(500)
   acceptedAt               DateTime?         @map("accepted_at") @db.Timestamptz(3)
   shippedAt                DateTime?         @map("shipped_at") @db.Timestamptz(3)
@@ -2066,6 +2148,8 @@ model SellerOrder {
   seller        Seller                @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   store         Store                 @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items         OrderItem[]
+  journalEntries JournalEntry[]
+  settlementLine SettlementLine?
   shippingGroup OrderShippingGroup?
   coupons       OrderCoupon[]
   events        OrderEvent[]
@@ -2141,11 +2225,20 @@ model OrderItem {
   vatAmount        Decimal  @map("vat_amount") @db.Decimal(19, 4)
   /// The price engine's line: source, rule, tiers.
   pricingSnapshot  Json     @map("pricing_snapshot")
+  /// Commission snapshot (immutable, trigger): rule, scope, type, rate / fixed amount used.
   commissionRuleId String?  @map("commission_rule_id") @db.Uuid
+  commissionScope  String   @default("DEFAULT") @map("commission_scope") @db.VarChar(20)
+  commissionType   String   @default("PERCENTAGE") @map("commission_type") @db.VarChar(12)
   commissionRate   Decimal  @map("commission_rate") @db.Decimal(5, 2)
+  commissionFixed  Decimal? @map("commission_fixed") @db.Decimal(19, 4)
   /// What the commission is calculated on: line subtotal minus the seller-paid discount.
   commissionBase   Decimal  @map("commission_base") @db.Decimal(19, 4)
   commissionAmount Decimal  @map("commission_amount") @db.Decimal(19, 4)
+  /// Tax snapshot: the goods tax rule that applied (null: none, e.g. a non-VAT seller).
+  taxRuleId        String?  @map("tax_rule_id") @db.Uuid
+  taxRate          Decimal  @default(0) @map("tax_rate") @db.Decimal(7, 4)
+  /// Whether the price already included the tax (vat_amount is then part of line_total).
+  taxInclusive     Boolean  @default(true) @map("tax_inclusive")
   weightGrams      Int?     @map("weight_grams")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -2154,7 +2247,8 @@ model OrderItem {
   product        Product            @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   variant        ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   flashSaleItem  FlashSaleItem?     @relation(fields: [flashSaleItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  commissionRule CommissionRule?    @relation(fields: [commissionRuleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  commissionRule CommissionRule?    @relation(fields: [commissionRuleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  taxRule        TaxRule?           @relation(fields: [taxRuleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   reservations   StockReservation[]
   review         ProductReview?
   returnItems    ReturnItem[]
@@ -2165,6 +2259,7 @@ model OrderItem {
   @@index([variantId])
   @@index([flashSaleItemId])
   @@index([commissionRuleId])
+  @@index([taxRuleId])
   @@map("order_items")
 }
 
@@ -2874,4 +2969,452 @@ model SellerLedgerEntry {
   @@index([sellerOrderId])
   @@index([refundId])
   @@map("seller_ledger_entries")
+}
+
+// ---- Finance (Phase 6) ------------------------------------------------------------------------
+
+enum TaxKind {
+  VAT
+  PERCENTAGE_TAX
+  WITHHOLDING
+
+  @@map("tax_kind")
+}
+
+enum TaxAppliesTo {
+  /// Goods sold by sellers to customers (shown on the order; the seller's tax).
+  GOODS
+  /// The marketplace's own services to sellers: commission and fee recoveries (service invoices).
+  MARKETPLACE_SERVICES
+  /// Withheld from what the marketplace remits to sellers (BIR RR 16-2023 as amended).
+  SELLER_REMITTANCE
+
+  @@map("tax_applies_to")
+}
+
+/// A versioned tax rule for one jurisdiction. Like commission rules, rows are never edited:
+/// a change ends the current version and starts a new one. Nothing assumes a universal VAT.
+model TaxRule {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  code               String       @db.VarChar(40)
+  name               String       @db.VarChar(120)
+  /// ISO 3166-1 alpha-2.
+  jurisdiction       String       @default("PH") @db.Char(2)
+  kind               TaxKind
+  appliesTo          TaxAppliesTo @map("applies_to")
+  /// GOODS / SELLER_REMITTANCE: which sellers (VAT_REGISTERED, NON_VAT or ANY).
+  sellerRegistration String       @default("ANY") @map("seller_registration") @db.VarChar(20)
+  ratePercent        Decimal      @map("rate_percent") @db.Decimal(7, 4)
+  /// Share of the amount that is taxed (e.g. withholding on one half of gross remittances: 50).
+  basePercent        Decimal      @default(100) @map("base_percent") @db.Decimal(7, 4)
+  /// Prices already include the tax (true) or it is added on top (false).
+  inclusive          Boolean      @default(true)
+  effectiveFrom      DateTime     @default(now()) @map("effective_from") @db.Timestamptz(3)
+  effectiveTo        DateTime?    @map("effective_to") @db.Timestamptz(3)
+  legalReference     String?      @map("legal_reference") @db.VarChar(300)
+  createdById        String?      @map("created_by_id") @db.Uuid
+  endedById          String?      @map("ended_by_id") @db.Uuid
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy  User?       @relation("TaxRuleCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  endedBy    User?       @relation("TaxRuleEnder", fields: [endedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  orderItems OrderItem[]
+
+  @@index([jurisdiction, appliesTo, effectiveFrom])
+  @@index([createdById])
+  @@index([endedById])
+  @@map("tax_rules")
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+
+  @@map("ledger_account_type")
+}
+
+/// Chart of accounts of the marketplace. Seller payables are subledger accounts: their entries
+/// carry the seller (and usually the seller order), so seller balances are sums of entries.
+model LedgerAccount {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  code            String            @unique @db.VarChar(10)
+  name            String            @db.VarChar(120)
+  type            LedgerAccountType
+  description     String?           @db.VarChar(500)
+  /// Entries must name a seller (seller payables).
+  sellerSubledger Boolean           @default(false) @map("seller_subledger")
+  /// Used by automatic postings; cannot be deactivated.
+  system          Boolean           @default(false)
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  entries  JournalEntry[]
+  expenses Expense[]
+
+  @@map("ledger_accounts")
+}
+
+enum JournalStatus {
+  /// Manual journals being prepared (entries editable).
+  DRAFT
+  /// Final: balanced (trigger), never edited; corrections are reversals.
+  POSTED
+
+  @@map("journal_status")
+}
+
+/// A journal transaction (double entry). Posting checks total debits = total credits.
+model JournalTransaction {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// e.g. "JE-7K3M9Q2X"
+  reference      String        @unique @db.VarChar(30)
+  /// SALE, PAYMENT_RECEIVED, PAYMENT_FEE, COD_COLLECTED, COD_REMITTED, REFUND, SHIPPING_CREDIT,
+  /// SETTLEMENT, PAYOUT_REQUESTED, PAYOUT_PAID, RESERVE, RESERVE_RELEASE, EXPENSE,
+  /// EXPENSE_PAYMENT, MANUAL, REVERSAL
+  type           String        @db.VarChar(30)
+  status         JournalStatus @default(DRAFT)
+  description    String        @db.VarChar(300)
+  currency       String        @default("PHP") @db.Char(3)
+  /// Accounting date (reports filter on it).
+  occurredAt     DateTime      @map("occurred_at") @db.Timestamptz(3)
+  postedAt       DateTime?     @map("posted_at") @db.Timestamptz(3)
+  /// The business record behind it (journal reference): payment, refund, settlement, payout...
+  sourceType     String?       @map("source_type") @db.VarChar(30)
+  sourceId       String?       @map("source_id") @db.Uuid
+  /// Prevents the same event being posted twice (e.g. "sale:<seller order id>").
+  idempotencyKey String?       @unique @map("idempotency_key") @db.VarChar(120)
+  /// This transaction reverses another one (each can be reversed once).
+  reversalOfId   String?       @unique @map("reversal_of_id") @db.Uuid
+  createdById    String?       @map("created_by_id") @db.Uuid
+  postedById     String?       @map("posted_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  entries     JournalEntry[]
+  reversalOf  JournalTransaction? @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reversedBy  JournalTransaction? @relation("JournalReversal")
+  currencyRef Currency            @relation("JournalCurrency", fields: [currency], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  createdBy   User?               @relation("JournalCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  postedBy    User?               @relation("JournalPoster", fields: [postedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([occurredAt])
+  @@index([type, occurredAt])
+  @@index([sourceType, sourceId])
+  @@index([status])
+  @@index([currency])
+  @@index([createdById])
+  @@index([postedById])
+  @@map("journal_transactions")
+}
+
+/// One debit or credit line. Exactly one of debit/credit is positive (CHECK).
+model JournalEntry {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  lineNo        Int      @map("line_no")
+  accountId     String   @map("account_id") @db.Uuid
+  /// Seller subledger dimension (required on seller payable accounts).
+  sellerId      String?  @map("seller_id") @db.Uuid
+  sellerOrderId String?  @map("seller_order_id") @db.Uuid
+  /// What the line is for in the seller's statement: SALE, COMMISSION, PAYMENT_FEE, COD_FEE,
+  /// SHIPPING_CREDIT, REFUND, COMMISSION_REVERSAL, SETTLEMENT, WITHHOLDING, PAYOUT, RESERVE,
+  /// ADJUSTMENT...
+  kind          String?  @db.VarChar(30)
+  debit         Decimal  @default(0) @db.Decimal(19, 4)
+  credit        Decimal  @default(0) @db.Decimal(19, 4)
+  description   String?  @db.VarChar(300)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  transaction JournalTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  account     LedgerAccount      @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  seller      Seller?            @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sellerOrder SellerOrder?       @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([transactionId, lineNo])
+  @@index([accountId, createdAt])
+  @@index([sellerId, accountId])
+  @@index([sellerOrderId])
+  @@map("journal_entries")
+}
+
+/// A seller's settlement for one period: the eligible seller orders moved from pending to
+/// available, withholding, and the statement totals. Immutable once generated (trigger).
+model Settlement {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  /// e.g. "ST-2611-7K3M9Q"
+  reference           String   @unique @db.VarChar(30)
+  sellerId            String   @map("seller_id") @db.Uuid
+  periodStart         DateTime @map("period_start") @db.Timestamptz(3)
+  /// Exclusive.
+  periodEnd           DateTime @map("period_end") @db.Timestamptz(3)
+  currency            String   @default("PHP") @db.Char(3)
+  ordersCount         Int      @map("orders_count")
+  grossSales          Decimal  @map("gross_sales") @db.Decimal(19, 4)
+  shippingCredits     Decimal  @map("shipping_credits") @db.Decimal(19, 4)
+  commission          Decimal  @db.Decimal(19, 4)
+  paymentFees         Decimal  @map("payment_fees") @db.Decimal(19, 4)
+  refunds             Decimal  @db.Decimal(19, 4)
+  commissionReversals Decimal  @map("commission_reversals") @db.Decimal(19, 4)
+  otherAdjustments    Decimal  @map("other_adjustments") @db.Decimal(19, 4)
+  /// Settled orders: gross − commission − fees − refunds + reversals + shipping credits ± other.
+  netSettled          Decimal  @map("net_settled") @db.Decimal(19, 4)
+  withholdingBase     Decimal  @map("withholding_base") @db.Decimal(19, 4)
+  withholdingTax      Decimal  @map("withholding_tax") @db.Decimal(19, 4)
+  /// Withholding rule snapshot: { ruleId, code, ratePercent, basePercent, exempt, reason }.
+  withholdingSnapshot Json     @map("withholding_snapshot")
+  /// Available balance before and after this settlement (from the ledger).
+  openingAvailable    Decimal  @map("opening_available") @db.Decimal(19, 4)
+  closingAvailable    Decimal  @map("closing_available") @db.Decimal(19, 4)
+  journalId           String?  @unique @map("journal_id") @db.Uuid
+  createdById         String?  @map("created_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller    Seller            @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy User?             @relation("SettlementCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lines     SettlementLine[]
+  documents FinanceDocument[]
+
+  @@unique([sellerId, periodStart])
+  @@index([periodStart])
+  @@index([createdById])
+  @@map("settlements")
+}
+
+/// One seller order settled (each seller order is settled once: unique).
+model SettlementLine {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  settlementId        String   @map("settlement_id") @db.Uuid
+  sellerOrderId       String   @unique @map("seller_order_id") @db.Uuid
+  orderNumber         String   @map("order_number") @db.VarChar(24)
+  grossSales          Decimal  @map("gross_sales") @db.Decimal(19, 4)
+  shippingCredits     Decimal  @map("shipping_credits") @db.Decimal(19, 4)
+  commission          Decimal  @db.Decimal(19, 4)
+  paymentFees         Decimal  @map("payment_fees") @db.Decimal(19, 4)
+  refunds             Decimal  @db.Decimal(19, 4)
+  commissionReversals Decimal  @map("commission_reversals") @db.Decimal(19, 4)
+  otherAdjustments    Decimal  @map("other_adjustments") @db.Decimal(19, 4)
+  net                 Decimal  @db.Decimal(19, 4)
+  withholdingBase     Decimal  @map("withholding_base") @db.Decimal(19, 4)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  settlement  Settlement  @relation(fields: [settlementId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sellerOrder SellerOrder @relation(fields: [sellerOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([settlementId])
+  @@map("settlement_lines")
+}
+
+enum BankAccountStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  DISABLED
+
+  @@map("bank_account_status")
+}
+
+/// Where a seller's payouts go. The account number is stored encrypted (AES-256-GCM) and only
+/// the last four digits are ever returned by the API.
+model SellerBankAccount {
+  id                     String            @id @default(uuid(7)) @db.Uuid
+  sellerId               String            @map("seller_id") @db.Uuid
+  /// BIC / SWIFT code of the bank or e-wallet (needed for transfers through a provider).
+  institutionCode        String?           @map("institution_code") @db.VarChar(20)
+  institutionName        String            @map("institution_name") @db.VarChar(120)
+  accountName            String            @map("account_name") @db.VarChar(120)
+  accountNumberEncrypted String            @map("account_number_encrypted") @db.VarChar(300)
+  accountNumberLast4     String            @map("account_number_last4") @db.VarChar(4)
+  status                 BankAccountStatus @default(PENDING_VERIFICATION)
+  isDefault              Boolean           @default(false) @map("is_default")
+  reviewNote             String?           @map("review_note") @db.VarChar(500)
+  reviewedById           String?           @map("reviewed_by_id") @db.Uuid
+  reviewedAt             DateTime?         @map("reviewed_at") @db.Timestamptz(3)
+  createdById            String?           @map("created_by_id") @db.Uuid
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller     Seller   @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reviewedBy User?    @relation("BankAccountReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdBy  User?    @relation("BankAccountCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  payouts    Payout[]
+
+  @@index([sellerId, status])
+  @@index([status, createdAt])
+  @@index([reviewedById])
+  @@index([createdById])
+  @@map("seller_bank_accounts")
+}
+
+enum PayoutStatus {
+  /// Requested by the seller; the amount is moved out of the available balance.
+  REQUESTED
+  /// Finance approved it.
+  APPROVED
+  /// Sent to the provider, waiting for its result.
+  PROCESSING
+  PAID
+  /// The transfer failed; the amount is back in the available balance.
+  FAILED
+  REJECTED
+  CANCELLED
+  /// Was paid, then reversed (returned by the bank or recorded in error).
+  REVERSED
+
+  @@map("payout_status")
+}
+
+model Payout {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  /// e.g. "PO-7K3M9Q2X" (also the transfer reference sent to the bank or provider).
+  reference          String       @unique @db.VarChar(30)
+  sellerId           String       @map("seller_id") @db.Uuid
+  bankAccountId      String       @map("bank_account_id") @db.Uuid
+  amount             Decimal      @db.Decimal(19, 4)
+  currency           String       @default("PHP") @db.Char(3)
+  /// MANUAL (finance transfers and records the bank reference) or PAYMONGO.
+  method             String       @default("MANUAL") @db.VarChar(12)
+  status             PayoutStatus @default(REQUESTED)
+  /// Destination snapshot (masked): { institutionName, institutionCode, accountName, last4 }.
+  destination        Json
+  /// Bank or provider reference of the transfer.
+  transferReference  String?      @map("transfer_reference") @db.VarChar(120)
+  providerTransferId String?      @unique @map("provider_transfer_id") @db.VarChar(120)
+  /// Transfer fee charged by the provider (marketplace expense).
+  transferFee        Decimal      @default(0) @map("transfer_fee") @db.Decimal(19, 4)
+  failureReason      String?      @map("failure_reason") @db.VarChar(500)
+  livemode           Boolean      @default(false)
+  /// Stops a double-submitted request creating two payouts.
+  idempotencyKey     String       @unique @map("idempotency_key") @db.VarChar(120)
+  requestedById      String?      @map("requested_by_id") @db.Uuid
+  requestedAt        DateTime     @default(now()) @map("requested_at") @db.Timestamptz(3)
+  approvedAt         DateTime?    @map("approved_at") @db.Timestamptz(3)
+  paidAt             DateTime?    @map("paid_at") @db.Timestamptz(3)
+  closedAt           DateTime?    @map("closed_at") @db.Timestamptz(3)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  seller      Seller            @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  bankAccount SellerBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  requestedBy User?             @relation("PayoutRequester", fields: [requestedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  events      PayoutEvent[]
+
+  @@index([sellerId, createdAt])
+  @@index([status, createdAt])
+  @@index([bankAccountId])
+  @@index([requestedById])
+  @@map("payouts")
+}
+
+/// Append-only approval and processing log of a payout.
+model PayoutEvent {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  payoutId   String    @map("payout_id") @db.Uuid
+  type       String    @db.VarChar(30)
+  fromStatus String?   @map("from_status") @db.VarChar(20)
+  toStatus   String?   @map("to_status") @db.VarChar(20)
+  actorId    String?   @map("actor_id") @db.Uuid
+  note       String?   @db.VarChar(1000)
+  data       Json      @default("{}")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payout Payout @relation(fields: [payoutId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([payoutId, createdAt])
+  @@index([actorId])
+  @@map("payout_events")
+}
+
+enum FinanceDocumentType {
+  /// The marketplace's invoice to a seller for commission and fees.
+  SERVICE_INVOICE
+  /// Reduces an earlier service invoice (commission given back on refunds).
+  CREDIT_NOTE
+
+  @@map("finance_document_type")
+}
+
+/// Service invoices and credit notes issued by the marketplace to sellers. Numbered without
+/// gaps per type and year (document_sequences); immutable (trigger).
+model FinanceDocument {
+  id             String              @id @default(uuid(7)) @db.Uuid
+  type           FinanceDocumentType
+  /// e.g. "SI-2026-000001", "CN-2026-000001"
+  number         String              @unique @db.VarChar(30)
+  sellerId       String              @map("seller_id") @db.Uuid
+  settlementId   String?             @map("settlement_id") @db.Uuid
+  issuedAt       DateTime            @map("issued_at") @db.Timestamptz(3)
+  currency       String              @default("PHP") @db.Char(3)
+  /// Net of tax.
+  subtotal       Decimal             @db.Decimal(19, 4)
+  taxAmount      Decimal             @map("tax_amount") @db.Decimal(19, 4)
+  total          Decimal             @db.Decimal(19, 4)
+  /// [{ description, amount, taxAmount }]
+  lines          Json
+  /// { ruleId, code, ratePercent, inclusive } of the marketplace services tax.
+  taxSnapshot    Json                @map("tax_snapshot")
+  /// The seller's name, TIN, address and VAT registration at issue time.
+  buyerSnapshot  Json                @map("buyer_snapshot")
+  /// The marketplace's legal name, TIN and address at issue time.
+  issuerSnapshot Json                @map("issuer_snapshot")
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  seller     Seller      @relation(fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([settlementId, type])
+  @@index([sellerId, issuedAt])
+  @@map("finance_documents")
+}
+
+/// Gap-free counters for document numbers (row lock while issuing).
+model DocumentSequence {
+  key       String   @id @db.VarChar(20)
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("document_sequences")
+}
+
+enum ExpenseStatus {
+  UNPAID
+  PAID
+  VOID
+
+  @@map("expense_status")
+}
+
+/// A marketplace expense (vendor bill), posted to the ledger: accounts payable until paid.
+model Expense {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  reference        String        @unique @db.VarChar(30)
+  vendorName       String        @map("vendor_name") @db.VarChar(160)
+  vendorTin        String?       @map("vendor_tin") @db.VarChar(14)
+  description      String        @db.VarChar(300)
+  accountId        String        @map("account_id") @db.Uuid
+  /// Amount before input VAT.
+  amount           Decimal       @db.Decimal(19, 4)
+  inputVat         Decimal       @default(0) @map("input_vat") @db.Decimal(19, 4)
+  total            Decimal       @db.Decimal(19, 4)
+  invoiceNumber    String?       @map("invoice_number") @db.VarChar(60)
+  incurredOn       DateTime      @map("incurred_on") @db.Date
+  status           ExpenseStatus @default(UNPAID)
+  paidAt           DateTime?     @map("paid_at") @db.Timestamptz(3)
+  paymentReference String?       @map("payment_reference") @db.VarChar(120)
+  createdById      String?       @map("created_by_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  account   LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy User?         @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([status, incurredOn])
+  @@index([accountId])
+  @@index([createdById])
+  @@map("expenses")
 }

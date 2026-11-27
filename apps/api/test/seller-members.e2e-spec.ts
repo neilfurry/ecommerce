@@ -296,6 +296,7 @@ describe('Seller employees (e2e)', () => {
         'seller.orders.manage',
         'seller.returns.manage',
         'seller.marketing.manage',
+        'seller.finance.read',
       ].sort(),
     );
     await staff

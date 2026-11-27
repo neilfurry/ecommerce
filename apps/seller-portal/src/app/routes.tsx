@@ -22,7 +22,19 @@ import { InventoryPage } from '../pages/inventory/inventory-page';
 import { WarehousesPage } from '../pages/inventory/warehouses-page';
 import { SellerCouponsPage, SellerFlashSalesPage } from '../pages/marketing/marketing-pages';
 import { OrderPage, OrdersPage } from '../pages/orders/orders-page';
-import { PayablesPage, ReturnPage, ReturnsPage } from '../pages/orders/returns-page';
+import {
+  BankAccountsPage,
+  DocumentPage,
+  DocumentsPage,
+  FinanceOverviewPage,
+  PayoutPage,
+  PayoutsPage,
+  SettlementPage,
+  SettlementsPage,
+  TaxProfilePage,
+  TransactionsPage,
+} from '../pages/finance/finance-pages';
+import { ReturnPage, ReturnsPage } from '../pages/orders/returns-page';
 import { NewProductPage } from '../pages/products/new-product-page';
 import { ProductPage } from '../pages/products/product-page';
 import { ProductsPage } from '../pages/products/products-page';
@@ -152,11 +164,85 @@ export const routes: RouteObject[] = [
                   </RequirePermission>
                 ),
               },
+              // Phase 5 payables page: now the finance transactions (double-entry ledger).
+              { path: 'payables', element: <Navigate to="/finance/transactions" replace /> },
               {
-                path: 'payables',
+                path: 'finance',
                 element: (
-                  <RequirePermission permission="seller.orders.read">
-                    <PayablesPage />
+                  <RequirePermission permission="seller.finance.read">
+                    <FinanceOverviewPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/transactions',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <TransactionsPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/settlements',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <SettlementsPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/settlements/:settlementId',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <SettlementPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/documents',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <DocumentsPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/documents/:documentId',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <DocumentPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/payouts',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <PayoutsPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/payouts/:payoutId',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <PayoutPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/bank-accounts',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <BankAccountsPage />
+                  </RequirePermission>
+                ),
+              },
+              {
+                path: 'finance/tax',
+                element: (
+                  <RequirePermission permission="seller.finance.read">
+                    <TaxProfilePage />
                   </RequirePermission>
                 ),
               },

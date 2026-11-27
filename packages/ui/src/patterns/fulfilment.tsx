@@ -9,7 +9,7 @@ import {
   type RefundStatus,
   RETURN_STATUS_LABELS,
   type ReturnStatus,
-  SELLER_LEDGER_TYPE_LABELS,
+  ledgerKindLabel,
   SHIPMENT_STATUS_LABELS,
   type ShipmentStatus,
 } from '@marketplace/shared-types';
@@ -231,7 +231,7 @@ export function LedgerList({ entries }: { entries: LedgerEntryDto[] }) {
       {entries.map((e) => (
         <li key={e.id} className="flex justify-between gap-3 py-1.5">
           <span>
-            {SELLER_LEDGER_TYPE_LABELS[e.type]}
+            {ledgerKindLabel(e.type)}
             <span className="block text-xs text-muted-foreground">{e.description}</span>
           </span>
           <span className={`font-mono ${Number(e.amount) < 0 ? 'text-destructive' : ''}`}>

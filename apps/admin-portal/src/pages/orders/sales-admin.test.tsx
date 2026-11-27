@@ -346,18 +346,15 @@ describe('Admin Console sales', () => {
     );
   });
 
-  it('saves the VAT rate as a fraction', async () => {
+  it('saves checkout settings without a universal VAT rate (taxes come from tax rules)', async () => {
     const user = userEvent.setup();
     const api = fakeApi();
     renderAt('/settings', api);
-    const vat = await screen.findByLabelText('VAT rate (%)');
-    expect(vat).toHaveValue('12');
-    await user.clear(vat);
-    await user.type(vat, '10');
+    expect(await screen.findByRole('link', { name: 'Finance › Taxes' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('VAT rate (%)')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await vi.waitFor(() =>
       expect(bodyOf(api, 'PUT', '/api/v1/settings/checkout')).toEqual({
-        vat: { rate: '0.1000', pricesIncludeVat: true },
         charges: [],
         paymentWindowMinutes: 60,
         paymentMethods: ['COD', 'GCASH'],

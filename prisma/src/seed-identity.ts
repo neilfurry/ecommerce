@@ -126,6 +126,12 @@ export const DEMO_USERS: SeedUser[] = [
   },
   { email: 'admin@marketplace.local', firstName: 'Andres', lastName: 'Admin', roles: ['ADMIN'] },
   {
+    email: 'finance@marketplace.local',
+    firstName: 'Fina',
+    lastName: 'Finance',
+    roles: ['FINANCE_ADMIN'],
+  },
+  {
     email: 'support@marketplace.local',
     firstName: 'Carla',
     lastName: 'Support',

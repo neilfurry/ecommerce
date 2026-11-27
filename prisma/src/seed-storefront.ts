@@ -14,9 +14,16 @@ type Tx = Prisma.TransactionClient;
 const D = (value: string) => new Prisma.Decimal(value);
 
 export async function ensureDefaultCommission(prisma: PrismaClient): Promise<boolean> {
-  const existing = await prisma.commissionRule.findFirst({ where: { categoryId: null } });
+  const existing = await prisma.commissionRule.findFirst({ where: { scope: 'DEFAULT' } });
   if (existing) return false;
-  await prisma.commissionRule.create({ data: { categoryId: null, ratePercent: D('5.00') } });
+  await prisma.commissionRule.create({
+    data: {
+      scope: 'DEFAULT',
+      type: 'PERCENTAGE',
+      ratePercent: D('5.00'),
+      reason: 'Initial default',
+    },
+  });
   return true;
 }
 

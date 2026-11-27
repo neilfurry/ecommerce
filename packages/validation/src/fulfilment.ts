@@ -19,7 +19,6 @@ import {
   RETURN_REASONS,
   RETURN_RESOLUTIONS,
   RETURN_STATUSES,
-  SELLER_LEDGER_TYPES,
   SELLER_ORDER_STATUSES,
   SELLER_ORDER_TABS,
   SHIPMENT_STATUSES,
@@ -656,9 +655,10 @@ export const createRefundSchema = z
 export type CreateRefundRequest = z.input<typeof createRefundSchema>;
 export const markRefundPaidSchema = z.object({ payoutReference: z.string().trim().min(3).max(80) });
 
+/** A seller payable line of the double-entry ledger (Phase 6): type is the line's kind. */
 export const ledgerEntrySchema = z.object({
   id: z.uuid(),
-  type: z.enum(SELLER_LEDGER_TYPES),
+  type: z.string(),
   amount: z.string(),
   description: z.string(),
   sellerOrderId: z.uuid().nullable(),

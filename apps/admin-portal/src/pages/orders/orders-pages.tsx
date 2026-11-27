@@ -432,7 +432,11 @@ export function AdminOrderPage() {
               <Separator className="my-2" />
               <Row label="Grand total" value={formatMoney(t.grandTotal)} strong />
               <Row
-                label={`VAT (${(Number(o.vat.rate) * 100).toFixed(0)}%) included`}
+                label={
+                  o.vat.rate === null
+                    ? `VAT ${o.vat.included ? 'included' : 'added'} (by seller registration)`
+                    : `VAT (${Number((Number(o.vat.rate) * 100).toFixed(2))}%) ${o.vat.included ? 'included' : 'added'}`
+                }
                 value={formatMoney(t.vatAmount)}
               />
               <Row label="Marketplace commission" value={formatMoney(o.commissionAmount)} />

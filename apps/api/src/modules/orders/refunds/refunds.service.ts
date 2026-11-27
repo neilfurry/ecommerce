@@ -1,5 +1,11 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { lockOrderInTx, Prisma, syncOrderPaymentStatusInTx } from '@marketplace/database';
+import {
+  lockOrderInTx,
+  postRefundInTx,
+  Prisma,
+  sellerOrderPosition,
+  syncOrderPaymentStatusInTx,
+} from '@marketplace/database';
 import type { RefundInput, WebhookOutcome } from '@marketplace/payments';
 import type { AuthenticatedUser, PaginatedResponse } from '@marketplace/shared-types';
 import type { RefundDto, SellerLedger } from '@marketplace/validation';
@@ -457,19 +463,12 @@ export class RefundsService {
 
   /** What the seller still holds for a seller order in the ledger (credits less earlier refunds). */
   private async remainingSellerPosition(tx: Tx, sellerOrderId: string) {
-    const entries = await tx.sellerLedgerEntry.groupBy({
-      by: ['type'],
-      where: { sellerOrderId },
-      _sum: { amount: true },
-    });
-    const sum = (type: string) => entries.find((e) => e.type === type)?._sum.amount ?? ZERO;
+    const { credited, commission } = await sellerOrderPosition(tx, sellerOrderId);
     // Pending refunds count too, so two refunds never charge the seller twice.
     const pending = await tx.refund.aggregate({
       where: { sellerOrderId, status: { in: ['PROCESSING', 'AWAITING_PAYOUT'] } },
       _sum: { sellerDebit: true, commissionReversal: true },
     });
-    const credited = sum('ORDER_EARNING').add(sum('SHIPPING_CREDIT')).add(sum('REFUND'));
-    const commission = sum('COMMISSION').neg().sub(sum('COMMISSION_REVERSAL'));
     return {
       debit: nonNeg(credited.sub(pending._sum.sellerDebit ?? ZERO)),
       reversal: nonNeg(commission.sub(pending._sum.commissionReversal ?? ZERO)),
@@ -579,33 +578,8 @@ export class RefundsService {
       },
       include: { sellerOrder: { select: { sellerId: true, number: true } } },
     });
-    if (row.sellerOrderId && row.sellerOrder) {
-      const entries: Prisma.SellerLedgerEntryCreateManyInput[] = [];
-      if (row.sellerDebit.gt(0)) {
-        entries.push({
-          sellerId: row.sellerOrder.sellerId,
-          sellerOrderId: row.sellerOrderId,
-          refundId,
-          type: 'REFUND',
-          amount: row.sellerDebit.neg(),
-          description: `Refund ${row.reference} on ${row.sellerOrder.number}`,
-          createdAt: now,
-        });
-      }
-      if (row.commissionReversal.gt(0)) {
-        entries.push({
-          sellerId: row.sellerOrder.sellerId,
-          sellerOrderId: row.sellerOrderId,
-          refundId,
-          type: 'COMMISSION_REVERSAL',
-          amount: row.commissionReversal,
-          description: `Commission returned for refund ${row.reference}`,
-          createdAt: now,
-        });
-      }
-      if (entries.length > 0)
-        await tx.sellerLedgerEntry.createMany({ data: entries, skipDuplicates: true });
-    }
+    // Seller share, commission given back and the money out, in the double-entry ledger.
+    await postRefundInTx(tx, refundId, now);
     await tx.paymentEvent.create({
       data: {
         paymentId: row.paymentId,
@@ -809,7 +783,10 @@ export class RefundsService {
     };
   }
 
-  /** A seller's payables ledger, newest first, with the running balance. */
+  /**
+   * A seller's payable lines in the double-entry ledger (pending, available, reserved, in
+   * payout), newest first, with the total owed to the seller.
+   */
   async ledger(
     user: AuthenticatedUser | null,
     query: { page: number; pageSize: number; sellerId?: string },
@@ -817,32 +794,39 @@ export class RefundsService {
     const sellerId = user ? sellerScope(user).sellerId : query.sellerId;
     if (!sellerId)
       throw new ApiException(HttpStatus.BAD_REQUEST, 'BAD_REQUEST', 'Choose a seller.');
-    const where = { sellerId };
+    const where: Prisma.JournalEntryWhereInput = {
+      sellerId,
+      account: { sellerSubledger: true },
+      transaction: { status: 'POSTED' },
+    };
     const [rows, total, sum] = await this.prisma.$transaction([
-      this.prisma.sellerLedgerEntry.findMany({
+      this.prisma.journalEntry.findMany({
         where,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          transaction: { select: { description: true, sourceType: true, sourceId: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { lineNo: 'desc' }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
-      this.prisma.sellerLedgerEntry.count({ where }),
-      this.prisma.sellerLedgerEntry.aggregate({ where, _sum: { amount: true } }),
+      this.prisma.journalEntry.count({ where }),
+      this.prisma.journalEntry.aggregate({ where, _sum: { debit: true, credit: true } }),
     ]);
     return {
       items: rows.map((e) => ({
         id: e.id,
-        type: e.type,
-        amount: e.amount.toFixed(2),
-        description: e.description,
+        type: e.kind ?? 'ADJUSTMENT',
+        amount: e.credit.sub(e.debit).toFixed(2),
+        description: e.description ?? e.transaction.description,
         sellerOrderId: e.sellerOrderId,
-        refundId: e.refundId,
+        refundId: e.transaction.sourceType === 'REFUND' ? e.transaction.sourceId : null,
         createdAt: e.createdAt.toISOString(),
       })),
       page: query.page,
       pageSize: query.pageSize,
       totalItems: total,
       totalPages: Math.ceil(total / query.pageSize),
-      balance: (sum._sum.amount ?? ZERO).toFixed(2),
+      balance: (sum._sum.credit ?? ZERO).sub(sum._sum.debit ?? ZERO).toFixed(2),
     };
   }
 }

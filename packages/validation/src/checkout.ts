@@ -217,7 +217,8 @@ export const checkoutQuoteSchema = z.object({
     vatAmount: z.string(),
     grandTotal: z.string(),
   }),
-  vat: z.object({ rate: z.string(), included: z.boolean() }),
+  /** The tax on goods: a single rate (fraction, e.g. "0.12") or null when items differ or none. */
+  vat: z.object({ rate: z.string().nullable(), included: z.boolean() }),
   /** Blocking problems (empty when the order can be placed). */
   problems: z.array(z.object({ path: z.string(), message: z.string() })),
   evaluatedAt: z.iso.datetime(),
@@ -346,7 +347,8 @@ export const orderDetailSchema = orderSummarySchema.extend({
     }),
   ),
   totals: checkoutQuoteSchema.shape.totals,
-  vat: z.object({ rate: z.string(), included: z.boolean() }),
+  /** The tax on goods: a single rate (fraction, e.g. "0.12") or null when items differ or none. */
+  vat: z.object({ rate: z.string().nullable(), included: z.boolean() }),
   events: z.array(orderEventSchema),
   cancelledAt: z.iso.datetime().nullable(),
   cancelReason: z.string().nullable(),
@@ -407,12 +409,29 @@ export const sellerOrderDetailSchema = sellerOrderSchema.extend({
       z.object({
         orderItemId: z.uuid(),
         ruleId: z.uuid().nullable(),
+        /** Phase 6 snapshot: which kind of rule applied and how. */
+        scope: z.string(),
+        type: z.string(),
         ratePercent: z.string(),
+        fixedAmount: z.string().nullable(),
         base: z.string(),
         amount: z.string(),
       }),
     ),
   }),
+  /** Goods tax per item as charged (snapshot of the tax rule at the time of the order). */
+  taxes: z.array(
+    z.object({
+      orderItemId: z.uuid(),
+      ratePercent: z.string(),
+      inclusive: z.boolean(),
+      amount: z.string(),
+    }),
+  ),
+  /** The seller's own sales invoice for this order (the seller is the seller of record). */
+  sellerInvoice: z.object({ number: z.string(), date: z.string() }).nullable(),
+  /** The settlement that paid this order out to the seller's available balance. */
+  settlement: z.object({ id: z.uuid(), reference: z.string() }).nullable(),
   coupons: z.array(
     z.object({
       code: z.string(),
@@ -582,12 +601,16 @@ export type FlashSaleList = z.infer<typeof flashSaleListSchema>;
 const rateString = decimalStringSchema({ scale: 4 });
 
 export const checkoutSettingsSchema = z.object({
-  vat: z.object({
-    /** e.g. "0.12" for 12%. */
-    rate: rateString.refine((v) => Number(v) >= 0 && Number(v) < 1, 'Between 0 and 1'),
-    /** Prices already include VAT (the VAT is shown as part of the total). */
-    pricesIncludeVat: z.literal(true),
-  }),
+  /**
+   * Phase 4 single VAT setting, no longer used (Phase 6: taxes come from versioned tax rules by
+   * seller registration). Accepted and ignored so older saved settings still load.
+   */
+  vat: z
+    .object({
+      rate: rateString.refine((v) => Number(v) >= 0 && Number(v) < 1, 'Between 0 and 1'),
+      pricesIncludeVat: z.literal(true),
+    })
+    .optional(),
   /** Other configured charges, added per seller order. */
   charges: z
     .array(

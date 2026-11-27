@@ -172,7 +172,8 @@ export const PERMISSION_CATALOG = {
   },
   'settings.manage': {
     scope: 'platform',
-    description: 'Change checkout settings: VAT, charges, shipping rates and commission rates',
+    description:
+      'Change checkout settings: charges, payment methods, shipping rates and order settings',
   },
   'reviews.moderate': { scope: 'platform', description: 'Hide and restore product reviews' },
   'orders.manage': {
@@ -197,6 +198,40 @@ export const PERMISSION_CATALOG = {
     description: 'Configure couriers and update shipments',
   },
   'disputes.manage': { scope: 'platform', description: 'Decide escalated return requests' },
+  'finance.read': {
+    scope: 'platform',
+    description:
+      'View the financial dashboard, seller balances, settlements, the ledger and reports',
+  },
+  'finance.manage': {
+    scope: 'platform',
+    description: 'Change finance settings: fees, settlement schedule, payouts and invoice details',
+  },
+  'commission.manage': {
+    scope: 'platform',
+    description: 'Create, schedule and end commission rules',
+  },
+  'commission.exempt': { scope: 'platform', description: 'Grant commission exemptions' },
+  'tax.manage': {
+    scope: 'platform',
+    description: 'Manage tax rules and verify sellers’ tax registration and withholding exemptions',
+  },
+  'ledger.post': {
+    scope: 'platform',
+    description: 'Create, post and reverse manual journal entries and record expenses',
+  },
+  'settlements.manage': {
+    scope: 'platform',
+    description: 'Run settlements and place or release reserves on seller balances',
+  },
+  'payouts.approve': {
+    scope: 'platform',
+    description: 'Verify seller bank accounts and approve or reject payout requests',
+  },
+  'payouts.process': {
+    scope: 'platform',
+    description: 'Send approved payouts and record their payment, failure or reversal',
+  },
   'seller.profile.manage': {
     scope: 'seller',
     description: 'Edit the business profile, upload documents and submit for verification',
@@ -234,6 +269,14 @@ export const PERMISSION_CATALOG = {
   'seller.inventory.manage': {
     scope: 'seller',
     description: 'Manage warehouses and record stock movements and transfers',
+  },
+  'seller.finance.read': {
+    scope: 'seller',
+    description: 'View balances, settlement statements, invoices and payout history',
+  },
+  'seller.payouts.manage': {
+    scope: 'seller',
+    description: 'Request payouts and add bank accounts',
   },
 } as const satisfies Record<string, { scope: 'platform' | 'seller'; description: string }>;
 export type Permission = keyof typeof PERMISSION_CATALOG;
@@ -301,6 +344,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'cod.manage',
     'shipping.manage',
     'disputes.manage',
+    'finance.read',
+    'commission.manage',
   ],
   FINANCE_ADMIN: [
     'users.read',
@@ -315,6 +360,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'payments.manage',
     'refunds.manage',
     'cod.manage',
+    'finance.read',
+    'finance.manage',
+    'commission.manage',
+    'commission.exempt',
+    'tax.manage',
+    'ledger.post',
+    'settlements.manage',
+    'payouts.approve',
+    'payouts.process',
   ],
   CUSTOMER_SUPPORT: [
     'users.read',
@@ -343,6 +397,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'seller.marketing.manage',
     'seller.orders.manage',
     'seller.returns.manage',
+    'seller.finance.read',
   ],
   SELLER_ENCODER: ['seller.members.read', 'seller.products.manage'],
   SELLER_INVENTORY: ['seller.members.read', 'seller.inventory.manage'],
@@ -352,7 +407,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'seller.orders.manage',
     'seller.returns.manage',
   ],
-  SELLER_ACCOUNTING: ['seller.members.read', 'seller.orders.read'],
+  SELLER_ACCOUNTING: [
+    'seller.members.read',
+    'seller.orders.read',
+    'seller.finance.read',
+    'seller.payouts.manage',
+  ],
   CUSTOMER: [],
   WHOLESALE_CUSTOMER: [],
 };

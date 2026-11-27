@@ -14,7 +14,7 @@
  */
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
-import { createPgAdapter, PrismaClient } from './src';
+import { backfillLedger, createPgAdapter, PrismaClient } from './src';
 import {
   DEMO_USERS,
   ensureDemoSeller,
@@ -56,6 +56,9 @@ async function main(): Promise<void> {
       console.log(`Imported ${result.total} Philippine locations (PSGC).`);
     }
     if (await ensureDefaultCommission(prisma)) console.log('Default commission rate set (5%).');
+    // Money events recorded before the double-entry ledger existed (Phase 6); idempotent.
+    const backfilled = await backfillLedger(prisma);
+    if (backfilled > 0) console.log(`Posted ${backfilled} earlier money event(s) to the ledger.`);
 
     const demoEnabled =
       process.env.NODE_ENV !== 'production' && (process.env.SEED_DEMO_USERS ?? 'false') === 'true';

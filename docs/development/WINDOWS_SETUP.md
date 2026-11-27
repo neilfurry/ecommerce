@@ -106,6 +106,7 @@ password in `SEED_DEMO_PASSWORD` (`Marketplace-dev-2026!` by default):
 | --------------------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
 | `superadmin@marketplace.local`    | Super admin        | Admin Console (5175)                                                                     |
 | `admin@marketplace.local`         | Admin              | Admin Console (5175)                                                                     |
+| `finance@marketplace.local`       | Finance admin      | Admin Console (5175)                                                                     |
 | `support@marketplace.local`       | Customer support   | Admin Console (5175)                                                                     |
 | `seller.owner@marketplace.local`  | Seller owner       | Seller Center (5174), business "Sam Sari-Sari Trading" (verified, store `sam-sari-sari`) |
 | `seller.staff@marketplace.local`  | Seller encoder     | Seller Center (5174), employee of the same seller                                        |

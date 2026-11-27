@@ -16,25 +16,37 @@ import {
 } from '../../common/auth/auth.decorators';
 import { zodToOpenApi } from '../../common/openapi/zod-openapi';
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe';
+import { CommissionRulesService } from './commission-rules.service';
 import { PlatformSettingsService } from './platform-settings.service';
 import { CheckoutSettingsDto, CommissionRuleInputDto, ShippingRatesDto } from './settings.dtos';
 
-/** Checkout settings (VAT, charges, payment methods), shipping rates and commission rates. */
+/**
+ * Checkout settings (charges, payment methods), shipping rates and the Phase 4 commission
+ * endpoints (default and category rates, now versioned rules: see the finance commission API).
+ */
 @ApiTags('Settings')
 @Controller({ path: 'settings', version: '1' })
 @RequirePermissions('settings.manage')
 export class SettingsController {
-  constructor(private readonly settings: PlatformSettingsService) {}
+  constructor(
+    private readonly settings: PlatformSettingsService,
+    private readonly commission: CommissionRulesService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Every checkout setting, the shipping rate table and commission rates' })
   @ApiOkResponse({ schema: zodToOpenApi(platformSettingsSchema) })
-  all() {
-    return this.settings.all();
+  async all() {
+    return {
+      ...(await this.settings.all()),
+      commissionRules: await this.commission.currentBasicRules(),
+    };
   }
 
   @Put('checkout')
-  @ApiOperation({ summary: 'VAT rate, other charges, payment methods and the payment window' })
+  @ApiOperation({
+    summary: 'Other charges, payment methods and the payment window (taxes: tax rules)',
+  })
   @ApiOkResponse({ schema: zodToOpenApi(checkoutSettingsSchema) })
   saveCheckout(
     @CurrentUser() user: AuthenticatedUser,
@@ -56,19 +68,24 @@ export class SettingsController {
   }
 
   @Put('commission-rules')
-  @ApiOperation({ summary: 'Set the default rate (categoryId null) or a category’s rate' })
+  @RequirePermissions('commission.manage')
+  @ApiOperation({
+    summary:
+      'Set the default rate (categoryId null) or a category’s rate (a new rule version from now)',
+  })
   @ApiOkResponse({ schema: zodToOpenApi(commissionRuleListSchema) })
   async putCommission(
     @CurrentUser() user: AuthenticatedUser,
     @Body() body: CommissionRuleInputDto,
     @ReqContext() context: RequestContext,
   ) {
-    return { items: await this.settings.putCommissionRule(user, body, context) };
+    return { items: await this.commission.putBasic(user, body, context) };
   }
 
   @Delete('commission-rules/:id')
+  @RequirePermissions('commission.manage')
   @ApiOperation({
-    summary: 'Remove a category rate (the category falls back to its parent’s or the default)',
+    summary: 'End a category rate now (the category falls back to its parent’s or the default)',
   })
   @ApiOkResponse({ schema: zodToOpenApi(commissionRuleListSchema) })
   async deleteCommission(
@@ -76,6 +93,6 @@ export class SettingsController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @ReqContext() context: RequestContext,
   ) {
-    return { items: await this.settings.deleteCommissionRule(user, id, context) };
+    return { items: await this.commission.endBasic(user, id, context) };
   }
 }

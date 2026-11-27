@@ -40,6 +40,27 @@ import {
   ReconciliationPage,
   RefundsPage,
 } from '../pages/finance/finance-pages';
+import {
+  DocumentAdminPage,
+  DocumentsAdminPage,
+  FinanceDashboardPage,
+  FinanceSettingsPage,
+  PayoutAdminPage,
+  PayoutsAdminPage,
+  SellerBalancesPage,
+  SellerFinancePage,
+  SettlementAdminPage,
+  SettlementsAdminPage,
+} from '../pages/finance/finance-admin-pages';
+import {
+  AccountLedgerPage,
+  CommissionRulesPage,
+  ExpensesPage,
+  JournalPage,
+  LedgerPage,
+  ReportsPage,
+  TaxesPage,
+} from '../pages/finance/ledger-pages';
 import { DisputePage, DisputesPage, ShippingPage } from '../pages/fulfilment/fulfilment-pages';
 import { PermissionsPage } from '../pages/permissions/permissions-page';
 import { RolesPage } from '../pages/roles/roles-page';
@@ -137,6 +158,56 @@ export function buildRoutes(devToolsEnabled: boolean): RouteObject[] {
                 {
                   path: 'reconciliation',
                   element: guarded('payments.read', <ReconciliationPage />),
+                },
+                { path: 'finance', element: guarded('finance.read', <FinanceDashboardPage />) },
+                {
+                  path: 'finance/commission',
+                  element: guarded('finance.read', <CommissionRulesPage />),
+                },
+                { path: 'finance/taxes', element: guarded('finance.read', <TaxesPage />) },
+                {
+                  path: 'finance/balances',
+                  element: guarded('finance.read', <SellerBalancesPage />),
+                },
+                {
+                  path: 'finance/balances/:sellerId',
+                  element: guarded('finance.read', <SellerFinancePage />),
+                },
+                {
+                  path: 'finance/settlements',
+                  element: guarded('finance.read', <SettlementsAdminPage />),
+                },
+                {
+                  path: 'finance/settlements/:settlementId',
+                  element: guarded('finance.read', <SettlementAdminPage />),
+                },
+                { path: 'finance/payouts', element: guarded('finance.read', <PayoutsAdminPage />) },
+                {
+                  path: 'finance/payouts/:payoutId',
+                  element: guarded('finance.read', <PayoutAdminPage />),
+                },
+                { path: 'finance/ledger', element: guarded('finance.read', <LedgerPage />) },
+                {
+                  path: 'finance/journals/:journalId',
+                  element: guarded('finance.read', <JournalPage />),
+                },
+                {
+                  path: 'finance/accounts/:code',
+                  element: guarded('finance.read', <AccountLedgerPage />),
+                },
+                { path: 'finance/expenses', element: guarded('finance.read', <ExpensesPage />) },
+                { path: 'finance/reports', element: guarded('finance.read', <ReportsPage />) },
+                {
+                  path: 'finance/documents',
+                  element: guarded('finance.read', <DocumentsAdminPage />),
+                },
+                {
+                  path: 'finance/documents/:documentId',
+                  element: guarded('finance.read', <DocumentAdminPage />),
+                },
+                {
+                  path: 'finance/settings',
+                  element: guarded('finance.read', <FinanceSettingsPage />),
                 },
                 { path: 'shipping', element: guarded('orders.read', <ShippingPage />) },
                 { path: 'disputes', element: guarded('orders.read', <DisputesPage />) },

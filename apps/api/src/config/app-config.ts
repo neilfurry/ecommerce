@@ -31,6 +31,14 @@ export class AppConfig {
     mockWebhookSecret: string;
     apiPublicUrl: string;
   };
+  readonly finance: {
+    encryptionKey: string;
+    /** PayMongo payouts: the source wallet, when configured with the secret key. */
+    paymongoPayouts: {
+      secretKey: string;
+      wallet: { number: string; name: string; bic: string };
+    } | null;
+  };
   readonly auth: {
     jwtSecret: string;
     otpSecret: string;
@@ -88,6 +96,20 @@ export class AppConfig {
           : null,
       mockWebhookSecret: env.MOCK_WEBHOOK_SECRET,
       apiPublicUrl: env.API_PUBLIC_URL,
+    };
+    this.finance = {
+      encryptionKey: env.FINANCE_ENCRYPTION_KEY,
+      paymongoPayouts:
+        env.PAYMONGO_SECRET_KEY && env.PAYMONGO_WALLET_ACCOUNT_NUMBER
+          ? {
+              secretKey: env.PAYMONGO_SECRET_KEY,
+              wallet: {
+                number: env.PAYMONGO_WALLET_ACCOUNT_NUMBER,
+                name: env.PAYMONGO_WALLET_ACCOUNT_NAME ?? 'Marketplace',
+                bic: env.PAYMONGO_WALLET_BIC,
+              },
+            }
+          : null,
     };
     this.auth = {
       jwtSecret: env.AUTH_JWT_SECRET,
