@@ -7,14 +7,14 @@ otherwise. `DC` below stands for `docker compose --env-file .env.production`.
 
 ## 1. What is protected, and how
 
-| Data | Where it lives | Protection | Recovery point | Kept for |
-|---|---|---|---|---|
-| Database (orders, payments, ledger, users, catalog…) | PostgreSQL volume `postgres-data` | pgBackRest: continuous WAL archiving + weekly full + daily differential + one before every migration, encrypted (AES-256-CBC), to an S3 bucket in another account/region | about 1 minute (`archive_timeout` 60 s) | 4 full backups = 28 days of point-in-time recovery |
-| Uploaded files (product photos, seller documents, payment proofs, attachments) | S3 uploads bucket | Provider-side versioning + nightly `objects-backup` copy to a second bucket elsewhere (profile `storage-backup`) | 24 hours (versioning: none lost) | Deleted/replaced files 90 days |
-| Queues and rate limits | Redis (AOF, `redis-data`) | Not backed up: jobs are re-created by the periodic sweeps (outbox, reservations, payments reconciliation, settlements) and rate limits are transient | n/a | n/a |
-| TLS certificates | `caddy-data` | Re-issued automatically by Let's Encrypt if lost | n/a | n/a |
-| Monitoring data | Prometheus, Loki, Grafana volumes | Not backed up (Grafana dashboards are provisioned from the repository) | n/a | 30 days |
-| Configuration and secrets | `.env.production` | Password vault (see below) | at every change | always |
+| Data                                                                           | Where it lives                    | Protection                                                                                                                                                               | Recovery point                          | Kept for                                           |
+| ------------------------------------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | -------------------------------------------------- |
+| Database (orders, payments, ledger, users, catalog…)                           | PostgreSQL volume `postgres-data` | pgBackRest: continuous WAL archiving + weekly full + daily differential + one before every migration, encrypted (AES-256-CBC), to an S3 bucket in another account/region | about 1 minute (`archive_timeout` 60 s) | 4 full backups = 28 days of point-in-time recovery |
+| Uploaded files (product photos, seller documents, payment proofs, attachments) | S3 uploads bucket                 | Provider-side versioning + nightly `objects-backup` copy to a second bucket elsewhere (profile `storage-backup`)                                                         | 24 hours (versioning: none lost)        | Deleted/replaced files 90 days                     |
+| Queues and rate limits                                                         | Redis (AOF, `redis-data`)         | Not backed up: jobs are re-created by the periodic sweeps (outbox, reservations, payments reconciliation, settlements) and rate limits are transient                     | n/a                                     | n/a                                                |
+| TLS certificates                                                               | `caddy-data`                      | Re-issued automatically by Let's Encrypt if lost                                                                                                                         | n/a                                     | n/a                                                |
+| Monitoring data                                                                | Prometheus, Loki, Grafana volumes | Not backed up (Grafana dashboards are provisioned from the repository)                                                                                                   | n/a                                     | 30 days                                            |
+| Configuration and secrets                                                      | `.env.production`                 | Password vault (see below)                                                                                                                                               | at every change                         | always                                             |
 
 **Keep in the vault** (they cannot be regenerated): `BACKUP_ENCRYPTION_PASSPHRASE` (without it
 no backup can be restored), `FINANCE_ENCRYPTION_KEY` (seller bank account numbers),
@@ -33,12 +33,12 @@ The `backup` service (`marketplace-backup schedule`) runs:
 Each run writes metrics read by Prometheus; these alerts fire (ALERTS in
 `monitoring/prometheus/alerts.yml`):
 
-| Alert | Meaning |
-|---|---|
-| `DatabaseBackupFailed` (critical) | The last backup of a type failed — look at `DC logs backup`. |
-| `DatabaseBackupOverdue` (critical) | No successful backup in 26 hours. |
+| Alert                                  | Meaning                                                                           |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| `DatabaseBackupFailed` (critical)      | The last backup of a type failed — look at `DC logs backup`.                      |
+| `DatabaseBackupOverdue` (critical)     | No successful backup in 26 hours.                                                 |
 | `PostgresWalArchiveFailing` (critical) | WAL cannot be pushed: point-in-time recovery is at risk and WAL piles up on disk. |
-| `ObjectStorageBackupOverdue` (warning) | Uploaded files not copied in 26 hours. |
+| `ObjectStorageBackupOverdue` (warning) | Uploaded files not copied in 26 hours.                                            |
 
 Useful commands:
 
@@ -165,12 +165,12 @@ Rules for every release:
 
 When something goes wrong:
 
-| Situation | Action |
-|---|---|
-| A migration fails during `deploy.sh` | The script stops before rolling out; the application keeps running the old version. PostgreSQL rolls back the failed script; check `DC run --rm migrate pnpm db:status`, fix the migration, mark it with `DC run --rm migrate pnpm --filter @marketplace/database exec prisma migrate resolve --rolled-back <name>` and deploy again. |
-| The new release is unhealthy | `deploy.sh` rolls the application back automatically; the (backward compatible) migration stays. `./deploy.sh --rollback` does it by hand. |
-| A migration was applied and its schema change must be undone | Write a new forward migration that reverses it, and release it. |
-| A migration damaged data | Point-in-time restore (§3) to the time just before the migration — the timestamp is in the `deploy.sh` output and in `_prisma_migrations.started_at` — then re-deploy the previous release. |
+| Situation                                                    | Action                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A migration fails during `deploy.sh`                         | The script stops before rolling out; the application keeps running the old version. PostgreSQL rolls back the failed script; check `DC run --rm migrate pnpm db:status`, fix the migration, mark it with `DC run --rm migrate pnpm --filter @marketplace/database exec prisma migrate resolve --rolled-back <name>` and deploy again. |
+| The new release is unhealthy                                 | `deploy.sh` rolls the application back automatically; the (backward compatible) migration stays. `./deploy.sh --rollback` does it by hand.                                                                                                                                                                                            |
+| A migration was applied and its schema change must be undone | Write a new forward migration that reverses it, and release it.                                                                                                                                                                                                                                                                       |
+| A migration damaged data                                     | Point-in-time restore (§3) to the time just before the migration — the timestamp is in the `deploy.sh` output and in `_prisma_migrations.started_at` — then re-deploy the previous release.                                                                                                                                           |
 
 ## 6. Restore testing
 
