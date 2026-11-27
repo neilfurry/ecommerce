@@ -3,31 +3,34 @@
 # optional "minio" service (start with --profile storage).
 services:
   mailpit:
-    image: axllent/mailpit:v1.27
+    image: axllent/mailpit:latest
     networks: [app, data, public]
 
   minio-backup:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: ['server', '/data']
+    image: cgr.dev/chainguard/minio:latest
+    command: ['server', '/data', '--certs-dir', '/certs']
     environment:
       MINIO_ROOT_USER: ${BACKUP_MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${BACKUP_MINIO_ROOT_PASSWORD}
     volumes:
       # pgBackRest only talks HTTPS: a self-signed certificate made by ci/certs.sh.
-      - ./ci/certs:/root/.minio/certs:ro
+      - ./ci/certs:/certs:ro
     networks: [data]
 
   buckets:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: amazon/aws-cli:2.15.0
     depends_on: [minio, minio-backup]
     entrypoint: ['/bin/sh', '-c']
     command:
       - |
         set -e
-        until mc alias set up http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 1; done
-        until mc --insecure alias set bk https://minio-backup:9000 "$$BACKUP_MINIO_ROOT_USER" "$$BACKUP_MINIO_ROOT_PASSWORD"; do sleep 1; done
-        mc mb --ignore-existing up/$$S3_BUCKET
-        mc --insecure mb --ignore-existing bk/$$BACKUP_S3_BUCKET
+        export AWS_DEFAULT_REGION=us-east-1
+        up() { AWS_ACCESS_KEY_ID="$$MINIO_ROOT_USER" AWS_SECRET_ACCESS_KEY="$$MINIO_ROOT_PASSWORD" aws --endpoint-url http://minio:9000 "$$@"; }
+        bk() { AWS_ACCESS_KEY_ID="$$BACKUP_MINIO_ROOT_USER" AWS_SECRET_ACCESS_KEY="$$BACKUP_MINIO_ROOT_PASSWORD" aws --endpoint-url https://minio-backup:9000 --no-verify-ssl "$$@"; }
+        for i in $$(seq 1 30); do up s3 ls >/dev/null 2>&1 && bk s3 ls >/dev/null 2>&1 && break; sleep 1; done
+        up s3 mb "s3://$$S3_BUCKET" || true
+        bk s3 mb "s3://$$BACKUP_S3_BUCKET" || true
+        up s3 ls && bk s3 ls
         echo buckets ready
     env_file: .env.production
     networks: [data]

@@ -10,6 +10,7 @@
  *
  * Refuses to run when NODE_ENV=production.
  */
+import { randomInt } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
@@ -73,6 +74,9 @@ async function main() {
     throw new Error('Load-test data is never created in production.');
   const prisma = new PrismaClient({ adapter: createPgAdapter(process.env.DATABASE_URL!) });
   const run = Date.now().toString(36);
+  // Mobile numbers unique to this run (users.mobile is unique), so the script can run again.
+  const mobileBase = randomInt(100_000_000, 800_000_000);
+  const mobile = (n: number) => `+639${String(mobileBase + n).padStart(9, '0')}`;
   const passwordHash = await hashPassword(PASSWORD);
   const category = await prisma.category.findUniqueOrThrow({ where: { slug: 'rice-and-grains' } });
   // More locations from the database (barangays of a few big cities), so routes and fees vary.
@@ -84,10 +88,13 @@ async function main() {
       city_code: string;
       city: string;
     }[]
-  >`SELECT b."code", b."region_code", b."province_code", b."city_code", c."name" AS "city"
-      FROM "ph_locations" b JOIN "ph_locations" c ON c."code" = b."city_code"
-     WHERE b."level" = 'BARANGAY' AND c."name" IN ('City of Cebu', 'City of Davao', 'City of Makati', 'City of Iloilo')
-     ORDER BY b."code" LIMIT 40`;
+  >`SELECT "code", "region_code", "province_code", "city_code", "city" FROM (
+        SELECT b."code", b."region_code", b."province_code", b."city_code", c."name" AS "city",
+               row_number() OVER (PARTITION BY c."code" ORDER BY b."code") AS n
+          FROM "ph_locations" b JOIN "ph_locations" c ON c."code" = b."city_code"
+         WHERE b."level" = 'BARANGAY'
+           AND c."name" IN ('City of Cebu', 'City of Davao', 'City of Makati', 'City of Iloilo')
+      ) x WHERE n <= 10 ORDER BY "code"`;
   const places = [
     ...PLACES,
     ...extra.map((r) => ({
@@ -122,7 +129,7 @@ async function main() {
         businessType: 'SOLE_PROPRIETORSHIP',
         ownerId: owner.id,
         email: owner.email,
-        mobile: `+63917${String(1_000_000 + s).slice(-7)}`,
+        mobile: mobile(s),
         addressLine1: `${s + 1} Rizal Street`,
         city: place.cityName,
         province: place.provinceName,
@@ -215,7 +222,7 @@ async function main() {
       data: {
         email,
         emailVerifiedAt: new Date(),
-        mobile: `+63918${String(1_000_000 + c).slice(-7)}`,
+        mobile: mobile(SELLERS + c),
         mobileVerifiedAt: new Date(),
         passwordHash,
         firstName: 'Load',
@@ -228,7 +235,7 @@ async function main() {
       data: {
         userId: user.id,
         recipientName: `Load Customer ${c}`,
-        mobile: `+63918${String(1_000_000 + c).slice(-7)}`,
+        mobile: mobile(SELLERS + c),
         regionCode: place.region,
         provinceCode: place.province,
         cityCode: place.city,

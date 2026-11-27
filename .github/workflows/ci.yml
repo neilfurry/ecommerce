@@ -235,8 +235,8 @@ jobs:
           docker compose -f compose.yml -f compose.ci.yml --env-file .env.production --profile storage config --quiet
       - name: Validate monitoring and edge configuration
         run: |
-          docker run --rm --entrypoint promtool -v "$PWD/monitoring/prometheus:/p:ro" prom/prometheus:v3.5.0 check config /p/prometheus.yml
-          docker run --rm --entrypoint promtool -v "$PWD/monitoring/prometheus:/p:ro" prom/prometheus:v3.5.0 check rules /p/alerts.yml
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
           docker run --rm -v "$PWD/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" --env-file .env.production caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Start data services, migrate, reference data
         run: |
