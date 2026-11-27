@@ -45,7 +45,8 @@ before="$(snapshot)"
 echo "Before: $(head -c 300 <<<"$before")…"
 
 step "Destroying the database"
-"${DC[@]}" stop backup postgres
+# Stopped containers still hold the volume: remove them (the restore creates new ones).
+"${DC[@]}" rm --stop --force backup postgres
 docker volume rm marketplace_postgres-data
 echo "Volume removed."
 

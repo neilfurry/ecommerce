@@ -65,14 +65,15 @@ A restore replaces the database. Decide first **which state** you need:
    for API calls):
 
    ```bash
-   DC stop api worker backup
+   DC stop api worker
    ```
 
-2. **Keep the damaged data** (do not delete what you may need for analysis), then stop
-   PostgreSQL:
+2. **Keep the damaged data** (do not delete what you may need for analysis), then remove the
+   PostgreSQL and backup containers (stopped containers still hold the volume, and
+   `docker volume rm` refuses while they exist; the restore creates new ones):
 
    ```bash
-   DC stop postgres
+   DC rm --stop --force backup postgres
    docker run --rm -v marketplace_postgres-data:/from -v /srv/pg-damaged:/to alpine \
      sh -c 'cp -a /from/. /to/'          # optional copy of the old data directory
    docker volume rm marketplace_postgres-data

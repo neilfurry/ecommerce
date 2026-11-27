@@ -330,14 +330,17 @@ function metric(data, name) {
 }
 
 export function handleSummary(summary) {
-  const rows = phases.map(([name]) => {
+  // Scenarios run one after another, so the request rate is over the scenario's own window
+  // (k6's own "rate" divides by the whole run). Contention and the webhook burst finish
+  // before their window ends, so their rate is a lower bound.
+  const rows = phases.map(([name, duration]) => {
     const d = metric(summary, `http_req_duration{scenario:${name}}`) || {};
     const f = metric(summary, `http_req_failed{scenario:${name}}`) || {};
     const n = metric(summary, `http_reqs{scenario:${name}}`) || {};
     return {
       scenario: name,
       requests: n.count || 0,
-      rps: Math.round((n.rate || 0) * 10) / 10,
+      rps: Math.round(((n.count || 0) / (parseInt(duration, 10) * 60)) * 10) / 10,
       p50_ms: Math.round(d.med || 0),
       p95_ms: Math.round(d['p(95)'] || 0),
       p99_ms: Math.round(d['p(99)'] || 0),
@@ -358,7 +361,7 @@ export function handleSummary(summary) {
     .filter(([, m]) => m.thresholds && Object.values(m.thresholds).some((t) => !t.ok))
     .map(([k]) => k);
   const md = [
-    '| Scenario | Requests | Req/s | p50 ms | p95 ms | p99 ms | Max ms | Errors % |',
+    '| Scenario | Requests | Req/s (scenario window) | p50 ms | p95 ms | p99 ms | Max ms | Errors % |',
     '|---|---:|---:|---:|---:|---:|---:|---:|',
     ...rows.map(
       (r) =>
