@@ -78,7 +78,13 @@ async function main() {
   const mobileBase = randomInt(100_000_000, 800_000_000);
   const mobile = (n: number) => `+639${String(mobileBase + n).padStart(9, '0')}`;
   const passwordHash = await hashPassword(PASSWORD);
-  const category = await prisma.category.findUniqueOrThrow({ where: { slug: 'rice-and-grains' } });
+  // Its own category: the production seed creates no catalog (administrators do), and the
+  // load test runs against a production-mode database.
+  const category = await prisma.category.upsert({
+    where: { slug: 'load-test-pantry' },
+    create: { slug: 'load-test-pantry', name: 'Pantry (load test)' },
+    update: { status: 'ACTIVE' },
+  });
   // More locations from the database (barangays of a few big cities), so routes and fees vary.
   const extra = await prisma.$queryRaw<
     {

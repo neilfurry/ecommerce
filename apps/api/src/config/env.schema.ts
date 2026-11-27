@@ -108,6 +108,11 @@ const apiEnvObject = z.object({
   AUTH_STAFF_SESSION_HOURS: envInteger(12, 1, 168),
   AUTH_MAX_FAILED_SIGN_INS: envInteger(5, 3, 20),
   AUTH_LOCKOUT_MINUTES: envInteger(15, 1, 1440),
+  /**
+   * Sign-in, sign-up and password-reset attempts per client address per minute. Raise it when
+   * many customers share one address (mobile-carrier NAT); account lockout still applies.
+   */
+  AUTH_SIGN_IN_LIMIT_PER_MINUTE: envInteger(10, 3, 100),
   /** Secure-only cookies. Defaults to true in production; local http needs false. */
   COOKIE_SECURE: envBoolean(false),
   /**

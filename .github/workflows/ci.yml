@@ -99,6 +99,9 @@ jobs:
       - run: pnpm test:e2e:ui
         env:
           CI: 'true'
+          # Every browser test signs in from 127.0.0.1, in parallel; the default 10 per minute
+          # per address is covered by the API tests (auth.e2e-spec.ts).
+          AUTH_SIGN_IN_LIMIT_PER_MINUTE: '60'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

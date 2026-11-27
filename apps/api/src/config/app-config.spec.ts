@@ -72,9 +72,18 @@ describe('AppConfig.load', () => {
       staffSessionHours: 12,
       maxFailedSignIns: 5,
       lockoutMinutes: 15,
+      signInLimitPerMinute: 10,
       cookieSecure: false,
     });
     expect(config.appUrls.storefront).toBe('http://localhost:5173');
+  });
+
+  it('accepts a sign-in limit between 3 and 100 per minute', () => {
+    const at = (value: string) =>
+      AppConfig.load({ ...validEnv, AUTH_SIGN_IN_LIMIT_PER_MINUTE: value }, false);
+    expect(at('30').auth.signInLimitPerMinute).toBe(30);
+    expect(() => at('1')).toThrow(/AUTH_SIGN_IN_LIMIT_PER_MINUTE/);
+    expect(() => at('500')).toThrow(/AUTH_SIGN_IN_LIMIT_PER_MINUTE/);
   });
 
   it('rejects weak or reused auth secrets', () => {

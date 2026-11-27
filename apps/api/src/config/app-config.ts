@@ -53,6 +53,8 @@ export class AppConfig {
     staffSessionHours: number;
     maxFailedSignIns: number;
     lockoutMinutes: number;
+    /** Credential requests per client address per minute (sign-in, sign-up, resets). */
+    signInLimitPerMinute: number;
     cookieSecure: boolean;
     cookieDomain: string | undefined;
     staffMfaRequired: boolean;
@@ -131,6 +133,7 @@ export class AppConfig {
       staffSessionHours: env.AUTH_STAFF_SESSION_HOURS,
       maxFailedSignIns: env.AUTH_MAX_FAILED_SIGN_INS,
       lockoutMinutes: env.AUTH_LOCKOUT_MINUTES,
+      signInLimitPerMinute: env.AUTH_SIGN_IN_LIMIT_PER_MINUTE,
       cookieSecure: env.COOKIE_SECURE,
       cookieDomain: env.COOKIE_DOMAIN || undefined,
       staffMfaRequired: env.STAFF_MFA_REQUIRED,

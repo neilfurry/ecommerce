@@ -49,7 +49,7 @@ ensure_stanza() {
   # WAL archiving is only written once it has succeeded. ("set -e" does not apply inside
   # an "if" condition, so every step is checked explicitly.)
   pgbackrest --stanza=$STANZA --log-level-console=warn stanza-create || return 1
-  # From now on PostgreSQL archives WAL (see archive-wal.sh).
+  # From now on PostgreSQL archives WAL (archive_command in postgresql.conf).
   touch "${PGDATA:-/var/lib/postgresql/data}/.pgbackrest-stanza" || return 1
 }
 

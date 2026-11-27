@@ -63,8 +63,13 @@ import { randomToken, sha256 } from './crypto';
 import { OtpService } from './otp.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
-/** Strict per-IP limits on credential endpoints, on top of the global limit. */
-const SIGN_IN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
+/**
+ * Strict per-IP limits on credential endpoints, on top of the global limit. The sign-in limit
+ * comes from AUTH_SIGN_IN_LIMIT_PER_MINUTE (default 10); the controller records it at start-up
+ * because decorators are evaluated before configuration is loaded.
+ */
+let signInLimitPerMinute = 10;
+const SIGN_IN_LIMIT = { default: { limit: () => signInLimitPerMinute, ttl: 60_000 } };
 const OTP_LIMIT = { default: { limit: 5, ttl: 60_000 } };
 
 function requireApp(context: RequestContext, allowed?: ClientApp[]): ClientApp {
@@ -90,7 +95,9 @@ export class AuthController {
     private readonly config: AppConfig,
     private readonly accessTokens: AccessTokenService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    signInLimitPerMinute = config.auth.signInLimitPerMinute;
+  }
 
   @Get('csrf')
   @Public()

@@ -13,7 +13,7 @@ chose pgBackRest to S3.
 
 - PostgreSQL archives every WAL segment to a pgBackRest repository in an S3 bucket in a
   different account or region (`archive_timeout` 60 s, so at most about a minute of data is at
-  risk). WAL is kept from the first backup on (`archive-wal.sh`).
+  risk). WAL is kept from the first backup on (`archive_command` in `postgresql.conf`).
 - The `backup` service takes a full backup weekly and a differential daily; `deploy.sh` takes
   an incremental one before every migration. The repository is encrypted client-side
   (`aes-256-cbc`, passphrase only on the server and in the vault) and compressed (zstd).
